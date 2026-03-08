@@ -41,6 +41,8 @@ export interface RawCall {
   phone: string;
   duration: number;
   direction: 'inbound' | 'outbound';
+  callSid?: string;
+  recordingUrl?: string;
 }
 
 export interface PeriodData {
@@ -338,7 +340,7 @@ async function getWorkerSpeedStats(
 
 // ── SOURCE 4: TWILIO REP ACTIVITY ───────────────────────────────────────────
 
-export interface TwilioCall { to: string; from: string; duration: string; start_time: string; status: string }
+export interface TwilioCall { sid: string; to: string; from: string; duration: string; start_time: string; status: string }
 
 export async function fetchCallsForDate(date: Date, auth: string): Promise<TwilioCall[]> {
   const sid = process.env.TWILIO_ACCOUNT_SID!;
@@ -419,6 +421,7 @@ export function extractRecentCalls(calls: TwilioCall[], limit = 20): RawCall[] {
       phone: isInbound ? c.from : c.to,
       duration: parseInt(c.duration) || 0,
       direction: isInbound ? 'inbound' as const : 'outbound' as const,
+      callSid: c.sid,
     };
   }).filter(c => c.agent && c.agent !== 'Unknown');
 }

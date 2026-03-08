@@ -1,9 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { twilioAuth, fetchCallsForDate, extractRecentCalls } from '@/lib/getDashboard';
 import type { RawCall } from '@/lib/getDashboard';
-import { ACTIVE_AGENTS, decodeAgent, capitalize } from '@/lib/constants';
+import { ACTIVE_AGENTS, capitalize } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Fetch all recordings for a date from Twilio and return a Set of CallSids that have recordings.
+ */
+async function fetchRecordingSids(date: Date, auth: string): Promise<Set<string>> {
+  const sid = process.env.TWILIO_ACCOUNT_SID!;
+  const ds = date.toISOString().slice(0, 10);
+  const sids = new Set<string>();
+
+  let url: string | null =
+    `https://api.twilio.com/2010-04-01/Accounts/${sid}/Recordings.json?DateCreated=${ds}&PageSize=1000`;
+
+  while (url) {
+    try {
+      const res = await fetch(url, { headers: { Authorization: auth } });
+      if (!res.ok) break;
+      const data = await res.json() as {
+        recordings?: { call_sid: string }[];
+        next_page_uri?: string;
+      };
+      if (data.recordings) {
+        for (const r of data.recordings) sids.add(r.call_sid);
+      }
+      url = data.next_page_uri ? `https://api.twilio.com${data.next_page_uri}` : null;
+    } catch {
+      break;
+    }
+  }
+  return sids;
+}
 
 export async function GET(req: NextRequest) {
   const dateParam = req.nextUrl.searchParams.get('date');
@@ -15,8 +45,20 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const raw = await fetchCallsForDate(date, auth);
+    // Fetch calls and recordings in parallel
+    const [raw, recordingSids] = await Promise.all([
+      fetchCallsForDate(date, auth),
+      fetchRecordingSids(date, auth),
+    ]);
+
     const calls: RawCall[] = extractRecentCalls(raw, 999);
+
+    // Annotate calls with recording availability
+    for (const call of calls) {
+      if (call.callSid && recordingSids.has(call.callSid)) {
+        call.recordingUrl = `/api/calls/recording?sid=${call.callSid}`;
+      }
+    }
 
     // Build per-agent summary
     const agentMap: Record<string, { calls: number; talkSec: number }> = {};

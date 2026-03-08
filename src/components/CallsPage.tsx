@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import NavBar from './NavBar';
 import Card from './Card';
 import { C, capitalize, fmtTalkTime, ACTIVE_AGENTS, agentColor } from '@/lib/constants';
 import type { RawCall } from '@/lib/getDashboard';
-import { ArrowDown, ArrowUp, Phone, Filter } from 'lucide-react';
+import { ArrowDown, ArrowUp, Filter, Download, Play, Pause, Square, Volume2 } from 'lucide-react';
 
 // ── Formatters ──────────────────────────────────────────────────────────────
 
@@ -35,6 +35,107 @@ function formatTime(iso: string): string {
 
 interface AgentSummary { agent: string; calls: number; talkMin: number }
 interface CallsResponse { calls: RawCall[]; agents: AgentSummary[]; pulledAt: string }
+
+// ── CSV Export ──────────────────────────────────────────────────────────────
+
+function downloadCSV(calls: RawCall[], filename: string) {
+  const header = 'Time,Agent,Phone,Duration (sec),Direction\n';
+  const rows = calls.map(c =>
+    `"${new Date(c.time).toLocaleString('en-US', { timeZone: 'America/Edmonton' })}","${c.agent}","${formatPhone(c.phone)}",${c.duration},"${c.direction}"`
+  ).join('\n');
+  const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Audio Player ────────────────────────────────────────────────────────────
+
+function InlinePlayer({ callSid, recordingUrl }: { callSid: string; recordingUrl: string }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [state, setState] = useState<'idle' | 'loading' | 'playing' | 'paused' | 'error'>('idle');
+  const [progress, setProgress] = useState(0);
+
+  const toggle = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (state === 'idle' || state === 'error') {
+      setState('loading');
+      audio.src = recordingUrl;
+      audio.load();
+      audio.play().then(() => setState('playing')).catch(() => setState('error'));
+    } else if (state === 'playing') {
+      audio.pause();
+      setState('paused');
+    } else if (state === 'paused') {
+      audio.play().then(() => setState('playing')).catch(() => setState('error'));
+    }
+  };
+
+  const stop = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.pause();
+    audio.currentTime = 0;
+    setState('idle');
+    setProgress(0);
+  };
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const onTime = () => {
+      if (audio.duration) setProgress((audio.currentTime / audio.duration) * 100);
+    };
+    const onEnd = () => { setState('idle'); setProgress(0); };
+    const onErr = () => setState('error');
+
+    audio.addEventListener('timeupdate', onTime);
+    audio.addEventListener('ended', onEnd);
+    audio.addEventListener('error', onErr);
+    return () => {
+      audio.removeEventListener('timeupdate', onTime);
+      audio.removeEventListener('ended', onEnd);
+      audio.removeEventListener('error', onErr);
+    };
+  }, []);
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <audio ref={audioRef} preload="none" />
+      <button
+        onClick={toggle}
+        className="p-1 rounded-md transition-colors hover:bg-white/5"
+        title={state === 'playing' ? 'Pause' : 'Play recording'}
+      >
+        {state === 'loading' ? (
+          <div className="w-3.5 h-3.5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: C.cyan, borderTopColor: 'transparent' }} />
+        ) : state === 'playing' ? (
+          <Pause size={14} style={{ color: C.cyan }} />
+        ) : state === 'error' ? (
+          <Volume2 size={14} style={{ color: '#f87171' }} />
+        ) : (
+          <Play size={14} style={{ color: C.cyan }} />
+        )}
+      </button>
+      {(state === 'playing' || state === 'paused') && (
+        <>
+          <div className="w-16 h-1 rounded-full overflow-hidden" style={{ background: C.border }}>
+            <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, background: C.cyan }} />
+          </div>
+          <button onClick={stop} className="p-0.5 rounded hover:bg-white/5">
+            <Square size={10} style={{ color: C.sub }} />
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
 
 // ── Filter Pill ─────────────────────────────────────────────────────────────
 
@@ -112,6 +213,13 @@ export default function CallsPage() {
     });
   }, [data, agentFilter, dirFilter]);
 
+  const handleDownload = () => {
+    if (!filtered.length) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const suffix = agentFilter !== 'all' ? `-${agentFilter}` : '';
+    downloadCSV(filtered, `calls-${today}${suffix}.csv`);
+  };
+
   if (loading) {
     return (
       <>
@@ -142,6 +250,7 @@ export default function CallsPage() {
 
   const agents = ['all', ...ACTIVE_AGENTS];
   const totalCalls = data.calls.length;
+  const recordingCount = data.calls.filter(c => c.recordingUrl).length;
 
   return (
     <>
@@ -155,7 +264,7 @@ export default function CallsPage() {
           ))}
         </div>
 
-        {/* Filter Bar */}
+        {/* Filter Bar + Actions */}
         <div className="flex flex-wrap items-center gap-2">
           <Filter size={14} style={{ color: C.sub }} />
           {agents.map(a => (
@@ -165,9 +274,30 @@ export default function CallsPage() {
           {(['all', 'inbound', 'outbound'] as const).map(d => (
             <Pill key={d} label={capitalize(d)} active={dirFilter === d} onClick={() => setDirFilter(d)} />
           ))}
-          <span className="text-xs ml-auto font-mono" style={{ color: C.sub }}>
-            {filtered.length} / {totalCalls} calls
-          </span>
+
+          <div className="flex items-center gap-3 ml-auto">
+            {recordingCount > 0 && (
+              <span className="text-xs font-mono flex items-center gap-1" style={{ color: C.sub }}>
+                <Volume2 size={12} /> {recordingCount} recordings
+              </span>
+            )}
+            <span className="text-xs font-mono" style={{ color: C.sub }}>
+              {filtered.length} / {totalCalls} calls
+            </span>
+            <button
+              onClick={handleDownload}
+              disabled={!filtered.length}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+              style={{
+                background: filtered.length ? C.lime + '18' : 'transparent',
+                color: filtered.length ? C.lime : C.sub,
+                border: `1px solid ${filtered.length ? C.lime + '44' : C.border}`,
+              }}
+            >
+              <Download size={13} />
+              Export CSV
+            </button>
+          </div>
         </div>
 
         {/* Call Table */}
@@ -176,7 +306,7 @@ export default function CallsPage() {
             <table className="w-full text-sm">
               <thead className="sticky top-0" style={{ background: '#141824' }}>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                  {['Time', 'Agent', 'Phone', 'Duration', ''].map(h => (
+                  {['Time', 'Agent', 'Phone', 'Duration', '', 'Recording'].map(h => (
                     <th key={h} className="px-5 py-2.5 text-left text-xs font-medium" style={{ color: C.sub }}>{h}</th>
                   ))}
                 </tr>
@@ -198,11 +328,18 @@ export default function CallsPage() {
                         ? <ArrowDown size={14} style={{ color: '#4ade80' }} />
                         : <ArrowUp size={14} style={{ color: '#38bdf8' }} />}
                     </td>
+                    <td className="px-5 py-2.5">
+                      {call.recordingUrl && call.callSid ? (
+                        <InlinePlayer callSid={call.callSid} recordingUrl={call.recordingUrl} />
+                      ) : (
+                        <span className="text-xs" style={{ color: C.border }}>—</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-5 py-12 text-center text-sm" style={{ color: C.sub }}>
+                    <td colSpan={6} className="px-5 py-12 text-center text-sm" style={{ color: C.sub }}>
                       No calls match the current filters
                     </td>
                   </tr>
