@@ -187,7 +187,8 @@ export default function CallsPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch('/api/calls');
+      const today = new Date().toISOString().slice(0, 10);
+      const res = await fetch(`/api/calls?date=${today}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setData(await res.json());
       setError(null);

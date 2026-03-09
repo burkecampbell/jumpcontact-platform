@@ -37,7 +37,9 @@ async function fetchRecordingSids(date: Date, auth: string): Promise<Set<string>
 
 export async function GET(req: NextRequest) {
   const dateParam = req.nextUrl.searchParams.get('date');
-  const date = dateParam ? new Date(dateParam + 'T00:00:00') : new Date();
+  const date = dateParam
+    ? new Date(dateParam + 'T00:00:00')
+    : new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Edmonton' }));
 
   const auth = twilioAuth();
   if (!auth) {
@@ -45,13 +47,14 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Fetch calls and recordings in parallel
-    const [raw, recordingSids] = await Promise.all([
-      fetchCallsForDate(date, auth),
-      fetchRecordingSids(date, auth),
-    ]);
-
+    const raw = await fetchCallsForDate(date, auth);
     const calls: RawCall[] = extractRecentCalls(raw, 999);
+
+    // Only fetch recordings if we have calls (skip empty days)
+    let recordingSids = new Set<string>();
+    if (calls.length > 0) {
+      recordingSids = await fetchRecordingSids(date, auth);
+    }
 
     // Annotate calls with recording availability
     for (const call of calls) {
