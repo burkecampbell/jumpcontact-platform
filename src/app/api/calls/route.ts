@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { twilioAuth, fetchCallsForDate, extractRecentCalls } from '@/lib/getDashboard';
-import type { RawCall } from '@/lib/getDashboard';
+import type { RawCall, TwilioCall } from '@/lib/getDashboard';
 import { ACTIVE_AGENTS, capitalize } from '@/lib/constants';
+import clientsData from '@/data/clients.json';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,6 +50,21 @@ export async function GET(req: NextRequest) {
   try {
     const raw = await fetchCallsForDate(date, auth);
     const calls: RawCall[] = extractRecentCalls(raw, 999);
+
+    // Build customer-phone → client/account mapping from raw Twilio data
+    const twilioNumbers = new Map<string, string>(
+      Object.entries((clientsData as { clients: Record<string, string> }).clients),
+    );
+    const customerToClient = new Map<string, string>();
+    for (const c of raw as TwilioCall[]) {
+      const toClient = twilioNumbers.get(c.to);
+      const fromClient = twilioNumbers.get(c.from);
+      if (toClient) customerToClient.set(c.from, toClient);   // inbound: to=Twilio#, from=customer
+      if (fromClient) customerToClient.set(c.to, fromClient);  // outbound: from=Twilio#, to=customer
+    }
+    for (const call of calls) {
+      call.account = customerToClient.get(call.phone);
+    }
 
     // Only fetch recordings if we have calls (skip empty days)
     let recordingSids = new Set<string>();

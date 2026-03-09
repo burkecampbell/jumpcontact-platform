@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(req: NextRequest) {
   const callSid = req.nextUrl.searchParams.get('sid');
+  const download = req.nextUrl.searchParams.get('download') === '1';
   if (!callSid) {
     return NextResponse.json({ error: 'Missing sid parameter' }, { status: 400 });
   }
@@ -46,7 +47,7 @@ export async function GET(req: NextRequest) {
       status: 200,
       headers: {
         'Content-Type': 'audio/mpeg',
-        'Content-Disposition': `inline; filename="recording-${callSid}.mp3"`,
+        'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename="recording-${callSid}.mp3"`,
         'Cache-Control': 'private, max-age=3600',
       },
     });

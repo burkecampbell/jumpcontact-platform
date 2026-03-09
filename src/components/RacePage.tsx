@@ -3,10 +3,26 @@
 import { useEffect, useState, useCallback } from 'react';
 import NavBar from './NavBar';
 import Card from './Card';
-import AgentRankingRow from './AgentRankingRow';
-import { C, GOAL, capitalize, computePace, agentColor } from '@/lib/constants';
+import { C, GOAL, capitalize, computePace, agentColor, AGENT_SCHEDULE } from '@/lib/constants';
 import type { DashboardData, AcctStat } from '@/lib/getDashboard';
-import { Target, TrendingUp, CalendarDays, BarChart3 } from 'lucide-react';
+import { Target, BarChart3 } from 'lucide-react';
+
+// ── Shared Table Cells ─────────────────────────────────────────────────────
+function TH({ children, right }: { children: React.ReactNode; right?: boolean }) {
+  return (
+    <th className={`px-3 py-2 text-xs font-medium whitespace-nowrap ${right ? 'text-right' : 'text-left'}`} style={{ color: C.sub }}>
+      {children}
+    </th>
+  );
+}
+
+function TD({ children, mono, right, color }: { children: React.ReactNode; mono?: boolean; right?: boolean; color?: string }) {
+  return (
+    <td className={`px-3 py-2.5 text-[13px] ${mono ? 'font-mono' : ''} ${right ? 'text-right' : ''}`} style={{ color: color || C.text }}>
+      {children}
+    </td>
+  );
+}
 
 // ── SVG Ring Chart ──────────────────────────────────────────────────────────
 
@@ -54,6 +70,20 @@ function PacePill({ label, value, color }: { label: string; value: string; color
   );
 }
 
+// ── Daily Grid Cell Color ───────────────────────────────────────────────────
+
+function cellColor(count: number): string {
+  if (count === 0) return 'rgba(139,146,168,0.08)';
+  if (count <= 2) return C.cyan + '30';
+  if (count <= 4) return C.cyan + '60';
+  return C.cyan + '99';
+}
+
+function cellText(count: number): string {
+  if (count === 0) return C.sub;
+  return C.text;
+}
+
 // ── Main Component ──────────────────────────────────────────────────────────
 
 export default function RacePage() {
@@ -84,9 +114,10 @@ export default function RacePage() {
     return (
       <>
         <NavBar />
-        <div className="max-w-5xl mx-auto px-4 py-6">
+        <div className="max-w-6xl mx-auto px-4 py-6">
           <div className="skeleton h-56 rounded-2xl mb-6" />
-          <div className="skeleton h-64 rounded-2xl" />
+          <div className="skeleton h-64 rounded-2xl mb-6" />
+          <div className="skeleton h-48 rounded-2xl" />
         </div>
       </>
     );
@@ -96,7 +127,7 @@ export default function RacePage() {
     return (
       <>
         <NavBar />
-        <div className="max-w-5xl mx-auto px-4 py-20 text-center">
+        <div className="max-w-6xl mx-auto px-4 py-20 text-center">
           <p style={{ color: '#f87171' }}>Failed to load: {error}</p>
           <button onClick={fetchData} className="mt-4 px-4 py-2 rounded-lg text-sm" style={{ background: C.cyan, color: '#000' }}>
             Retry
@@ -113,14 +144,48 @@ export default function RacePage() {
   const dailyNeeded = daysLeft > 0 ? Math.ceil(remaining / daysLeft) : remaining;
   const paceColor = pace.pacePercent >= 100 ? '#4ade80' : pace.pacePercent >= 85 ? '#fbbf24' : '#f87171';
 
-  const topAgent = mtd.byAgent[0]?.count ?? 1;
-  const topAccounts = (mtd.byAccount || []).slice(0, 10);
-  const topAcct = topAccounts[0]?.count ?? 1;
+  // Build date lookup for daily grid
+  const now = new Date(data.pulledAt);
+  const year = now.getFullYear();
+  const month = now.getMonth();
+
+  // Compute MTD scheduled hours per agent (sum day 1 through dayOfMonth)
+  const mtdHoursMap: Record<string, number> = {};
+  for (const [agent, schedule] of Object.entries(AGENT_SCHEDULE)) {
+    let total = 0;
+    for (let d = 1; d <= pace.dayOfMonth; d++) {
+      const dt = new Date(year, month, d);
+      total += schedule[dt.getDay()] ?? 0;
+    }
+    mtdHoursMap[agent] = total;
+  }
+
+  // Agent stats with projections
+  const agentStats = mtd.byAgent.map(a => {
+    const dailyAvg = pace.dayOfMonth > 0 ? +(a.count / pace.dayOfMonth).toFixed(1) : 0;
+    const projected = Math.round(dailyAvg * pace.daysInMonth);
+    let bestDay = 0;
+    if (a.daily) {
+      for (const v of Object.values(a.daily)) {
+        if (v > bestDay) bestDay = v;
+      }
+    }
+    const mtdHours = mtdHoursMap[a.agent.toLowerCase()] ?? 0;
+    const convPerHr = mtdHours > 0 ? +(a.count / mtdHours).toFixed(2) : null;
+    return { ...a, dailyAvg, projected, bestDay, mtdHours, convPerHr };
+  });
+
+  // Build daily grid: days of month × agents
+  const mtdDaily = mtd.mtdDaily ?? [];
+  const dayNumbers = Array.from({ length: pace.dayOfMonth }, (_, i) => i + 1);
+  const agentNames = mtd.byAgent.map(a => a.agent.toLowerCase());
+
+  const topAccounts = (mtd.byAccount || []).slice(0, 12);
 
   return (
     <>
       <NavBar pulledAt={data.pulledAt} />
-      <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-6xl mx-auto px-4 py-6 space-y-5">
         {/* Hero: Ring + Pace Strip */}
         <Card>
           <div className="flex flex-col md:flex-row items-center gap-6">
@@ -134,30 +199,140 @@ export default function RacePage() {
           </div>
         </Card>
 
-        {/* Agent Leaderboard */}
-        <Card>
-          <div className="flex items-center gap-2 mb-4">
+        {/* Agent Leaderboard Table */}
+        <Card padding={false}>
+          <div className="flex items-center gap-2 px-4 pt-4 pb-2">
             <BarChart3 size={16} style={{ color: C.cyan }} />
             <h2 className="text-sm font-semibold" style={{ color: C.text }}>Agent Leaderboard</h2>
             <span className="text-xs ml-auto" style={{ color: C.sub }}>MTD conversions</span>
           </div>
-          {mtd.byAgent.map((a, i) => (
-            <AgentRankingRow
-              key={a.agent}
-              rank={i + 1}
-              agent={capitalize(a.agent)}
-              value={a.count}
-              maxValue={topAgent}
-            />
-          ))}
-          {mtd.byAgent.length === 0 && (
-            <p className="text-sm py-4 text-center" style={{ color: C.sub }}>No conversion data yet</p>
-          )}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <TH>#</TH>
+                  <TH>Agent</TH>
+                  <TH right>MTD</TH>
+                  <TH right>Avg/Day</TH>
+                  <TH right>Conv/Hr</TH>
+                  <TH right>Projected</TH>
+                  <TH right>Best Day</TH>
+                </tr>
+              </thead>
+              <tbody>
+                {agentStats.map((a, i) => (
+                  <tr key={a.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
+                    <TD color={i < 3 ? C.cyan : C.sub}>
+                      <span className="font-bold">{i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}</span>
+                    </TD>
+                    <TD>
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full" style={{ background: agentColor(a.agent) }} />
+                        <span className="font-semibold">{capitalize(a.agent)}</span>
+                      </div>
+                    </TD>
+                    <TD mono right>{a.count}</TD>
+                    <TD mono right color={C.sub}>{a.dailyAvg}</TD>
+                    <TD mono right color={a.convPerHr !== null && a.convPerHr >= 1 ? C.lime : C.sub}>
+                      {a.convPerHr !== null ? a.convPerHr.toFixed(1) : '—'}
+                    </TD>
+                    <TD mono right color={a.projected >= Math.round(GOAL / agentStats.length) ? '#4ade80' : C.sub}>
+                      {a.projected}
+                    </TD>
+                    <TD mono right color={C.sub}>{a.bestDay || '—'}</TD>
+                  </tr>
+                ))}
+                {mtd.byAgent.length === 0 && (
+                  <tr><td colSpan={7} className="text-center text-sm py-5" style={{ color: C.sub }}>No conversion data yet</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </Card>
 
-        {/* Account Leaderboard */}
-        <Card>
-          <div className="flex items-center gap-2 mb-4">
+        {/* Daily Grid Matrix */}
+        {dayNumbers.length > 0 && agentNames.length > 0 && (
+          <Card padding={false}>
+            <div className="px-4 pt-4 pb-2">
+              <h2 className="text-sm font-semibold" style={{ color: C.text }}>Daily Grid</h2>
+              <p className="text-xs mt-0.5" style={{ color: C.sub }}>Conversions per agent per day this month</p>
+            </div>
+            <div className="overflow-x-auto px-4 pb-4">
+              <table className="text-[11px]" style={{ borderCollapse: 'separate', borderSpacing: '2px' }}>
+                <thead>
+                  <tr>
+                    <th className="px-2 py-1 text-left font-medium sticky left-0" style={{ color: C.sub, background: C.card, minWidth: '70px' }}>
+                      Agent
+                    </th>
+                    {dayNumbers.map(d => (
+                      <th key={d} className="px-1 py-1 text-center font-medium" style={{ color: d === pace.dayOfMonth ? C.cyan : C.sub, minWidth: '24px' }}>
+                        {d}
+                      </th>
+                    ))}
+                    <th className="px-2 py-1 text-right font-bold" style={{ color: C.text }}>Σ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {agentNames.map(name => {
+                    const agentData = mtd.byAgent.find(a => a.agent.toLowerCase() === name);
+                    const daily = agentData?.daily || {};
+                    const total = agentData?.count ?? 0;
+                    return (
+                      <tr key={name}>
+                        <td className="px-2 py-1 font-medium sticky left-0 whitespace-nowrap" style={{ color: agentColor(name), background: C.card }}>
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ background: agentColor(name) }} />
+                            {capitalize(name)}
+                          </div>
+                        </td>
+                        {dayNumbers.map(d => {
+                          const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                          const count = daily[dateKey] || 0;
+                          return (
+                            <td key={d} className="text-center rounded-sm font-mono font-bold" style={{
+                              background: cellColor(count),
+                              color: cellText(count),
+                              padding: '3px 2px',
+                            }}>
+                              {count > 0 ? count : '·'}
+                            </td>
+                          );
+                        })}
+                        <td className="px-2 py-1 text-right font-bold font-mono" style={{ color: C.text }}>
+                          {total}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {/* Daily totals row */}
+                  <tr style={{ borderTop: `1px solid ${C.border}` }}>
+                    <td className="px-2 py-1 font-medium sticky left-0 text-xs" style={{ color: C.sub, background: C.card }}>Total</td>
+                    {dayNumbers.map(d => {
+                      const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                      const dayEntry = mtdDaily.find(e => e.date === dateKey);
+                      const total = dayEntry?.total ?? 0;
+                      return (
+                        <td key={d} className="text-center font-mono font-bold text-[10px]" style={{
+                          color: total >= 30 ? '#4ade80' : total > 0 ? C.text : C.sub,
+                          padding: '3px 2px',
+                        }}>
+                          {total > 0 ? total : '·'}
+                        </td>
+                      );
+                    })}
+                    <td className="px-2 py-1 text-right font-bold font-mono" style={{ color: C.cyan }}>
+                      {mtd.total}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
+
+        {/* Account Leaderboard with MTD % */}
+        <Card padding={false}>
+          <div className="flex items-center gap-2 px-4 pt-4 pb-2">
             <Target size={16} style={{ color: C.cyan }} />
             <h2 className="text-sm font-semibold" style={{ color: C.text }}>Top Accounts</h2>
             <span className="text-xs ml-auto" style={{ color: C.sub }}>MTD conversions</span>
@@ -166,28 +341,38 @@ export default function RacePage() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                  <th className="text-left text-xs font-medium px-3 py-2" style={{ color: C.sub }}>#</th>
-                  <th className="text-left text-xs font-medium px-3 py-2" style={{ color: C.sub }}>Account</th>
-                  <th className="text-right text-xs font-medium px-3 py-2" style={{ color: C.sub }}>Count</th>
-                  <th className="text-left text-xs font-medium px-3 py-2 w-1/3" style={{ color: C.sub }}></th>
+                  <TH>#</TH>
+                  <TH>Account</TH>
+                  <TH right>Count</TH>
+                  <TH right>% of Total</TH>
+                  <TH>Bar</TH>
                 </tr>
               </thead>
               <tbody>
-                {topAccounts.map((a: AcctStat, i: number) => (
-                  <tr key={a.account} style={{ borderBottom: `1px solid ${C.border}` }}>
-                    <td className="px-3 py-2 text-xs font-bold" style={{ color: i < 3 ? C.cyan : C.sub }}>{i + 1}</td>
-                    <td className="px-3 py-2 text-sm font-medium truncate max-w-[200px]" style={{ color: C.text }}>{a.account}</td>
-                    <td className="px-3 py-2 text-sm font-mono text-right" style={{ color: C.text }}>{a.count}</td>
-                    <td className="px-3 py-2">
-                      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(139,146,168,0.12)' }}>
-                        <div
-                          className="h-full rounded-full transition-all duration-700"
-                          style={{ width: `${Math.max((a.count / topAcct) * 100, 3)}%`, background: C.cyan }}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {topAccounts.map((a: AcctStat, i: number) => {
+                  const pctOfTotal = mtd.total > 0 ? ((a.count / mtd.total) * 100).toFixed(1) : '0';
+                  const topAcct = topAccounts[0]?.count ?? 1;
+                  return (
+                    <tr key={a.account} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
+                      <TD color={i < 3 ? C.cyan : C.sub}>
+                        <span className="font-bold">{i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}</span>
+                      </TD>
+                      <TD>
+                        <span className="font-medium truncate block max-w-[220px]">{a.account}</span>
+                      </TD>
+                      <TD mono right>{a.count}</TD>
+                      <TD mono right color={C.sub}>{pctOfTotal}%</TD>
+                      <td className="px-3 py-2">
+                        <div className="h-1.5 rounded-full overflow-hidden w-24" style={{ background: 'rgba(139,146,168,0.12)' }}>
+                          <div
+                            className="h-full rounded-full transition-all duration-700"
+                            style={{ width: `${Math.max((a.count / topAcct) * 100, 3)}%`, background: C.cyan }}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

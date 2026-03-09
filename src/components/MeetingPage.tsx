@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import NavBar from './NavBar';
 import Card from './Card';
-import AgentRankingRow from './AgentRankingRow';
+
 import {
   C, GOAL, capitalize, fmtTalkTime, fmtSpeed, speedGrade,
   computePace, isMonday, isIbrahim, agentColor,
@@ -104,9 +104,8 @@ function generateCallouts(period: PeriodData): Callout[] {
   return callouts;
 }
 
-// ── Monday Aggregation ────────────────────────────────────────────────────
-function aggregateWeekend(weekend: { friday: PeriodData; saturday: PeriodData; sunday: PeriodData }): PeriodData {
-  const days = [weekend.friday, weekend.saturday, weekend.sunday];
+// ── Day Aggregation ──────────────────────────────────────────────────────
+function aggregateDays(days: PeriodData[]): PeriodData {
 
   // Aggregate rep activity
   const agentMap: Record<string, { calls: number; talkMin: number; speedSec: number[]; wrapUpSec: number[] }> = {};
@@ -120,6 +119,14 @@ function aggregateWeekend(weekend: { friday: PeriodData; saturday: PeriodData; s
     }
   }
 
+  // Sum scheduled hours across weekend days for each agent
+  const agentHoursMap: Record<string, number> = {};
+  for (const day of days) {
+    for (const a of day.repActivity.agents) {
+      agentHoursMap[a.agent] = (agentHoursMap[a.agent] || 0) + (a.hoursScheduled || 0);
+    }
+  }
+
   const agents: RepAgent[] = Object.entries(agentMap)
     .sort((a, b) => b[1].calls - a[1].calls)
     .map(([agent, s]) => ({
@@ -128,6 +135,7 @@ function aggregateWeekend(weekend: { friday: PeriodData; saturday: PeriodData; s
       talkMin: +(s.talkMin).toFixed(1),
       speedSec: s.speedSec.length > 0 ? +(s.speedSec.reduce((a, b) => a + b, 0) / s.speedSec.length).toFixed(1) : null,
       wrapUpSec: s.wrapUpSec.length > 0 ? +(s.wrapUpSec.reduce((a, b) => a + b, 0) / s.wrapUpSec.length).toFixed(1) : null,
+      hoursScheduled: agentHoursMap[agent] || 0,
     }));
 
   // Aggregate conversions
@@ -183,21 +191,92 @@ function aggregateWeekend(weekend: { friday: PeriodData; saturday: PeriodData; s
   };
 }
 
+// ── Shared Table Shell ─────────────────────────────────────────────────
+function TH({ children, right }: { children: React.ReactNode; right?: boolean }) {
+  return (
+    <th className={`px-3 py-2 text-xs font-medium whitespace-nowrap ${right ? 'text-right' : 'text-left'}`} style={{ color: C.sub }}>
+      {children}
+    </th>
+  );
+}
+function TD({ children, mono, right, color }: { children: React.ReactNode; mono?: boolean; right?: boolean; color?: string }) {
+  return (
+    <td className={`px-3 py-2.5 text-[13px] ${mono ? 'font-mono' : ''} ${right ? 'text-right' : ''}`} style={{ color: color || C.text }}>
+      {children}
+    </td>
+  );
+}
+
 // ── STEP 1: Calls Answered ─────────────────────────────────────────────
 function StepCalls({ period, label }: { period: PeriodData; label: string }) {
   const agents = period.repActivity.agents;
   const total = agents.reduce((s, a) => s + a.calls, 0);
-  const max = agents[0]?.calls ?? 1;
+  const totalTalk = agents.reduce((s, a) => s + a.talkMin, 0);
 
   return (
     <div>
       <div className="text-center mb-1 text-[13px] font-semibold uppercase tracking-wider" style={{ color: C.sub }}>{label}</div>
       <Hero value={total} sub="calls answered" />
-      <Card>
-        {agents.map((a, i) => (
-          <AgentRankingRow key={a.agent} rank={i + 1} agent={a.agent} value={a.calls} maxValue={max} suffix=" calls" />
-        ))}
-        {agents.length === 0 && <p className="text-center text-sm py-5" style={{ color: C.sub }}>No call data yet</p>}
+
+      {/* Summary strip */}
+      <div className="flex justify-center gap-6 mb-4">
+        <div className="text-center">
+          <div className="text-lg font-bold font-mono" style={{ color: C.text }}>{total}</div>
+          <div className="text-[10px] uppercase" style={{ color: C.sub }}>Total Calls</div>
+        </div>
+        <div className="text-center">
+          <div className="text-lg font-bold font-mono" style={{ color: C.text }}>{fmtTalkTime(totalTalk)}</div>
+          <div className="text-[10px] uppercase" style={{ color: C.sub }}>Total Talk</div>
+        </div>
+        <div className="text-center">
+          <div className="text-lg font-bold font-mono" style={{ color: C.text }}>{agents.length}</div>
+          <div className="text-[10px] uppercase" style={{ color: C.sub }}>Agents</div>
+        </div>
+      </div>
+
+      {/* Agent Table */}
+      <Card padding={false}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                <TH>#</TH>
+                <TH>Agent</TH>
+                <TH right>Calls</TH>
+                <TH right>Hrs</TH>
+                <TH right>Calls/Hr</TH>
+                <TH right>Talk Time</TH>
+                <TH right>Avg Speed</TH>
+                <TH right>Wrap-Up</TH>
+              </tr>
+            </thead>
+            <tbody>
+              {agents.map((a, i) => {
+                const callsPerHr = a.hoursScheduled > 0 ? (a.calls / a.hoursScheduled).toFixed(1) : '—';
+                return (
+                <tr key={a.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <TD color={i < 3 ? C.cyan : C.sub}><span className="font-bold">{i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}</span></TD>
+                  <TD>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full" style={{ background: agentColor(a.agent) }} />
+                      <span className="font-semibold capitalize">{a.agent}</span>
+                    </div>
+                  </TD>
+                  <TD mono right>{a.calls}</TD>
+                  <TD mono right color={C.sub}>{a.hoursScheduled > 0 ? a.hoursScheduled : '—'}</TD>
+                  <TD mono right color={callsPerHr !== '—' && parseFloat(callsPerHr) >= 3 ? '#4ade80' : C.sub}>{callsPerHr}</TD>
+                  <TD mono right>{fmtTalkTime(a.talkMin)}</TD>
+                  <TD mono right>{fmtSpeed(a.speedSec)}</TD>
+                  <TD mono right color={C.sub}>{a.wrapUpSec != null ? `${Math.round(a.wrapUpSec)}s` : '—'}</TD>
+                </tr>
+                );
+              })}
+              {agents.length === 0 && (
+                <tr><td colSpan={8} className="text-center text-sm py-5" style={{ color: C.sub }}>No call data yet</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </Card>
     </div>
   );
@@ -207,17 +286,68 @@ function StepCalls({ period, label }: { period: PeriodData; label: string }) {
 function StepTalkTime({ period, label }: { period: PeriodData; label: string }) {
   const agents = [...period.repActivity.agents].sort((a, b) => b.talkMin - a.talkMin);
   const totalMin = agents.reduce((s, a) => s + a.talkMin, 0);
-  const max = agents[0]?.talkMin ?? 1;
+  const totalCalls = agents.reduce((s, a) => s + a.calls, 0);
 
   return (
     <div>
       <div className="text-center mb-1 text-[13px] font-semibold uppercase tracking-wider" style={{ color: C.sub }}>{label}</div>
       <Hero value={Math.round(totalMin / 60)} sub="hours total talk time" color={C.text} />
-      <Card>
-        {agents.map((a, i) => (
-          <AgentRankingRow key={a.agent} rank={i + 1} agent={a.agent} value={a.talkMin} maxValue={max} formatValue={fmtTalkTime} />
-        ))}
-        {agents.length === 0 && <p className="text-center text-sm py-5" style={{ color: C.sub }}>No talk time data yet</p>}
+
+      {/* Summary strip */}
+      <div className="flex justify-center gap-6 mb-4">
+        <div className="text-center">
+          <div className="text-lg font-bold font-mono" style={{ color: C.text }}>{fmtTalkTime(totalMin)}</div>
+          <div className="text-[10px] uppercase" style={{ color: C.sub }}>Total Talk</div>
+        </div>
+        <div className="text-center">
+          <div className="text-lg font-bold font-mono" style={{ color: C.text }}>{totalCalls > 0 ? fmtTalkTime(totalMin / totalCalls) : '—'}</div>
+          <div className="text-[10px] uppercase" style={{ color: C.sub }}>Avg / Call</div>
+        </div>
+        <div className="text-center">
+          <div className="text-lg font-bold font-mono" style={{ color: C.text }}>{agents.length}</div>
+          <div className="text-[10px] uppercase" style={{ color: C.sub }}>Agents</div>
+        </div>
+      </div>
+
+      {/* Agent Table */}
+      <Card padding={false}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                <TH>#</TH>
+                <TH>Agent</TH>
+                <TH right>Talk Time</TH>
+                <TH right>Avg / Call</TH>
+                <TH right>Calls</TH>
+                <TH right>Wrap-Up</TH>
+              </tr>
+            </thead>
+            <tbody>
+              {agents.map((a, i) => {
+                const avgPerCall = a.calls > 0 ? a.talkMin / a.calls : 0;
+                return (
+                  <tr key={a.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
+                    <TD color={i < 3 ? C.cyan : C.sub}><span className="font-bold">{i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}</span></TD>
+                    <TD>
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full" style={{ background: agentColor(a.agent) }} />
+                        <span className="font-semibold capitalize">{a.agent}</span>
+                      </div>
+                    </TD>
+                    <TD mono right>{fmtTalkTime(a.talkMin)}</TD>
+                    <TD mono right color={C.sub}>{a.calls > 0 ? fmtTalkTime(avgPerCall) : '—'}</TD>
+                    <TD mono right color={C.sub}>{a.calls}</TD>
+                    <TD mono right color={C.sub}>{a.wrapUpSec != null ? `${Math.round(a.wrapUpSec)}s` : '—'}</TD>
+                  </tr>
+                );
+              })}
+              {agents.length === 0 && (
+                <tr><td colSpan={6} className="text-center text-sm py-5" style={{ color: C.sub }}>No talk time data yet</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </Card>
     </div>
   );
@@ -232,6 +362,17 @@ function StepSpeed({ period, label }: { period: PeriodData; label: string }) {
     return a.speedSec - b.speedSec;
   });
   const avgSec = period.repActivity.avgSpeedSec;
+  const teamGrade = speedGrade(avgSec);
+
+  // Speed distribution buckets
+  const buckets = { fast: 0, good: 0, ok: 0, slow: 0 };
+  for (const a of sorted) {
+    if (a.speedSec === null) continue;
+    if (a.speedSec < 8) buckets.fast++;
+    else if (a.speedSec < 12) buckets.good++;
+    else if (a.speedSec < 17) buckets.ok++;
+    else buckets.slow++;
+  }
 
   return (
     <div>
@@ -244,29 +385,74 @@ function StepSpeed({ period, label }: { period: PeriodData; label: string }) {
           <div className="mt-2 text-[13px]" style={{ color: C.sub }}>no speed data yet</div>
         </div>
       )}
-      <Card>
-        {sorted.map((a, i) => {
-          const { grade, color } = speedGrade(a.speedSec);
-          return (
-            <div key={a.agent} className="flex items-center justify-between py-3" style={{ borderBottom: i < sorted.length - 1 ? `1px solid ${C.border}` : 'none' }}>
-              <div className="flex items-center gap-3">
-                <span className="font-extrabold text-lg w-7 text-center" style={{ color: C.sub }}>
-                  {i < 3 ? ['🥇','🥈','🥉'][i] : `${i + 1}`}
-                </span>
-                <div>
-                  <div className="font-semibold text-[15px] capitalize" style={{ color: C.text }}>{a.agent}</div>
-                  {a.calls > 0 && <div className="text-xs" style={{ color: C.sub }}>{a.calls} calls · {fmtTalkTime(a.talkMin)}</div>}
-                </div>
-              </div>
-              <div className="text-right flex items-center gap-2.5">
-                <span className="font-mono font-bold text-[17px]" style={{ color: agentColor(a.agent) }}>{fmtSpeed(a.speedSec)}</span>
-                <span className="text-[13px] font-extrabold px-1.5 py-0.5 rounded min-w-[30px] text-center"
-                  style={{ color, background: `${color}18` }}>{grade}</span>
-              </div>
-            </div>
-          );
-        })}
-        {sorted.length === 0 && <p className="text-center text-sm py-5" style={{ color: C.sub }}>No speed data yet</p>}
+
+      {/* Speed distribution strip */}
+      {avgSec !== null && (
+        <div className="flex justify-center gap-5 mb-4">
+          <div className="text-center">
+            <div className="text-lg font-bold" style={{ color: teamGrade.color }}>{teamGrade.grade}</div>
+            <div className="text-[10px] uppercase" style={{ color: C.sub }}>Team Grade</div>
+          </div>
+          <div className="text-center">
+            <div className="text-lg font-bold font-mono" style={{ color: '#4ade80' }}>{buckets.fast}</div>
+            <div className="text-[10px] uppercase" style={{ color: C.sub }}>&lt;8s</div>
+          </div>
+          <div className="text-center">
+            <div className="text-lg font-bold font-mono" style={{ color: '#38bdf8' }}>{buckets.good}</div>
+            <div className="text-[10px] uppercase" style={{ color: C.sub }}>8-12s</div>
+          </div>
+          <div className="text-center">
+            <div className="text-lg font-bold font-mono" style={{ color: '#fbbf24' }}>{buckets.ok}</div>
+            <div className="text-[10px] uppercase" style={{ color: C.sub }}>12-17s</div>
+          </div>
+          <div className="text-center">
+            <div className="text-lg font-bold font-mono" style={{ color: '#f87171' }}>{buckets.slow}</div>
+            <div className="text-[10px] uppercase" style={{ color: C.sub }}>17s+</div>
+          </div>
+        </div>
+      )}
+
+      {/* Agent Table */}
+      <Card padding={false}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                <TH>#</TH>
+                <TH>Agent</TH>
+                <TH right>Avg Speed</TH>
+                <TH right>Grade</TH>
+                <TH right>Calls</TH>
+                <TH right>Talk Time</TH>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((a, i) => {
+                const { grade, color } = speedGrade(a.speedSec);
+                return (
+                  <tr key={a.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
+                    <TD color={i < 3 ? C.cyan : C.sub}><span className="font-bold">{i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}</span></TD>
+                    <TD>
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full" style={{ background: agentColor(a.agent) }} />
+                        <span className="font-semibold capitalize">{a.agent}</span>
+                      </div>
+                    </TD>
+                    <TD mono right>{fmtSpeed(a.speedSec)}</TD>
+                    <TD right>
+                      <span className="text-xs font-extrabold px-1.5 py-0.5 rounded" style={{ color, background: `${color}18` }}>{grade}</span>
+                    </TD>
+                    <TD mono right color={C.sub}>{a.calls}</TD>
+                    <TD mono right color={C.sub}>{fmtTalkTime(a.talkMin)}</TD>
+                  </tr>
+                );
+              })}
+              {sorted.length === 0 && (
+                <tr><td colSpan={6} className="text-center text-sm py-5" style={{ color: C.sub }}>No speed data yet</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </Card>
     </div>
   );
@@ -278,13 +464,46 @@ function StepConversions({ period, label }: { period: PeriodData; label: string 
   const convAccounts = period.conversions.byAccount;
   const missed = period.missedCalls;
   const jcMissed = missed.jcTotal - missed.ibrahimCount;
-  const maxAgent = convAgents[0]?.count ?? 1;
+  const repAgents = period.repActivity.agents;
   const callouts = generateCallouts(period);
+  const convRate = period.conversionRate;
+
+  // Peak hour
+  const hourly = period.conversions.hourly;
+  let peakHour = -1;
+  let peakCount = 0;
+  if (hourly) {
+    hourly.forEach((v, h) => { if (v > peakCount) { peakCount = v; peakHour = h; } });
+  }
+  const fmtHour = (h: number) => {
+    if (h === 0) return '12 AM';
+    if (h < 12) return `${h} AM`;
+    if (h === 12) return '12 PM';
+    return `${h - 12} PM`;
+  };
 
   return (
     <div>
       <div className="text-center mb-1 text-[13px] font-semibold uppercase tracking-wider" style={{ color: C.sub }}>{label}</div>
       <Hero value={period.conversions.total} sub="conversions" />
+
+      {/* Summary strip */}
+      <div className="flex justify-center gap-6 mb-4">
+        <div className="text-center">
+          <div className="text-lg font-bold font-mono" style={{ color: C.text }}>{convRate != null ? `${convRate}%` : '—'}</div>
+          <div className="text-[10px] uppercase" style={{ color: C.sub }}>Conv Rate</div>
+        </div>
+        <div className="text-center">
+          <div className="text-lg font-bold font-mono" style={{ color: C.pink }}>{jcMissed}</div>
+          <div className="text-[10px] uppercase" style={{ color: C.sub }}>Missed (JC)</div>
+        </div>
+        {peakHour >= 0 && peakCount > 0 && (
+          <div className="text-center">
+            <div className="text-lg font-bold font-mono" style={{ color: C.cyan }}>{fmtHour(peakHour)}</div>
+            <div className="text-[10px] uppercase" style={{ color: C.sub }}>Peak ({peakCount})</div>
+          </div>
+        )}
+      </div>
 
       {/* Callouts */}
       {callouts.length > 0 && (
@@ -298,21 +517,61 @@ function StepConversions({ period, label }: { period: PeriodData; label: string 
         </div>
       )}
 
-      {/* Agent breakdown */}
-      <Card className="mb-3">
-        <div className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: C.sub }}>By Agent</div>
-        {convAgents.map((a, i) => (
-          <AgentRankingRow key={a.agent} rank={i + 1} agent={a.agent} value={a.count} maxValue={maxAgent} />
-        ))}
-        {convAgents.length === 0 && <p className="text-center text-sm py-3" style={{ color: C.sub }}>No conversions yet</p>}
+      {/* Agent Table with Conv Rate */}
+      <Card padding={false} className="mb-3">
+        <div className="px-4 pt-3 pb-1 text-xs font-bold uppercase tracking-wider" style={{ color: C.sub }}>Agent Breakdown</div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                <TH>#</TH>
+                <TH>Agent</TH>
+                <TH right>Conv</TH>
+                <TH right>Calls</TH>
+                <TH right>Rate</TH>
+                <TH right>Conv/Hr</TH>
+              </tr>
+            </thead>
+            <tbody>
+              {convAgents.map((a, i) => {
+                const rep = repAgents.find(r => r.agent.toLowerCase() === a.agent.toLowerCase());
+                const calls = rep?.calls ?? 0;
+                const rate = calls > 0 ? ((a.count / calls) * 100).toFixed(1) : '—';
+                const convPerHr = rep?.convsPerHour != null ? rep.convsPerHour.toFixed(1) : (rep?.hoursScheduled && rep.hoursScheduled > 0 ? (a.count / rep.hoursScheduled).toFixed(1) : '—');
+                return (
+                  <tr key={a.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
+                    <TD color={i < 3 ? C.cyan : C.sub}><span className="font-bold">{i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}</span></TD>
+                    <TD>
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full" style={{ background: agentColor(a.agent) }} />
+                        <span className="font-semibold capitalize">{a.agent}</span>
+                      </div>
+                    </TD>
+                    <TD mono right>{a.count}</TD>
+                    <TD mono right color={C.sub}>{calls}</TD>
+                    <TD mono right color={rate !== '—' && parseFloat(rate as string) >= 10 ? '#4ade80' : C.sub}>
+                      {rate !== '—' ? `${rate}%` : '—'}
+                    </TD>
+                    <TD mono right color={convPerHr !== '—' && parseFloat(convPerHr) >= 1 ? C.lime : C.sub}>
+                      {convPerHr}
+                    </TD>
+                  </tr>
+                );
+              })}
+              {convAgents.length === 0 && (
+                <tr><td colSpan={6} className="text-center text-sm py-5" style={{ color: C.sub }}>No conversions yet</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </Card>
 
       {/* Accounts + Missed side by side */}
       <div className="grid grid-cols-2 gap-3">
         <Card>
           <div className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: C.sub }}>Top Accounts</div>
-          {convAccounts.slice(0, 6).map((a, i) => (
-            <div key={a.account} className="flex justify-between items-center py-1.5" style={{ borderBottom: i < Math.min(convAccounts.length, 6) - 1 ? `1px solid ${C.border}` : 'none' }}>
+          {convAccounts.slice(0, 8).map((a, i) => (
+            <div key={a.account} className="flex justify-between items-center py-1.5" style={{ borderBottom: i < Math.min(convAccounts.length, 8) - 1 ? `1px solid ${C.border}` : 'none' }}>
               <span className="text-[13px] truncate mr-2" style={{ color: C.text }}>{a.account}</span>
               <span className="font-bold text-[13px] shrink-0" style={{ color: C.cyan }}>{a.count}</span>
             </div>
@@ -324,8 +583,8 @@ function StepConversions({ period, label }: { period: PeriodData; label: string 
           <div className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: C.sub }}>
             Missed Calls <span style={{ color: C.pink }}>{jcMissed}</span>
           </div>
-          {missed.byAccount.filter(a => !isIbrahim(a.account)).slice(0, 6).map((a, i) => (
-            <div key={a.account} className="flex justify-between items-center py-1.5" style={{ borderBottom: i < 5 ? `1px solid ${C.border}` : 'none' }}>
+          {missed.byAccount.filter(a => !isIbrahim(a.account)).slice(0, 8).map((a, i) => (
+            <div key={a.account} className="flex justify-between items-center py-1.5" style={{ borderBottom: i < 7 ? `1px solid ${C.border}` : 'none' }}>
               <span className="text-[13px] truncate mr-2" style={{ color: C.text }}>{a.account}</span>
               <span className="font-bold text-[13px] shrink-0" style={{ color: C.pink }}>{a.count}</span>
             </div>
@@ -339,17 +598,22 @@ function StepConversions({ period, label }: { period: PeriodData; label: string 
         </Card>
       </div>
 
-      {/* Hourly Distribution */}
-      {period.conversions.hourly && (
+      {/* Hourly Distribution — conversions + missed overlay */}
+      {hourly && (
         <Card className="mt-3">
           <div className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: C.sub }}>Hourly Distribution</div>
-          <div className="flex items-end gap-[2px] h-16">
-            {period.conversions.hourly.slice(6, 22).map((v, i) => {
-              const maxH = Math.max(...(period.conversions.hourly?.slice(6, 22) || [1]), 1);
+          <div className="flex items-end gap-[2px] h-20">
+            {hourly.slice(6, 22).map((v, i) => {
+              const maxH = Math.max(...(hourly.slice(6, 22) || [1]), 1);
               const h = v > 0 ? Math.max((v / maxH) * 100, 8) : 0;
+              const hour = i + 6;
+              const isPeak = hour === peakHour;
               return (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                  <div className="w-full rounded-sm transition-all duration-500" style={{ height: `${h}%`, background: v > 0 ? C.cyan : C.border, minHeight: v > 0 ? '4px' : '0' }} />
+                <div key={i} className="flex-1 flex flex-col items-center relative group">
+                  {v > 0 && (
+                    <span className="text-[9px] font-mono mb-0.5 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: C.text }}>{v}</span>
+                  )}
+                  <div className="w-full rounded-sm transition-all duration-500" style={{ height: `${h}%`, background: isPeak ? C.lime : v > 0 ? C.cyan : C.border, minHeight: v > 0 ? '4px' : '0' }} />
                 </div>
               );
             })}
@@ -370,14 +634,29 @@ function StepConversions({ period, label }: { period: PeriodData; label: string 
 function StepMTD({ data }: { data: DashboardData }) {
   const { dayOfMonth, daysInMonth, projected, pacePercent } = computePace(data.mtd.total, data.pulledAt);
   const agents = data.mtd.byAgent;
-  const maxCount = agents[0]?.count ?? 1;
   const paceColor = pacePercent >= 100 ? '#4ade80' : pacePercent >= 80 ? C.cyan : '#f87171';
+  const mtdDaily = data.mtd.mtdDaily ?? [];
+
+  // Compute per-agent stats
+  const agentStats = agents.map(a => {
+    const dailyAvg = dayOfMonth > 0 ? +(a.count / dayOfMonth).toFixed(1) : 0;
+    const agentProjected = Math.round(dailyAvg * daysInMonth);
+    // Best day from agent daily data
+    let bestDay = 0;
+    if (a.daily) {
+      for (const v of Object.values(a.daily)) {
+        if (v > bestDay) bestDay = v;
+      }
+    }
+    return { ...a, dailyAvg, projected: agentProjected, bestDay };
+  });
 
   return (
     <div>
       <div className="text-center mb-1 text-[13px] font-semibold uppercase tracking-wider" style={{ color: C.sub }}>Month-to-Date</div>
       <Hero value={data.mtd.total} sub={`conversions · day ${dayOfMonth} of ${daysInMonth}`} />
 
+      {/* Pace Bar */}
       <Card className="mb-3">
         <div className="flex justify-between items-center mb-2.5">
           <span className="text-[13px] font-semibold" style={{ color: C.sub }}>Monthly Pace</span>
@@ -390,13 +669,106 @@ function StepMTD({ data }: { data: DashboardData }) {
         </div>
       </Card>
 
-      <Card>
-        <div className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: C.sub }}>Agent Leaderboard</div>
-        {agents.map((a, i) => (
-          <AgentRankingRow key={a.agent} rank={i + 1} agent={a.agent} value={a.count} maxValue={maxCount} />
+      {/* Summary Strip */}
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        {[
+          { label: 'Daily Avg', value: dayOfMonth > 0 ? (data.mtd.total / dayOfMonth).toFixed(1) : '—' },
+          { label: 'Projected', value: String(projected) },
+          { label: 'Need/Day', value: dayOfMonth < daysInMonth ? String(Math.max(0, Math.ceil((GOAL - data.mtd.total) / (daysInMonth - dayOfMonth)))) : '—' },
+        ].map(s => (
+          <Card key={s.label}>
+            <div className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: C.sub }}>{s.label}</div>
+            <div className="text-lg font-bold font-mono" style={{ color: C.text }}>{s.value}</div>
+          </Card>
         ))}
-        {agents.length === 0 && <p className="text-center text-sm py-5" style={{ color: C.sub }}>No MTD data</p>}
+      </div>
+
+      {/* Agent Leaderboard Table */}
+      <Card padding={false} className="mb-3">
+        <div className="px-4 pt-3 pb-1 text-xs font-bold uppercase tracking-wider" style={{ color: C.sub }}>Agent Leaderboard</div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                <TH>#</TH>
+                <TH>Agent</TH>
+                <TH right>MTD</TH>
+                <TH right>Avg/Day</TH>
+                <TH right>Proj.</TH>
+                <TH right>Best</TH>
+              </tr>
+            </thead>
+            <tbody>
+              {agentStats.map((a, i) => (
+                <tr key={a.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <TD color={i < 3 ? C.cyan : C.sub}><span className="font-bold">{i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}</span></TD>
+                  <TD>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full" style={{ background: agentColor(a.agent) }} />
+                      <span className="font-semibold capitalize">{a.agent}</span>
+                    </div>
+                  </TD>
+                  <TD mono right>{a.count}</TD>
+                  <TD mono right color={C.sub}>{a.dailyAvg}</TD>
+                  <TD mono right color={a.projected >= Math.round(GOAL / agents.length) ? '#4ade80' : C.sub}>{a.projected}</TD>
+                  <TD mono right color={C.sub}>{a.bestDay || '—'}</TD>
+                </tr>
+              ))}
+              {agents.length === 0 && (
+                <tr><td colSpan={6} className="text-center text-sm py-5" style={{ color: C.sub }}>No MTD data</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </Card>
+
+      {/* Cumulative MTD Chart — SVG */}
+      {mtdDaily.length > 1 && (
+        <Card>
+          <div className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: C.sub }}>Daily Trend</div>
+          <div className="h-24">
+            <svg viewBox={`0 0 ${mtdDaily.length * 20} 100`} className="w-full h-full" preserveAspectRatio="none">
+              {(() => {
+                // Build cumulative data
+                const cumulative: number[] = [];
+                let sum = 0;
+                for (const d of mtdDaily) { sum += d.total; cumulative.push(sum); }
+                const maxVal = Math.max(...cumulative, 1);
+                const goalLine = (GOAL / maxVal) * 100;
+
+                // Build path
+                const points = cumulative.map((v, i) => {
+                  const x = i * 20 + 10;
+                  const y = 100 - (v / maxVal) * 90;
+                  return `${x},${y}`;
+                });
+                const linePath = `M${points.join(' L')}`;
+                const areaPath = `${linePath} L${(cumulative.length - 1) * 20 + 10},100 L10,100 Z`;
+
+                return (
+                  <>
+                    {/* Goal line */}
+                    <line x1="0" y1={100 - (goalLine * 0.9)} x2={mtdDaily.length * 20} y2={100 - (goalLine * 0.9)}
+                      stroke={C.sub} strokeDasharray="4,4" strokeWidth="0.5" opacity="0.5" />
+                    {/* Area fill */}
+                    <path d={areaPath} fill={C.cyan} opacity="0.1" />
+                    {/* Line */}
+                    <path d={linePath} fill="none" stroke={C.cyan} strokeWidth="2" />
+                    {/* Dots */}
+                    {cumulative.map((v, i) => (
+                      <circle key={i} cx={i * 20 + 10} cy={100 - (v / maxVal) * 90} r="2.5" fill={C.cyan} />
+                    ))}
+                  </>
+                );
+              })()}
+            </svg>
+          </div>
+          <div className="flex justify-between mt-1">
+            <span className="text-[10px]" style={{ color: C.sub }}>Day 1</span>
+            <span className="text-[10px]" style={{ color: C.sub }}>Day {dayOfMonth}</span>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
@@ -456,13 +828,22 @@ function StepSlack({ data }: { data: DashboardData }) {
 
   const generatedAt = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Edmonton' });
 
+  // Week-to-date: sum last 7 days from mtdDaily
+  const mtdDaily = data.mtd.mtdDaily ?? [];
+  let wtdTotal = 0;
+  if (mtdDaily.length > 0) {
+    const last7 = mtdDaily.slice(-7);
+    wtdTotal = last7.reduce((s, d) => s + d.total, 0);
+  }
+  const wtdLine = wtdTotal > 0 ? `\n${dotLeader('Week-to-Date', `*${wtdTotal}*`)}` : '';
+
   const message = `🌅 *JUMP CONTACT — MORNING REPORT*
 📅 ${data.date}
 
 ━━━━━━━━━━━━━━━━━━━━━
 📊 *CONVERSIONS*
 ━━━━━━━━━━━━━━━━━━━━━
-${dotLeader(periodLbl, `*${period.conversions.total}*`)}
+${dotLeader(periodLbl, `*${period.conversions.total}*`)}${wtdLine}
 ${dotLeader('MTD Total', `*${data.mtd.total}* / ${GOAL}`)}
 ${dotLeader('Projected', `*${projected}* ${paceEmoji} (${pacePercent}%)`)}
 
@@ -528,7 +909,7 @@ export default function MeetingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState(0);
-  const [activeDay, setActiveDay] = useState<'today' | 'yesterday'>('yesterday');
+  const [activeDay, setActiveDay] = useState<'today' | 'yesterday' | 'friday' | 'weekend'>('yesterday');
 
   const fetchData = useCallback(async () => {
     try {
@@ -590,8 +971,11 @@ export default function MeetingPage() {
   if (activeDay === 'today') {
     period = data.today;
     label = 'Today';
-  } else if (monday && data.weekend) {
-    period = aggregateWeekend(data.weekend);
+  } else if (activeDay === 'friday' && monday && data.weekend) {
+    period = data.weekend.friday;
+    label = 'Friday';
+  } else if (activeDay === 'weekend' && monday && data.weekend) {
+    period = aggregateDays([data.weekend.saturday, data.weekend.sunday]);
     label = 'Weekend';
   } else {
     period = data.yesterday;
@@ -629,14 +1013,17 @@ export default function MeetingPage() {
             ))}
           </div>
           <div className="flex gap-1 shrink-0">
-            {(['today', 'yesterday'] as const).map(d => (
-              <button key={d} onClick={() => setActiveDay(d)} className="px-2.5 py-1 rounded-md border-none text-xs cursor-pointer capitalize"
+            {(monday
+              ? [{ key: 'today', label: 'Today' }, { key: 'friday', label: 'Friday' }, { key: 'weekend', label: 'Weekend' }]
+              : [{ key: 'today', label: 'Today' }, { key: 'yesterday', label: 'Yesterday' }]
+            ).map(d => (
+              <button key={d.key} onClick={() => setActiveDay(d.key as typeof activeDay)} className="px-2.5 py-1 rounded-md border-none text-xs cursor-pointer"
                 style={{
-                  background: activeDay === d ? C.lime : 'rgba(255,255,255,0.06)',
-                  color: activeDay === d ? '#0A0E1A' : C.sub,
+                  background: activeDay === d.key ? C.lime : 'rgba(255,255,255,0.06)',
+                  color: activeDay === d.key ? '#0A0E1A' : C.sub,
                   fontWeight: 600,
                 }}>
-                {d === 'yesterday' && monday ? 'weekend' : d}
+                {d.label}
               </button>
             ))}
           </div>

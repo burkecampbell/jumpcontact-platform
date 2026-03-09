@@ -18,11 +18,12 @@ import {
   parseHMS,
   isMonday,
   capitalize,
+  getScheduledHours,
 } from './constants';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-export interface AgentStat { agent: string; count: number }
+export interface AgentStat { agent: string; count: number; daily?: Record<string, number> }
 export interface AcctStat  { account: string; count: number }
 export interface RepAgent  {
   agent: string;
@@ -30,10 +31,18 @@ export interface RepAgent  {
   talkMin: number;
   speedSec: number | null;
   wrapUpSec: number | null;
+  hoursScheduled: number;
+  convsPerHour?: number;
 }
 export interface OutboundAgent { agent: string; callsMade: number; talkMin: number }
 export interface MissedData { total: number; jcTotal: number; ibrahimCount: number; byAccount: AcctStat[] }
-export interface ConvPeriod { total: number; byAgent: AgentStat[]; byAccount: AcctStat[]; hourly?: number[] }
+export interface ConvPeriod {
+  total: number;
+  byAgent: AgentStat[];
+  byAccount: AcctStat[];
+  hourly?: number[];
+  mtdDaily?: { date: string; total: number }[];
+}
 
 export interface RawCall {
   time: string;
@@ -43,12 +52,14 @@ export interface RawCall {
   direction: 'inbound' | 'outbound';
   callSid?: string;
   recordingUrl?: string;
+  account?: string;
 }
 
 export interface PeriodData {
   conversions: ConvPeriod;
   missedCalls: MissedData;
   repActivity: { agents: RepAgent[]; outbound: OutboundAgent[]; avgSpeedSec: number | null };
+  conversionRate?: number;
 }
 
 export interface DashboardData {
@@ -182,7 +193,30 @@ export async function getConversions(
   // MTD
   const mtdRows = all.filter(c => isSameMonth(c.date, monthRef));
   const mtdMap: Record<string, number> = {};
-  mtdRows.forEach(c => { mtdMap[c.agent] = (mtdMap[c.agent] || 0) + 1; });
+  // Track per-agent daily breakdown for Race page grid
+  const mtdAgentDaily: Record<string, Record<string, number>> = {};
+  // Track per-day totals for MTD daily breakdown
+  const mtdDailyMap: Record<string, number> = {};
+  mtdRows.forEach(c => {
+    mtdMap[c.agent] = (mtdMap[c.agent] || 0) + 1;
+    const dayKey = dateStr(c.date);
+    mtdDailyMap[dayKey] = (mtdDailyMap[dayKey] || 0) + 1;
+    // Per-agent daily
+    const agentLower = c.agent.toLowerCase();
+    if (!mtdAgentDaily[agentLower]) mtdAgentDaily[agentLower] = {};
+    mtdAgentDaily[agentLower][dayKey] = (mtdAgentDaily[agentLower][dayKey] || 0) + 1;
+  });
+
+  // Build mtdDaily sorted by date
+  const mtdDaily = Object.entries(mtdDailyMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, total]) => ({ date, total }));
+
+  // Build byAgent with daily breakdown
+  const mtdByAgent = toAgentList(mtdMap).map(a => ({
+    ...a,
+    daily: mtdAgentDaily[a.agent.toLowerCase()] || {},
+  }));
 
   function buildPeriod(convs: Conv[]): ConvPeriod {
     const agentMap: Record<string, number> = {};
@@ -208,8 +242,9 @@ export async function getConversions(
     periods,
     mtd: {
       total: mtdRows.length,
-      byAgent: toAgentList(mtdMap),
+      byAgent: mtdByAgent,
       byAccount: buildAccountMap(mtdRows),
+      mtdDaily,
     },
   };
 }
@@ -313,7 +348,7 @@ async function getWorkerSpeedStats(
     const results = await Promise.allSettled(
       workers.map(async w => {
         const statsRes = await fetch(
-          `https://taskrouter.twilio.com/v1/Workspaces/${WORKSPACE_SID}/Workers/${w.sid}/Statistics?StartDate=${ds}&EndDate=${ds}`,
+          `https://taskrouter.twilio.com/v1/Workspaces/${WORKSPACE_SID}/Workers/${w.sid}/Statistics?StartDate=${ds}`,
           { headers: { Authorization: auth } },
         );
         const statsData = await statsRes.json() as {
@@ -344,8 +379,10 @@ export interface TwilioCall { sid: string; to: string; from: string; duration: s
 
 export async function fetchCallsForDate(date: Date, auth: string): Promise<TwilioCall[]> {
   const sid = process.env.TWILIO_ACCOUNT_SID!;
-  const ds  = dateStr(date);
-  const nds = nextDayStr(date);
+  // Use ISO timestamps with MST offset so Twilio queries the correct MST day
+  // (plain date strings are interpreted as UTC midnight, which is 7 hours off)
+  const ds  = `${dateStr(date)}T00:00:00-07:00`;
+  const nds = `${nextDayStr(date)}T00:00:00-07:00`;
   const calls: TwilioCall[] = [];
   let url: string | null =
     `https://api.twilio.com/2010-04-01/Accounts/${sid}/Calls.json?StartTime>=${ds}&StartTime<${nds}&PageSize=1000`;
@@ -363,9 +400,11 @@ function buildRepActivity(
   speedMap: Record<string, number>,
   avgSpeedSec: number | null,
   workerStats: Record<string, { speedSec: number; wrapUpSec: number }>,
+  date: Date,
 ) {
   const inboundMap: Record<string, { calls: number; durationSec: number }> = {};
   for (const call of calls) {
+    if (call.status !== 'completed') continue;
     const raw = decodeAgent(call.to || '');
     if (!raw || !ACTIVE_AGENTS.includes(raw)) continue;
     const agent = capitalize(raw === 'jose' || raw === 'daniel' ? 'danny' : raw);
@@ -376,6 +415,7 @@ function buildRepActivity(
 
   const outboundMap: Record<string, { calls: number; durationSec: number }> = {};
   for (const call of calls) {
+    if (call.status !== 'completed') continue;
     const raw = decodeAgent(call.from || '');
     if (!raw || !OUTBOUND_AGENTS.includes(raw)) continue;
     const agent = capitalize(raw);
@@ -390,8 +430,9 @@ function buildRepActivity(
       const rawName    = agent.toLowerCase();
       const lookupKeys = rawName === 'danny' ? ['danny', 'jose', 'daniel'] : [rawName];
       const speedSec   = lookupKeys.map(k => speedMap[k]).find(v => v != null) ?? null;
-      const wrapUpSec  = lookupKeys.map(k => workerStats[k]?.wrapUpSec).find(v => v != null && v > 0) ?? null;
-      return { agent, calls: s.calls, talkMin: +(s.durationSec / 60).toFixed(1), speedSec, wrapUpSec };
+      const wrapUpSec  = lookupKeys.map(k => workerStats[k]?.wrapUpSec).find(v => v != null) ?? null;
+      const hoursScheduled = getScheduledHours(rawName, date);
+      return { agent, calls: s.calls, talkMin: +(s.durationSec / 60).toFixed(1), speedSec, wrapUpSec, hoursScheduled };
     });
 
   const outbound: OutboundAgent[] = Object.entries(outboundMap)
@@ -449,11 +490,24 @@ async function buildPeriodData(
       getWorkerSpeedStats(ds, auth),
     ]);
     calls = fetchedCalls;
-    repActivity = buildRepActivity(calls, speed.speedMap, speed.avgSpeedSec, workerStats);
+    repActivity = buildRepActivity(calls, speed.speedMap, speed.avgSpeedSec, workerStats, date);
+  }
+
+  // Compute conversion rate: conversions / calls answered × 100
+  const totalCalls = repActivity.agents.reduce((s, a) => s + a.calls, 0);
+  const convRate = totalCalls > 0 ? +((convPeriod.total / totalCalls) * 100).toFixed(1) : undefined;
+
+  // Compute per-agent conversions per hour (join conversion data with schedule)
+  const convByAgentMap: Record<string, number> = {};
+  for (const a of convPeriod.byAgent) convByAgentMap[a.agent.toLowerCase()] = a.count;
+  for (const agent of repActivity.agents) {
+    const convs = convByAgentMap[agent.agent.toLowerCase()] || 0;
+    agent.convsPerHour =
+      agent.hoursScheduled > 0 ? +(convs / agent.hoursScheduled).toFixed(2) : undefined;
   }
 
   return {
-    period: { conversions: convPeriod, missedCalls: missed, repActivity },
+    period: { conversions: convPeriod, missedCalls: missed, repActivity, conversionRate: convRate },
     calls,
   };
 }
@@ -461,8 +515,9 @@ async function buildPeriodData(
 // ── MAIN EXPORT ─────────────────────────────────────────────────────────────
 
 export async function getDashboardData(): Promise<DashboardData> {
-  const now       = new Date();
-  const today     = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // Force MST date — new Date() returns UTC on Vercel, which after 5pm MST resolves to tomorrow
+  const mstNow    = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Edmonton' }));
+  const today     = new Date(mstNow.getFullYear(), mstNow.getMonth(), mstNow.getDate());
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
 

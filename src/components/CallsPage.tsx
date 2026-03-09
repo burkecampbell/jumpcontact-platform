@@ -5,7 +5,7 @@ import NavBar from './NavBar';
 import Card from './Card';
 import { C, capitalize, fmtTalkTime, ACTIVE_AGENTS, agentColor } from '@/lib/constants';
 import type { RawCall } from '@/lib/getDashboard';
-import { ArrowDown, ArrowUp, Filter, Download, Play, Pause, Square, Volume2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Filter, Download, Play, Pause, Square, Volume2, CheckSquare } from 'lucide-react';
 
 // ── Formatters ──────────────────────────────────────────────────────────────
 
@@ -39,9 +39,9 @@ interface CallsResponse { calls: RawCall[]; agents: AgentSummary[]; pulledAt: st
 // ── CSV Export ──────────────────────────────────────────────────────────────
 
 function downloadCSV(calls: RawCall[], filename: string) {
-  const header = 'Time,Agent,Phone,Duration (sec),Direction\n';
+  const header = 'Time,Agent,Client,Phone,Duration (sec),Direction\n';
   const rows = calls.map(c =>
-    `"${new Date(c.time).toLocaleString('en-US', { timeZone: 'America/Edmonton' })}","${c.agent}","${formatPhone(c.phone)}",${c.duration},"${c.direction}"`
+    `"${new Date(c.time).toLocaleString('en-US', { timeZone: 'America/Edmonton' })}","${c.agent}","${c.account || ''}","${formatPhone(c.phone)}",${c.duration},"${c.direction}"`
   ).join('\n');
   const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -184,10 +184,11 @@ export default function CallsPage() {
   const [error, setError] = useState<string | null>(null);
   const [agentFilter, setAgentFilter] = useState('all');
   const [dirFilter, setDirFilter] = useState<'all' | 'inbound' | 'outbound'>('all');
+  const [selectedSids, setSelectedSids] = useState<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Edmonton' });
       const res = await fetch(`/api/calls?date=${today}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setData(await res.json());
@@ -219,6 +220,43 @@ export default function CallsPage() {
     const today = new Date().toISOString().slice(0, 10);
     const suffix = agentFilter !== 'all' ? `-${agentFilter}` : '';
     downloadCSV(filtered, `calls-${today}${suffix}.csv`);
+  };
+
+  // Selection helpers
+  const recordingsInView = useMemo(
+    () => filtered.filter(c => c.recordingUrl && c.callSid),
+    [filtered],
+  );
+
+  const allSelected = recordingsInView.length > 0 && recordingsInView.every(c => selectedSids.has(c.callSid!));
+
+  const toggleSelect = (sid: string) => {
+    setSelectedSids(prev => {
+      const next = new Set(prev);
+      if (next.has(sid)) next.delete(sid); else next.add(sid);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelectedSids(new Set());
+    } else {
+      setSelectedSids(new Set(recordingsInView.map(c => c.callSid!)));
+    }
+  };
+
+  const handleBulkDownload = async () => {
+    for (const sid of selectedSids) {
+      const call = filtered.find(c => c.callSid === sid);
+      if (!call?.recordingUrl) continue;
+      const url = call.recordingUrl + (call.recordingUrl.includes('?') ? '&' : '?') + 'download=1';
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `recording-${sid}.mp3`;
+      a.click();
+      await new Promise(r => setTimeout(r, 500)); // stagger downloads
+    }
   };
 
   if (loading) {
@@ -285,6 +323,20 @@ export default function CallsPage() {
             <span className="text-xs font-mono" style={{ color: C.sub }}>
               {filtered.length} / {totalCalls} calls
             </span>
+            {selectedSids.size > 0 && (
+              <button
+                onClick={handleBulkDownload}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                style={{
+                  background: C.cyan + '18',
+                  color: C.cyan,
+                  border: `1px solid ${C.cyan}44`,
+                }}
+              >
+                <Download size={13} />
+                Download {selectedSids.size} Recording{selectedSids.size > 1 ? 's' : ''}
+              </button>
+            )}
             <button
               onClick={handleDownload}
               disabled={!filtered.length}
@@ -307,40 +359,77 @@ export default function CallsPage() {
             <table className="w-full text-sm">
               <thead className="sticky top-0" style={{ background: '#141824' }}>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                  {['Time', 'Agent', 'Phone', 'Duration', '', 'Recording'].map(h => (
+                  <th className="px-3 py-2.5 w-10">
+                    {recordingsInView.length > 0 && (
+                      <button onClick={toggleAll} className="p-0.5 rounded hover:bg-white/5" title="Select all recordings">
+                        {allSelected
+                          ? <CheckSquare size={14} style={{ color: C.cyan }} />
+                          : <Square size={14} style={{ color: C.sub }} />}
+                      </button>
+                    )}
+                  </th>
+                  {['Time', 'Agent', 'Client', 'Phone', 'Duration', '', 'Recording'].map(h => (
                     <th key={h} className="px-5 py-2.5 text-left text-xs font-medium" style={{ color: C.sub }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((call, i) => (
-                  <tr key={i} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
-                    <td className="px-5 py-2.5 font-mono text-xs" style={{ color: C.sub }}>{formatTime(call.time)}</td>
-                    <td className="px-5 py-2.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: agentColor(call.agent) }} />
-                        <span className="font-medium" style={{ color: C.text }}>{capitalize(call.agent)}</span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-2.5 font-mono text-xs" style={{ color: C.sub }}>{formatPhone(call.phone)}</td>
-                    <td className="px-5 py-2.5 font-mono text-xs" style={{ color: C.text }}>{formatDuration(call.duration)}</td>
-                    <td className="px-5 py-2.5">
-                      {call.direction === 'inbound'
-                        ? <ArrowDown size={14} style={{ color: '#4ade80' }} />
-                        : <ArrowUp size={14} style={{ color: '#38bdf8' }} />}
-                    </td>
-                    <td className="px-5 py-2.5">
-                      {call.recordingUrl && call.callSid ? (
-                        <InlinePlayer callSid={call.callSid} recordingUrl={call.recordingUrl} />
-                      ) : (
-                        <span className="text-xs" style={{ color: C.border }}>—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map((call, i) => {
+                  const hasRec = !!(call.recordingUrl && call.callSid);
+                  const isSelected = hasRec && selectedSids.has(call.callSid!);
+                  return (
+                    <tr key={i} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
+                      <td className="px-3 py-2.5 w-10">
+                        {hasRec && (
+                          <button onClick={() => toggleSelect(call.callSid!)} className="p-0.5 rounded hover:bg-white/5">
+                            {isSelected
+                              ? <CheckSquare size={14} style={{ color: C.cyan }} />
+                              : <Square size={14} style={{ color: C.sub }} />}
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-5 py-2.5 font-mono text-xs" style={{ color: C.sub }}>{formatTime(call.time)}</td>
+                      <td className="px-5 py-2.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ background: agentColor(call.agent) }} />
+                          <span className="font-medium" style={{ color: C.text }}>{capitalize(call.agent)}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-2.5 text-xs" style={{ color: call.account ? C.text : C.border }}>
+                        {call.account || '—'}
+                      </td>
+                      <td className="px-5 py-2.5 font-mono text-xs" style={{ color: C.sub }}>{formatPhone(call.phone)}</td>
+                      <td className="px-5 py-2.5 font-mono text-xs" style={{ color: C.text }}>{formatDuration(call.duration)}</td>
+                      <td className="px-5 py-2.5">
+                        {call.direction === 'inbound'
+                          ? <ArrowDown size={14} style={{ color: '#4ade80' }} />
+                          : <ArrowUp size={14} style={{ color: '#38bdf8' }} />}
+                      </td>
+                      <td className="px-5 py-2.5">
+                        <div className="flex items-center gap-2">
+                          {hasRec ? (
+                            <>
+                              <InlinePlayer callSid={call.callSid!} recordingUrl={call.recordingUrl!} />
+                              <a
+                                href={call.recordingUrl! + (call.recordingUrl!.includes('?') ? '&' : '?') + 'download=1'}
+                                download={`recording-${call.callSid}.mp3`}
+                                className="p-1 rounded-md transition-colors hover:bg-white/5"
+                                title="Download recording"
+                              >
+                                <Download size={13} style={{ color: C.sub }} />
+                              </a>
+                            </>
+                          ) : (
+                            <span className="text-xs" style={{ color: C.border }}>—</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-5 py-12 text-center text-sm" style={{ color: C.sub }}>
+                    <td colSpan={8} className="px-5 py-12 text-center text-sm" style={{ color: C.sub }}>
                       No calls match the current filters
                     </td>
                   </tr>

@@ -7,11 +7,11 @@ export const OUTBOUND_AGENTS = ['william', 'joseph'];
 export const EXCLUDED_AGENTS_LOWER = ['sara', 'george'];
 
 export const AGENT_COLORS: Record<string, string> = {
-  burke: '#4ade80',
-  omar:  '#38bdf8',
-  ian:   '#a78bfa',
-  danny: '#fbbf24',
-  chris: '#f87171',
+  omar:  '#0369a1',
+  burke: '#15803d',
+  ian:   '#6d28d9',
+  danny: '#b45309',
+  chris: '#9f1239',
 };
 
 export const C = {
@@ -117,12 +117,31 @@ export function parseHMS(hms: string): number {
 }
 
 export function isMonday(): boolean {
-  return new Date().getDay() === 1;
+  const mst = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Edmonton' }));
+  return mst.getDay() === 1;
 }
 
 export function capitalize(s: string): string {
   if (!s) return '';
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// ── Agent Schedule (March 2026) ──────────────────────────────────────────────
+// Hours per day-of-week [Sun=0, Mon=1, ..., Sat=6]
+// Manually calculated from shift times, NOT from the Hrs/Wk column in the sheet.
+export const AGENT_SCHEDULE: Record<string, number[]> = {
+  //           Sun  Mon  Tue  Wed  Thu  Fri  Sat
+  omar:    [   0,   9,   9,   9,   9,   7,   7 ],  // OFF, 8a-5p, 8a-5p, 8a-5p, 8a-5p, 8a-3p, 6p-1a
+  burke:   [   4,  11,  11,  11,  11,  11,   0 ],  // 1p-5p, 7a-6p x5, OFF
+  ian:     [   7,   8,   8,   8,   8,   8,   7 ],  // 6a-1p, 4a-12p x5, 6a-1p
+  danny:   [   0,   8,   8,   8,   8,   8,   5 ],  // OFF, 10a-6p x5, 1p-6p
+  chris:   [   9,   9,   9,   9,   9,   9,   0 ],  // 4p-1a x6, OFF
+};
+
+export function getScheduledHours(agent: string, date: Date): number {
+  const key = agent.toLowerCase();
+  const dow = date.getDay(); // 0=Sun
+  return AGENT_SCHEDULE[key]?.[dow] ?? 0;
 }
 
 // ── Sheet IDs ─────────────────────────────────────────────────────────────────
