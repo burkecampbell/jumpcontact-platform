@@ -6,7 +6,9 @@
     "dev": "next dev -p 3003",
     "build": "next build",
     "start": "next start -p 3003",
-    "lint": "eslint"
+    "lint": "eslint",
+    "verify": "npx tsx scripts/verify-env.ts",
+    "verify:deploys": "npx tsx scripts/verify-env.ts --all-deploys"
   },
   "dependencies": {
     "googleapis": "^171.4.0",
