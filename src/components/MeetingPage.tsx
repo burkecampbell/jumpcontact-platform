@@ -5,19 +5,26 @@ import NavBar from './NavBar';
 import Card from './Card';
 
 import {
-  C, GOAL, capitalize, fmtTalkTime, fmtSpeed, speedGrade,
+  C, GOAL, fmtTalkTime, fmtSpeed, speedGrade,
   computePace, isMonday, isIbrahim, agentColor,
 } from '@/lib/constants';
-import type { DashboardData, PeriodData, ConvPeriod, RepAgent } from '@/lib/getDashboard';
+import { TH, TD } from './TableHelpers';
+import type { DashboardData, PeriodData, RepAgent } from '@/lib/getDashboard';
 
 // ── Count-Up Hook ──────────────────────────────────────────────────────────
 function useCountUp(target: number, duration = 600): number {
   const [value, setValue] = useState(0);
   const startTs = useRef<number | null>(null);
   const rafId = useRef<number>(0);
+  const [prevTarget, setPrevTarget] = useState(target);
+
+  // React-recommended pattern: adjust state during render when prop changes
+  if (prevTarget !== target) {
+    setPrevTarget(target);
+    setValue(0);
+  }
 
   useEffect(() => {
-    setValue(0);
     startTs.current = null;
     function tick(ts: number) {
       if (!startTs.current) startTs.current = ts;
@@ -52,7 +59,15 @@ function Hero({ value, sub, color }: { value: number; sub?: string; color?: stri
 // ── Pace Bar ──────────────────────────────────────────────────────────────
 function PaceBar({ pct, color }: { pct: number; color: string }) {
   const [w, setW] = useState(0);
-  useEffect(() => { setW(0); const t = setTimeout(() => setW(pct), 100); return () => clearTimeout(t); }, [pct]);
+  const [prevPct, setPrevPct] = useState(pct);
+
+  // React-recommended pattern: adjust state during render when prop changes
+  if (prevPct !== pct) {
+    setPrevPct(pct);
+    setW(0);
+  }
+
+  useEffect(() => { const t = setTimeout(() => setW(pct), 100); return () => clearTimeout(t); }, [pct]);
   return (
     <div className="h-2.5 rounded-full overflow-hidden" style={{ background: C.border }}>
       <div className="h-full rounded-full transition-all duration-700 ease-out" style={{ width: `${w}%`, background: color }} />
@@ -191,21 +206,6 @@ function aggregateDays(days: PeriodData[]): PeriodData {
   };
 }
 
-// ── Shared Table Shell ─────────────────────────────────────────────────
-function TH({ children, right }: { children: React.ReactNode; right?: boolean }) {
-  return (
-    <th className={`px-3 py-2 text-xs font-medium whitespace-nowrap ${right ? 'text-right' : 'text-left'}`} style={{ color: C.sub }}>
-      {children}
-    </th>
-  );
-}
-function TD({ children, mono, right, color }: { children: React.ReactNode; mono?: boolean; right?: boolean; color?: string }) {
-  return (
-    <td className={`px-3 py-2.5 text-[13px] ${mono ? 'font-mono' : ''} ${right ? 'text-right' : ''}`} style={{ color: color || C.text }}>
-      {children}
-    </td>
-  );
-}
 
 // ── STEP 1: Calls Answered ─────────────────────────────────────────────
 function StepCalls({ period, label }: { period: PeriodData; label: string }) {
@@ -264,7 +264,7 @@ function StepCalls({ period, label }: { period: PeriodData; label: string }) {
                   </TD>
                   <TD mono right>{a.calls}</TD>
                   <TD mono right color={C.sub}>{a.hoursScheduled > 0 ? a.hoursScheduled : '—'}</TD>
-                  <TD mono right color={callsPerHr !== '—' && parseFloat(callsPerHr) >= 3 ? '#4ade80' : C.sub}>{callsPerHr}</TD>
+                  <TD mono right color={callsPerHr !== '—' && parseFloat(callsPerHr) >= 3 ? C.good : C.sub}>{callsPerHr}</TD>
                   <TD mono right>{fmtTalkTime(a.talkMin)}</TD>
                   <TD mono right>{fmtSpeed(a.speedSec)}</TD>
                   <TD mono right color={C.sub}>{a.wrapUpSec != null ? `${Math.round(a.wrapUpSec)}s` : '—'}</TD>
@@ -394,19 +394,19 @@ function StepSpeed({ period, label }: { period: PeriodData; label: string }) {
             <div className="text-[10px] uppercase" style={{ color: C.sub }}>Team Grade</div>
           </div>
           <div className="text-center">
-            <div className="text-lg font-bold font-mono" style={{ color: '#4ade80' }}>{buckets.fast}</div>
+            <div className="text-lg font-bold font-mono" style={{ color: C.good }}>{buckets.fast}</div>
             <div className="text-[10px] uppercase" style={{ color: C.sub }}>&lt;8s</div>
           </div>
           <div className="text-center">
-            <div className="text-lg font-bold font-mono" style={{ color: '#38bdf8' }}>{buckets.good}</div>
+            <div className="text-lg font-bold font-mono" style={{ color: C.info }}>{buckets.good}</div>
             <div className="text-[10px] uppercase" style={{ color: C.sub }}>8-12s</div>
           </div>
           <div className="text-center">
-            <div className="text-lg font-bold font-mono" style={{ color: '#fbbf24' }}>{buckets.ok}</div>
+            <div className="text-lg font-bold font-mono" style={{ color: C.warn }}>{buckets.ok}</div>
             <div className="text-[10px] uppercase" style={{ color: C.sub }}>12-17s</div>
           </div>
           <div className="text-center">
-            <div className="text-lg font-bold font-mono" style={{ color: '#f87171' }}>{buckets.slow}</div>
+            <div className="text-lg font-bold font-mono" style={{ color: C.bad }}>{buckets.slow}</div>
             <div className="text-[10px] uppercase" style={{ color: C.sub }}>17s+</div>
           </div>
         </div>
@@ -549,7 +549,7 @@ function StepConversions({ period, label }: { period: PeriodData; label: string 
                     </TD>
                     <TD mono right>{a.count}</TD>
                     <TD mono right color={C.sub}>{calls}</TD>
-                    <TD mono right color={rate !== '—' && parseFloat(rate as string) >= 10 ? '#4ade80' : C.sub}>
+                    <TD mono right color={rate !== '—' && parseFloat(rate as string) >= 10 ? C.good : C.sub}>
                       {rate !== '—' ? `${rate}%` : '—'}
                     </TD>
                     <TD mono right color={convPerHr !== '—' && parseFloat(convPerHr) >= 1 ? C.lime : C.sub}>
@@ -634,7 +634,7 @@ function StepConversions({ period, label }: { period: PeriodData; label: string 
 function StepMTD({ data }: { data: DashboardData }) {
   const { dayOfMonth, daysInMonth, projected, pacePercent } = computePace(data.mtd.total, data.pulledAt);
   const agents = data.mtd.byAgent;
-  const paceColor = pacePercent >= 100 ? '#4ade80' : pacePercent >= 80 ? C.cyan : '#f87171';
+  const paceColor = pacePercent >= 100 ? C.good : pacePercent >= 80 ? C.cyan : C.bad;
   const mtdDaily = data.mtd.mtdDaily ?? [];
 
   // Compute per-agent stats
@@ -710,7 +710,7 @@ function StepMTD({ data }: { data: DashboardData }) {
                   </TD>
                   <TD mono right>{a.count}</TD>
                   <TD mono right color={C.sub}>{a.dailyAvg}</TD>
-                  <TD mono right color={a.projected >= Math.round(GOAL / agents.length) ? '#4ade80' : C.sub}>{a.projected}</TD>
+                  <TD mono right color={a.projected >= Math.round(GOAL / agents.length) ? C.good : C.sub}>{a.projected}</TD>
                   <TD mono right color={C.sub}>{a.bestDay || '—'}</TD>
                 </tr>
               ))}
@@ -957,7 +957,7 @@ export default function MeetingPage() {
       <>
         <NavBar />
         <div className="max-w-[640px] mx-auto px-5 py-20 text-center">
-          <p style={{ color: '#f87171' }}>Failed to load: {error}</p>
+          <p style={{ color: C.bad }}>Failed to load: {error}</p>
           <button onClick={fetchData} className="mt-4 px-4 py-2 rounded-lg text-sm" style={{ background: C.cyan, color: '#000' }}>Retry</button>
         </div>
       </>

@@ -3,33 +3,9 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import NavBar from './NavBar';
 import Card from './Card';
-import { C, capitalize, fmtTalkTime, ACTIVE_AGENTS, agentColor } from '@/lib/constants';
+import { C, capitalize, fmtTalkTime, ACTIVE_AGENTS, agentColor, formatPhone, formatDuration, formatTime } from '@/lib/constants';
 import type { RawCall } from '@/lib/getDashboard';
 import { ArrowDown, ArrowUp, Filter, Download, Play, Pause, Square, Volume2, CheckSquare } from 'lucide-react';
-
-// ── Formatters ──────────────────────────────────────────────────────────────
-
-function formatPhone(num: string): string {
-  if (!num) return '—';
-  const d = num.replace(/\D/g, '');
-  if (d.length === 11 && d.startsWith('1')) return `(${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}`;
-  if (d.length === 10) return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;
-  return num;
-}
-
-function formatDuration(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
-function formatTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString('en-US', {
-      hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Edmonton',
-    });
-  } catch { return '—'; }
-}
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -54,7 +30,7 @@ function downloadCSV(calls: RawCall[], filename: string) {
 
 // ── Audio Player ────────────────────────────────────────────────────────────
 
-function InlinePlayer({ callSid, recordingUrl }: { callSid: string; recordingUrl: string }) {
+function InlinePlayer({ recordingUrl }: { recordingUrl: string }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [state, setState] = useState<'idle' | 'loading' | 'playing' | 'paused' | 'error'>('idle');
   const [progress, setProgress] = useState(0);
@@ -118,7 +94,7 @@ function InlinePlayer({ callSid, recordingUrl }: { callSid: string; recordingUrl
         ) : state === 'playing' ? (
           <Pause size={14} style={{ color: C.cyan }} />
         ) : state === 'error' ? (
-          <Volume2 size={14} style={{ color: '#f87171' }} />
+          <Volume2 size={14} style={{ color: C.bad }} />
         ) : (
           <Play size={14} style={{ color: C.cyan }} />
         )}
@@ -278,7 +254,7 @@ export default function CallsPage() {
       <>
         <NavBar />
         <div className="max-w-6xl mx-auto px-4 py-20 text-center">
-          <p style={{ color: '#f87171' }}>Failed to load: {error}</p>
+          <p style={{ color: C.bad }}>Failed to load: {error}</p>
           <button onClick={fetchData} className="mt-4 px-4 py-2 rounded-lg text-sm" style={{ background: C.cyan, color: '#000' }}>
             Retry
           </button>
@@ -402,14 +378,14 @@ export default function CallsPage() {
                       <td className="px-5 py-2.5 font-mono text-xs" style={{ color: C.text }}>{formatDuration(call.duration)}</td>
                       <td className="px-5 py-2.5">
                         {call.direction === 'inbound'
-                          ? <ArrowDown size={14} style={{ color: '#4ade80' }} />
-                          : <ArrowUp size={14} style={{ color: '#38bdf8' }} />}
+                          ? <ArrowDown size={14} style={{ color: C.good }} />
+                          : <ArrowUp size={14} style={{ color: C.info }} />}
                       </td>
                       <td className="px-5 py-2.5">
                         <div className="flex items-center gap-2">
                           {hasRec ? (
                             <>
-                              <InlinePlayer callSid={call.callSid!} recordingUrl={call.recordingUrl!} />
+                              <InlinePlayer recordingUrl={call.recordingUrl!} />
                               <a
                                 href={call.recordingUrl! + (call.recordingUrl!.includes('?') ? '&' : '?') + 'download=1'}
                                 download={`recording-${call.callSid}.mp3`}

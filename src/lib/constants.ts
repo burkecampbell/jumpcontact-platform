@@ -23,6 +23,11 @@ export const C = {
   lime:   '#BCFD4C',
   cyan:   '#3EA5C3',
   pink:   '#E63888',
+  // Semantic status colors — use these instead of hardcoded hex strings
+  good:   '#4ade80',
+  warn:   '#fbbf24',
+  bad:    '#f87171',
+  info:   '#38bdf8',
 };
 
 export const JC_KEYWORDS = [
@@ -91,12 +96,12 @@ export function fmtSpeed(sec: number | null): string {
 
 export function speedGrade(sec: number | null): { grade: string; color: string } {
   if (sec === null) return { grade: '—', color: C.sub };
-  if (sec < 8)  return { grade: 'A+', color: '#4ade80' };
+  if (sec < 8)  return { grade: 'A+', color: C.good };
   if (sec < 10) return { grade: 'A',  color: '#86efac' };
-  if (sec < 12) return { grade: 'B+', color: '#38bdf8' };
+  if (sec < 12) return { grade: 'B+', color: C.info };
   if (sec < 14) return { grade: 'B',  color: '#a78bfa' };
-  if (sec < 17) return { grade: 'B-', color: '#fbbf24' };
-  return { grade: 'C', color: '#f87171' };
+  if (sec < 17) return { grade: 'B-', color: C.warn };
+  return { grade: 'C', color: C.bad };
 }
 
 export function computePace(mtdTotal: number, pulledAt: string) {
@@ -119,6 +124,28 @@ export function parseHMS(hms: string): number {
 export function isMonday(): boolean {
   const mst = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Edmonton' }));
   return mst.getDay() === 1;
+}
+
+export function formatPhone(num: string): string {
+  if (!num) return '—';
+  const d = num.replace(/\D/g, '');
+  if (d.length === 11 && d.startsWith('1')) return `(${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;
+  return num;
+}
+
+export function formatDuration(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+export function formatTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleTimeString('en-US', {
+      hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Edmonton',
+    });
+  } catch { return '—'; }
 }
 
 export function capitalize(s: string): string {

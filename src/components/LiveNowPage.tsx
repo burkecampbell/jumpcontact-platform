@@ -3,35 +3,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import NavBar from './NavBar';
 import Card from './Card';
-import { C, capitalize, fmtSpeed, fmtTalkTime, speedGrade, agentColor } from '@/lib/constants';
+import { C, capitalize, fmtSpeed, fmtTalkTime, speedGrade, agentColor, formatPhone, formatDuration, formatTime } from '@/lib/constants';
 import type { DashboardData, RawCall, RepAgent } from '@/lib/getDashboard';
 import { Phone, PhoneMissed, TrendingUp, Zap, Users, ArrowDown, ArrowUp, Percent, Timer, Clock, ChevronUp, ChevronDown } from 'lucide-react';
-
-function formatPhone(num: string): string {
-  if (!num) return '—';
-  const digits = num.replace(/\D/g, '');
-  if (digits.length === 11 && digits.startsWith('1')) {
-    return `(${digits.slice(1,4)}) ${digits.slice(4,7)}-${digits.slice(7)}`;
-  }
-  if (digits.length === 10) {
-    return `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
-  }
-  return num;
-}
-
-function formatDuration(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
-function formatTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString('en-US', {
-      hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Edmonton',
-    });
-  } catch { return '—'; }
-}
 
 interface KPIProps {
   label: string;
@@ -62,7 +36,7 @@ function KPICard({ label, value, icon, delta, suffix, badge }: KPIProps) {
       </div>
       {delta !== undefined && delta !== null && (
         <div className="flex items-center gap-1 mt-1">
-          <span className="text-xs" style={{ color: delta >= 0 ? '#4ade80' : '#f87171' }}>
+          <span className="text-xs" style={{ color: delta >= 0 ? C.good : C.bad }}>
             {delta >= 0 ? '▲' : '▼'} {Math.abs(delta)} vs yesterday
           </span>
         </div>
@@ -121,7 +95,7 @@ export default function LiveNowPage() {
       <>
         <NavBar />
         <div className="max-w-7xl mx-auto px-4 py-20 text-center">
-          <p style={{ color: '#f87171' }}>Failed to load: {error}</p>
+          <p style={{ color: C.bad }}>Failed to load: {error}</p>
           <button onClick={fetchData} className="mt-4 px-4 py-2 rounded-lg text-sm" style={{ background: C.cyan, color: '#000' }}>
             Retry
           </button>
@@ -189,7 +163,7 @@ export default function LiveNowPage() {
             <span className="text-xs" style={{ color: C.sub }}>
               Yesterday at this time: <span className="font-mono font-semibold" style={{ color: C.text }}>{yesterdayConv}</span> conversions
               {todayConv !== yesterdayConv && (
-                <span style={{ color: todayConv >= yesterdayConv ? '#4ade80' : '#f87171' }}>
+                <span style={{ color: todayConv >= yesterdayConv ? C.good : C.bad }}>
                   {' '}— you&apos;re {todayConv >= yesterdayConv ? 'ahead' : 'behind'} at <span className="font-mono font-semibold">{todayConv}</span>
                 </span>
               )}
@@ -305,7 +279,7 @@ export default function LiveNowPage() {
                       <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: C.text }}>{fmtSpeed(row.speedSec)}</td>
                       <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: C.text }}>{fmtSpeed(row.wrapUpSec)}</td>
                       <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: C.sub }}>{row.hoursScheduled}h</td>
-                      <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: row.convsPerHour != null && row.convsPerHour >= 2 ? '#4ade80' : C.text }}>
+                      <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: row.convsPerHour != null && row.convsPerHour >= 2 ? C.good : C.text }}>
                         {row.convsPerHour != null ? row.convsPerHour.toFixed(1) : '—'}
                       </td>
                     </tr>
@@ -350,9 +324,9 @@ export default function LiveNowPage() {
                     </td>
                     <td className="px-5 py-2.5">
                       {call.direction === 'inbound' ? (
-                        <ArrowDown size={14} style={{ color: '#4ade80' }} />
+                        <ArrowDown size={14} style={{ color: C.good }} />
                       ) : (
-                        <ArrowUp size={14} style={{ color: '#38bdf8' }} />
+                        <ArrowUp size={14} style={{ color: C.info }} />
                       )}
                     </td>
                   </tr>
