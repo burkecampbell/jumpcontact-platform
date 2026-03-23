@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import { Activity, Phone, Presentation, Trophy } from 'lucide-react';
+import { UserButton } from '@clerk/nextjs';
 
 const NAV_ITEMS = [
   { href: '/',        label: 'Live Now',  icon: Activity },
@@ -54,13 +55,21 @@ export default function NavBar({ pulledAt }: { pulledAt?: string }) {
           })}
         </div>
 
-        {/* Pulled at */}
-        {timeStr && (
-          <span className="text-xs shrink-0" style={{ color: '#8B92A8' }}>
-            Pulled {timeStr}
-          </span>
-        )}
-        {!timeStr && <span className="w-20" />}
+        {/* Right side: time + user */}
+        <div className="flex items-center gap-3 shrink-0">
+          {timeStr && (
+            <span className="text-xs" style={{ color: '#8B92A8' }}>
+              Pulled {timeStr}
+            </span>
+          )}
+          <UserButton
+            appearance={{
+              elements: {
+                avatarBox: 'w-8 h-8',
+              },
+            }}
+          />
+        </div>
       </div>
     </nav>
   );

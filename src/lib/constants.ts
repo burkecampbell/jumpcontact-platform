@@ -2,16 +2,17 @@
 
 export const GOAL = 900;
 
-export const ACTIVE_AGENTS = ['omar', 'burke', 'ian', 'danny', 'chris'];
-export const OUTBOUND_AGENTS = ['william', 'joseph'];
-export const EXCLUDED_AGENTS_LOWER = ['sara', 'george'];
+export const ACTIVE_AGENTS   = (process.env.ACTIVE_AGENTS   || 'omar,burke,ian,danny,chris,george').split(',');
+export const OUTBOUND_AGENTS = (process.env.OUTBOUND_AGENTS  || 'william,joseph').split(',');
+export const EXCLUDED_AGENTS_LOWER = (process.env.EXCLUDED_AGENTS || 'sara').split(',');
 
 export const AGENT_COLORS: Record<string, string> = {
-  omar:  '#0369a1',
-  burke: '#15803d',
-  ian:   '#6d28d9',
-  danny: '#b45309',
-  chris: '#9f1239',
+  omar:   '#0369a1',
+  burke:  '#15803d',
+  ian:    '#6d28d9',
+  danny:  '#b45309',
+  chris:  '#9f1239',
+  george: '#0891b2',
 };
 
 export const C = {
@@ -163,6 +164,7 @@ export const AGENT_SCHEDULE: Record<string, number[]> = {
   ian:     [   7,   8,   8,   8,   8,   8,   7 ],  // 6a-1p, 4a-12p x5, 6a-1p
   danny:   [   0,   8,   8,   8,   8,   8,   5 ],  // OFF, 10a-6p x5, 1p-6p
   chris:   [   9,   9,   9,   9,   9,   9,   0 ],  // 4p-1a x6, OFF
+  george:  [   0,   8,   8,   8,   8,   8,   0 ],  // OFF, standard weekday 8h, OFF
 };
 
 export function getScheduledHours(agent: string, date: Date): number {
@@ -171,8 +173,9 @@ export function getScheduledHours(agent: string, date: Date): number {
   return AGENT_SCHEDULE[key]?.[dow] ?? 0;
 }
 
-// ── Sheet IDs ─────────────────────────────────────────────────────────────────
-export const CONVERSIONS_SHEET_ID  = 'YOUR_SHEET_ID';
-export const MISSED_CALLS_SHEET_ID = 'YOUR_SHEET_ID';
-export const MISSED_CALLS_TAB     = 'Missed Calls';
-export const YTICA_SHEET_ID       = 'YOUR_SHEET_ID';
+// ── Sheet IDs (overridable via env vars — fallbacks are current production values) ──
+export const CONVERSIONS_SHEET_ID  = process.env.CONVERSIONS_SHEET_ID  || 'YOUR_SHEET_ID';
+export const MISSED_CALLS_SHEET_ID = process.env.MISSED_CALLS_SHEET_ID || 'YOUR_SHEET_ID';
+export const MISSED_CALLS_TAB     = process.env.MISSED_CALLS_TAB      || 'Missed Calls';
+export const YTICA_SHEET_ID       = process.env.YTICA_SHEET_ID        || 'YOUR_SHEET_ID';
+export const SCHEDULE_SHEET_ID    = process.env.SCHEDULE_SHEET_ID     || 'YOUR_SHEET_ID';

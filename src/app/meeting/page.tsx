@@ -1,4 +1,4 @@
-import MeetingPage from '@/components/MeetingPage';
+import MeetingPage from '@/components/meeting/MeetingPage';
 
 export const dynamic = 'force-dynamic';
 

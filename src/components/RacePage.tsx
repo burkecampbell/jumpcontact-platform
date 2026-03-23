@@ -3,10 +3,27 @@
 import { useEffect, useState, useCallback } from 'react';
 import NavBar from './NavBar';
 import Card from './Card';
-import { C, GOAL, capitalize, computePace, agentColor, AGENT_SCHEDULE } from '@/lib/constants';
-import { TH, TD } from './TableHelpers';
-import type { DashboardData, AcctStat } from '@/lib/getDashboard';
-import { Target, BarChart3 } from 'lucide-react';
+import ErrorBoundary from './ErrorBoundary';
+import { C, GOAL, capitalize, computePace, agentColor, AGENT_SCHEDULE, fmtSpeed, fmtTalkTime } from '@/lib/constants';
+import type { DashboardData, AcctStat, RepAgent } from '@/lib/getDashboard';
+import { Target, BarChart3, Trophy, Zap, Phone, Clock, Timer } from 'lucide-react';
+
+// ── Shared Table Cells ─────────────────────────────────────────────────────
+function TH({ children, right }: { children: React.ReactNode; right?: boolean }) {
+  return (
+    <th className={`px-3 py-2 text-xs font-medium whitespace-nowrap ${right ? 'text-right' : 'text-left'}`} style={{ color: C.sub }}>
+      {children}
+    </th>
+  );
+}
+
+function TD({ children, mono, right, color }: { children: React.ReactNode; mono?: boolean; right?: boolean; color?: string }) {
+  return (
+    <td className={`px-3 py-2.5 text-[13px] ${mono ? 'font-mono' : ''} ${right ? 'text-right' : ''}`} style={{ color: color || C.text }}>
+      {children}
+    </td>
+  );
+}
 
 // ── SVG Ring Chart ──────────────────────────────────────────────────────────
 
@@ -68,6 +85,54 @@ function cellText(count: number): string {
   return C.text;
 }
 
+// ── Award Card ──────────────────────────────────────────────────────────────
+
+function AwardCard({ icon, title, winner, value, runnerUp, runnerValue }: {
+  icon: React.ReactNode;
+  title: string;
+  winner: string;
+  value: string;
+  runnerUp?: string;
+  runnerValue?: string;
+}) {
+  return (
+    <div className="flex-1 min-w-[150px] rounded-xl p-3 border" style={{ background: C.card, borderColor: C.border }}>
+      <div className="flex items-center gap-1.5 mb-2">
+        {icon}
+        <span className="text-xs font-medium" style={{ color: C.sub }}>{title}</span>
+      </div>
+      <div className="flex items-center gap-2 mb-1">
+        <span className="w-2 h-2 rounded-full" style={{ background: agentColor(winner) }} />
+        <span className="text-sm font-bold" style={{ color: C.text }}>{capitalize(winner)}</span>
+        <span className="text-sm font-mono font-bold ml-auto" style={{ color: C.cyan }}>{value}</span>
+      </div>
+      {runnerUp && (
+        <div className="flex items-center gap-2 opacity-60">
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: agentColor(runnerUp) }} />
+          <span className="text-xs" style={{ color: C.sub }}>{capitalize(runnerUp)}</span>
+          <span className="text-xs font-mono ml-auto" style={{ color: C.sub }}>{runnerValue}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Speed Grade Badge ───────────────────────────────────────────────────────
+
+function SpeedBadge({ sec }: { sec: number | null }) {
+  if (sec === null) return <span style={{ color: C.sub }}>—</span>;
+  let color: string;
+  if (sec < 8)  color = '#4ade80';
+  else if (sec < 12) color = '#38bdf8';
+  else if (sec < 17) color = '#fbbf24';
+  else color = '#f87171';
+  return (
+    <span className="font-mono text-xs font-bold" style={{ color }}>
+      {fmtSpeed(sec)}
+    </span>
+  );
+}
+
 // ── Main Component ──────────────────────────────────────────────────────────
 
 export default function RacePage() {
@@ -112,7 +177,7 @@ export default function RacePage() {
       <>
         <NavBar />
         <div className="max-w-6xl mx-auto px-4 py-20 text-center">
-          <p style={{ color: C.bad }}>Failed to load: {error}</p>
+          <p style={{ color: '#f87171' }}>Failed to load: {error}</p>
           <button onClick={fetchData} className="mt-4 px-4 py-2 rounded-lg text-sm" style={{ background: C.cyan, color: '#000' }}>
             Retry
           </button>
@@ -126,7 +191,7 @@ export default function RacePage() {
   const daysLeft = pace.daysInMonth - pace.dayOfMonth;
   const remaining = Math.max(GOAL - mtd.total, 0);
   const dailyNeeded = daysLeft > 0 ? Math.ceil(remaining / daysLeft) : remaining;
-  const paceColor = pace.pacePercent >= 100 ? C.good : pace.pacePercent >= 85 ? C.warn : C.bad;
+  const paceColor = pace.pacePercent >= 100 ? '#4ade80' : pace.pacePercent >= 85 ? '#fbbf24' : '#f87171';
 
   // Build date lookup for daily grid
   const now = new Date(data.pulledAt);
@@ -134,12 +199,13 @@ export default function RacePage() {
   const month = now.getMonth();
 
   // Compute MTD scheduled hours per agent (sum day 1 through dayOfMonth)
+  const scheduleSource = data.schedule ?? AGENT_SCHEDULE;
   const mtdHoursMap: Record<string, number> = {};
-  for (const [agent, schedule] of Object.entries(AGENT_SCHEDULE)) {
+  for (const [agent, agentSched] of Object.entries(scheduleSource)) {
     let total = 0;
     for (let d = 1; d <= pace.dayOfMonth; d++) {
       const dt = new Date(year, month, d);
-      total += schedule[dt.getDay()] ?? 0;
+      total += agentSched[dt.getDay()] ?? 0;
     }
     mtdHoursMap[agent] = total;
   }
@@ -166,11 +232,39 @@ export default function RacePage() {
 
   const topAccounts = (mtd.byAccount || []).slice(0, 12);
 
+  // ── Today's Competitive Metrics ──────────────────────────────────────────
+  const todayAgents = data.today.repActivity.agents;
+  const todayConvsByAgent: Record<string, number> = {};
+  for (const a of data.today.conversions.byAgent) {
+    todayConvsByAgent[a.agent.toLowerCase()] = a.count;
+  }
+
+  // Combined today stats per agent (only agents who took calls today)
+  const todayStats = todayAgents
+    .filter(a => a.calls > 0)
+    .map(a => {
+      const todayConvs = todayConvsByAgent[a.agent.toLowerCase()] || 0;
+      const convRate = a.calls > 0 ? +((todayConvs / a.calls) * 100).toFixed(1) : 0;
+      return { ...a, todayConvs, convRate };
+    });
+
+  // Build lookup for leaderboard (today's call data by agent)
+  const todayByAgent: Record<string, RepAgent> = {};
+  for (const a of todayAgents) todayByAgent[a.agent.toLowerCase()] = a;
+
+  // Category leaders (sorted best first)
+  const fastest = [...todayStats].filter(a => a.speedSec !== null).sort((a, b) => a.speedSec! - b.speedSec!);
+  const mostCalls = [...todayStats].sort((a, b) => b.calls - a.calls);
+  const mostTalk = [...todayStats].sort((a, b) => b.talkMin - a.talkMin);
+  const bestWrap = [...todayStats].filter(a => a.wrapUpSec !== null).sort((a, b) => a.wrapUpSec! - b.wrapUpSec!);
+  const bestConv = [...todayStats].filter(a => a.todayConvs > 0).sort((a, b) => b.convRate - a.convRate);
+
   return (
     <>
       <NavBar pulledAt={data.pulledAt} />
       <div className="max-w-6xl mx-auto px-4 py-6 space-y-5">
         {/* Hero: Ring + Pace Strip */}
+        <ErrorBoundary section="MTD Pace">
         <Card>
           <div className="flex flex-col md:flex-row items-center gap-6">
             <RingChart value={mtd.total} max={GOAL} label="MTD Conversions" />
@@ -182,13 +276,82 @@ export default function RacePage() {
             </div>
           </div>
         </Card>
+        </ErrorBoundary>
+
+        {/* Today's Competition Awards */}
+        {todayStats.length > 0 && (
+        <ErrorBoundary section="Today's Competition">
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Trophy size={16} style={{ color: '#fbbf24' }} />
+            <h2 className="text-sm font-semibold" style={{ color: C.text }}>Today&apos;s Competition</h2>
+            <span className="text-xs ml-auto" style={{ color: C.sub }}>
+              {new Date(data.pulledAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/Edmonton' })}
+            </span>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-1">
+            {fastest.length > 0 && (
+              <AwardCard
+                icon={<Zap size={14} style={{ color: '#4ade80' }} />}
+                title="Fastest Pickup"
+                winner={fastest[0].agent}
+                value={fmtSpeed(fastest[0].speedSec!)}
+                runnerUp={fastest[1]?.agent}
+                runnerValue={fastest[1] ? fmtSpeed(fastest[1].speedSec!) : undefined}
+              />
+            )}
+            {mostCalls.length > 0 && (
+              <AwardCard
+                icon={<Phone size={14} style={{ color: C.cyan }} />}
+                title="Most Calls"
+                winner={mostCalls[0].agent}
+                value={String(mostCalls[0].calls)}
+                runnerUp={mostCalls[1]?.agent}
+                runnerValue={mostCalls[1] ? String(mostCalls[1].calls) : undefined}
+              />
+            )}
+            {mostTalk.length > 0 && (
+              <AwardCard
+                icon={<Clock size={14} style={{ color: '#a78bfa' }} />}
+                title="Most Talk Time"
+                winner={mostTalk[0].agent}
+                value={fmtTalkTime(mostTalk[0].talkMin)}
+                runnerUp={mostTalk[1]?.agent}
+                runnerValue={mostTalk[1] ? fmtTalkTime(mostTalk[1].talkMin) : undefined}
+              />
+            )}
+            {bestWrap.length > 0 && (
+              <AwardCard
+                icon={<Timer size={14} style={{ color: '#f472b6' }} />}
+                title="Best Wrap-Up"
+                winner={bestWrap[0].agent}
+                value={fmtSpeed(bestWrap[0].wrapUpSec!)}
+                runnerUp={bestWrap[1]?.agent}
+                runnerValue={bestWrap[1] ? fmtSpeed(bestWrap[1].wrapUpSec!) : undefined}
+              />
+            )}
+            {bestConv.length > 0 && (
+              <AwardCard
+                icon={<Target size={14} style={{ color: C.lime }} />}
+                title="Best Conv Rate"
+                winner={bestConv[0].agent}
+                value={`${bestConv[0].convRate}%`}
+                runnerUp={bestConv[1]?.agent}
+                runnerValue={bestConv[1] ? `${bestConv[1].convRate}%` : undefined}
+              />
+            )}
+          </div>
+        </div>
+        </ErrorBoundary>
+        )}
 
         {/* Agent Leaderboard Table */}
+        <ErrorBoundary section="Agent Leaderboard">
         <Card padding={false}>
           <div className="flex items-center gap-2 px-4 pt-4 pb-2">
             <BarChart3 size={16} style={{ color: C.cyan }} />
             <h2 className="text-sm font-semibold" style={{ color: C.text }}>Agent Leaderboard</h2>
-            <span className="text-xs ml-auto" style={{ color: C.sub }}>MTD conversions</span>
+            <span className="text-xs ml-auto" style={{ color: C.sub }}>MTD + Today&apos;s performance</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -201,10 +364,17 @@ export default function RacePage() {
                   <TH right>Conv/Hr</TH>
                   <TH right>Projected</TH>
                   <TH right>Best Day</TH>
+                  <th className="px-1 py-2" style={{ borderLeft: `1px solid ${C.border}` }} />
+                  <TH right>Calls</TH>
+                  <TH right>Speed</TH>
+                  <TH right>Talk</TH>
+                  <TH right>Wrap</TH>
                 </tr>
               </thead>
               <tbody>
-                {agentStats.map((a, i) => (
+                {agentStats.map((a, i) => {
+                  const today = todayByAgent[a.agent.toLowerCase()];
+                  return (
                   <tr key={a.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
                     <TD color={i < 3 ? C.cyan : C.sub}>
                       <span className="font-bold">{i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}</span>
@@ -220,21 +390,42 @@ export default function RacePage() {
                     <TD mono right color={a.convPerHr !== null && a.convPerHr >= 1 ? C.lime : C.sub}>
                       {a.convPerHr !== null ? a.convPerHr.toFixed(1) : '—'}
                     </TD>
-                    <TD mono right color={a.projected >= Math.round(GOAL / agentStats.length) ? C.good : C.sub}>
+                    <TD mono right color={a.projected >= Math.round(GOAL / agentStats.length) ? '#4ade80' : C.sub}>
                       {a.projected}
                     </TD>
                     <TD mono right color={C.sub}>{a.bestDay || '—'}</TD>
+                    <td style={{ borderLeft: `1px solid ${C.border}` }} />
+                    <TD mono right color={today?.calls ? C.text : C.sub}>
+                      {today?.calls ?? 0}
+                    </TD>
+                    <td className="px-3 py-2.5 text-right">
+                      <SpeedBadge sec={today?.speedSec ?? null} />
+                    </td>
+                    <TD mono right color={C.sub}>
+                      {fmtTalkTime(today?.talkMin ?? 0)}
+                    </TD>
+                    <td className="px-3 py-2.5 text-right">
+                      {today?.wrapUpSec !== null && today?.wrapUpSec !== undefined
+                        ? <span className="font-mono text-xs" style={{ color: today.wrapUpSec < 30 ? '#4ade80' : today.wrapUpSec < 60 ? '#fbbf24' : '#f87171' }}>
+                            {fmtSpeed(today.wrapUpSec)}
+                          </span>
+                        : <span className="text-xs" style={{ color: C.sub }}>—</span>
+                      }
+                    </td>
                   </tr>
-                ))}
+                  );
+                })}
                 {mtd.byAgent.length === 0 && (
-                  <tr><td colSpan={7} className="text-center text-sm py-5" style={{ color: C.sub }}>No conversion data yet</td></tr>
+                  <tr><td colSpan={11} className="text-center text-sm py-5" style={{ color: C.sub }}>No conversion data yet</td></tr>
                 )}
               </tbody>
             </table>
           </div>
         </Card>
+        </ErrorBoundary>
 
         {/* Daily Grid Matrix */}
+        <ErrorBoundary section="Daily Grid">
         {dayNumbers.length > 0 && agentNames.length > 0 && (
           <Card padding={false}>
             <div className="px-4 pt-4 pb-2">
@@ -297,7 +488,7 @@ export default function RacePage() {
                       const total = dayEntry?.total ?? 0;
                       return (
                         <td key={d} className="text-center font-mono font-bold text-[10px]" style={{
-                          color: total >= 30 ? C.good : total > 0 ? C.text : C.sub,
+                          color: total >= 30 ? '#4ade80' : total > 0 ? C.text : C.sub,
                           padding: '3px 2px',
                         }}>
                           {total > 0 ? total : '·'}
@@ -313,8 +504,10 @@ export default function RacePage() {
             </div>
           </Card>
         )}
+        </ErrorBoundary>
 
         {/* Account Leaderboard with MTD % */}
+        <ErrorBoundary section="Top Accounts">
         <Card padding={false}>
           <div className="flex items-center gap-2 px-4 pt-4 pb-2">
             <Target size={16} style={{ color: C.cyan }} />
@@ -364,6 +557,7 @@ export default function RacePage() {
             <p className="text-sm py-4 text-center" style={{ color: C.sub }}>No account data yet</p>
           )}
         </Card>
+        </ErrorBoundary>
       </div>
     </>
   );

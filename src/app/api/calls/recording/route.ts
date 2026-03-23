@@ -4,11 +4,23 @@ import { twilioAuth } from '@/lib/getDashboard';
 export const dynamic = 'force-dynamic';
 
 /**
- * GET /api/calls/recording?sid=CAxxxx
+ * GET /api/calls/recording?sid=CAxxxx[&key=xxx]
  * Proxy for Twilio call recordings — streams MP3 audio to the browser.
  * Looks up recordings by CallSid, then streams the audio.
+ *
+ * When RECORDING_API_KEY env var is set, requires `?key=xxx` query param
+ * or `X-API-Key` header to authenticate. When unset, open access (current behavior).
  */
 export async function GET(req: NextRequest) {
+  // Optional API key gate — only active when RECORDING_API_KEY is configured
+  const API_KEY = process.env.RECORDING_API_KEY;
+  if (API_KEY) {
+    const provided = req.nextUrl.searchParams.get('key') || req.headers.get('x-api-key');
+    if (provided !== API_KEY) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+  }
+
   const callSid = req.nextUrl.searchParams.get('sid');
   const download = req.nextUrl.searchParams.get('download') === '1';
   if (!callSid) {

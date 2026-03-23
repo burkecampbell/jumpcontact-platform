@@ -1,16 +1,15 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import NavBar from './NavBar';
 import Card from './Card';
-import { C, capitalize, fmtTalkTime, ACTIVE_AGENTS, agentColor, formatPhone, formatDuration, formatTime } from '@/lib/constants';
+import { C, capitalize, fmtTalkTime, ACTIVE_AGENTS, agentColor } from '@/lib/constants';
+import { formatPhone, formatDuration, formatTime } from '@/lib/formatters';
 import type { RawCall } from '@/lib/getDashboard';
-import { ArrowDown, ArrowUp, Filter, Download, Play, Pause, Square, Volume2, CheckSquare } from 'lucide-react';
-
-// ── Types ───────────────────────────────────────────────────────────────────
-
-interface AgentSummary { agent: string; calls: number; talkMin: number }
-interface CallsResponse { calls: RawCall[]; agents: AgentSummary[]; pulledAt: string }
+import type { CallsResponse, AgentCallSummary } from '@/lib/api-types';
+import { ArrowDown, ArrowUp, Filter, Download, Volume2, Square, CheckSquare } from 'lucide-react';
+import ErrorBoundary from './ErrorBoundary';
+import InlinePlayer from './InlinePlayer';
 
 // ── CSV Export ──────────────────────────────────────────────────────────────
 
@@ -28,112 +27,40 @@ function downloadCSV(calls: RawCall[], filename: string) {
   URL.revokeObjectURL(url);
 }
 
-// ── Audio Player ────────────────────────────────────────────────────────────
+// ── Filter Dropdown ──────────────────────────────────────────────────────────
 
-function InlinePlayer({ recordingUrl }: { recordingUrl: string }) {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const [state, setState] = useState<'idle' | 'loading' | 'playing' | 'paused' | 'error'>('idle');
-  const [progress, setProgress] = useState(0);
-
-  const toggle = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    if (state === 'idle' || state === 'error') {
-      setState('loading');
-      audio.src = recordingUrl;
-      audio.load();
-      audio.play().then(() => setState('playing')).catch(() => setState('error'));
-    } else if (state === 'playing') {
-      audio.pause();
-      setState('paused');
-    } else if (state === 'paused') {
-      audio.play().then(() => setState('playing')).catch(() => setState('error'));
-    }
-  };
-
-  const stop = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.pause();
-    audio.currentTime = 0;
-    setState('idle');
-    setProgress(0);
-  };
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const onTime = () => {
-      if (audio.duration) setProgress((audio.currentTime / audio.duration) * 100);
-    };
-    const onEnd = () => { setState('idle'); setProgress(0); };
-    const onErr = () => setState('error');
-
-    audio.addEventListener('timeupdate', onTime);
-    audio.addEventListener('ended', onEnd);
-    audio.addEventListener('error', onErr);
-    return () => {
-      audio.removeEventListener('timeupdate', onTime);
-      audio.removeEventListener('ended', onEnd);
-      audio.removeEventListener('error', onErr);
-    };
-  }, []);
-
+function FilterDropdown({ value, onChange, options }: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+}) {
   return (
-    <div className="flex items-center gap-1.5">
-      <audio ref={audioRef} preload="none" />
-      <button
-        onClick={toggle}
-        className="p-1 rounded-md transition-colors hover:bg-white/5"
-        title={state === 'playing' ? 'Pause' : 'Play recording'}
-      >
-        {state === 'loading' ? (
-          <div className="w-3.5 h-3.5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: C.cyan, borderTopColor: 'transparent' }} />
-        ) : state === 'playing' ? (
-          <Pause size={14} style={{ color: C.cyan }} />
-        ) : state === 'error' ? (
-          <Volume2 size={14} style={{ color: C.bad }} />
-        ) : (
-          <Play size={14} style={{ color: C.cyan }} />
-        )}
-      </button>
-      {(state === 'playing' || state === 'paused') && (
-        <>
-          <div className="w-16 h-1 rounded-full overflow-hidden" style={{ background: C.border }}>
-            <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, background: C.cyan }} />
-          </div>
-          <button onClick={stop} className="p-0.5 rounded hover:bg-white/5">
-            <Square size={10} style={{ color: C.sub }} />
-          </button>
-        </>
-      )}
-    </div>
-  );
-}
-
-// ── Filter Pill ─────────────────────────────────────────────────────────────
-
-function Pill({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="px-3 py-1 rounded-full text-xs font-medium transition-colors"
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className="px-3 py-1.5 rounded-lg text-xs font-medium appearance-none cursor-pointer"
       style={{
-        background: active ? C.cyan + '22' : 'transparent',
-        color: active ? C.cyan : C.sub,
-        border: `1px solid ${active ? C.cyan + '44' : C.border}`,
+        background: C.card,
+        color: value !== 'all' ? C.cyan : C.sub,
+        border: `1px solid ${value !== 'all' ? C.cyan + '44' : C.border}`,
+        paddingRight: '1.5rem',
+        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238B92A8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+        backgroundRepeat: 'no-repeat',
+        backgroundPosition: 'right 0.4rem center',
       }}
     >
-      {label}
-    </button>
+      {options.map(o => (
+        <option key={o.value} value={o.value} style={{ background: '#141824', color: C.text }}>
+          {o.label}
+        </option>
+      ))}
+    </select>
   );
 }
 
 // ── Agent Mini Card ─────────────────────────────────────────────────────────
 
-function AgentMiniCard({ agent, calls, talkMin }: AgentSummary) {
+function AgentMiniCard({ agent, calls, talkMin }: AgentCallSummary) {
   const clr = agentColor(agent);
   return (
     <div className="flex-1 min-w-[120px] rounded-xl p-3 border" style={{ background: C.card, borderColor: C.border }}>
@@ -159,13 +86,14 @@ export default function CallsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [agentFilter, setAgentFilter] = useState('all');
+  const [clientFilter, setClientFilter] = useState('all');
   const [dirFilter, setDirFilter] = useState<'all' | 'inbound' | 'outbound'>('all');
   const [selectedSids, setSelectedSids] = useState<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
     try {
       const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Edmonton' });
-      const res = await fetch(`/api/calls?date=${today}`);
+      const res = await fetch(`/api/calls?date=${today}&limit=500`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setData(await res.json());
       setError(null);
@@ -182,14 +110,25 @@ export default function CallsPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
+  // Build unique client list from call data
+  const clientOptions = useMemo(() => {
+    if (!data) return [];
+    const clients = new Set<string>();
+    for (const c of data.calls) {
+      if (c.account) clients.add(c.account);
+    }
+    return [...clients].sort();
+  }, [data]);
+
   const filtered = useMemo(() => {
     if (!data) return [];
     return data.calls.filter(c => {
       if (agentFilter !== 'all' && c.agent.toLowerCase() !== agentFilter) return false;
+      if (clientFilter !== 'all' && (c.account || '') !== clientFilter) return false;
       if (dirFilter !== 'all' && c.direction !== dirFilter) return false;
       return true;
     });
-  }, [data, agentFilter, dirFilter]);
+  }, [data, agentFilter, clientFilter, dirFilter]);
 
   const handleDownload = () => {
     if (!filtered.length) return;
@@ -254,7 +193,7 @@ export default function CallsPage() {
       <>
         <NavBar />
         <div className="max-w-6xl mx-auto px-4 py-20 text-center">
-          <p style={{ color: C.bad }}>Failed to load: {error}</p>
+          <p style={{ color: '#f87171' }}>Failed to load: {error}</p>
           <button onClick={fetchData} className="mt-4 px-4 py-2 rounded-lg text-sm" style={{ background: C.cyan, color: '#000' }}>
             Retry
           </button>
@@ -270,6 +209,7 @@ export default function CallsPage() {
   return (
     <>
       <NavBar pulledAt={data.pulledAt} />
+      <ErrorBoundary section="Call Log">
       <div className="max-w-6xl mx-auto px-4 py-6 space-y-5">
 
         {/* Agent Summary Strip */}
@@ -280,15 +220,30 @@ export default function CallsPage() {
         </div>
 
         {/* Filter Bar + Actions */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
           <Filter size={14} style={{ color: C.sub }} />
-          {agents.map(a => (
-            <Pill key={a} label={a === 'all' ? 'All Agents' : capitalize(a)} active={agentFilter === a} onClick={() => setAgentFilter(a)} />
-          ))}
-          <span className="mx-2 h-4 w-px" style={{ background: C.border }} />
-          {(['all', 'inbound', 'outbound'] as const).map(d => (
-            <Pill key={d} label={capitalize(d)} active={dirFilter === d} onClick={() => setDirFilter(d)} />
-          ))}
+          <FilterDropdown
+            value={agentFilter}
+            onChange={setAgentFilter}
+            options={agents.map(a => ({ value: a, label: a === 'all' ? 'All Agents' : capitalize(a) }))}
+          />
+          <FilterDropdown
+            value={clientFilter}
+            onChange={setClientFilter}
+            options={[
+              { value: 'all', label: 'All Clients' },
+              ...clientOptions.map(c => ({ value: c, label: c })),
+            ]}
+          />
+          <FilterDropdown
+            value={dirFilter}
+            onChange={v => setDirFilter(v as 'all' | 'inbound' | 'outbound')}
+            options={[
+              { value: 'all', label: 'All Directions' },
+              { value: 'inbound', label: 'Inbound' },
+              { value: 'outbound', label: 'Outbound' },
+            ]}
+          />
 
           <div className="flex items-center gap-3 ml-auto">
             {recordingCount > 0 && (
@@ -378,14 +333,14 @@ export default function CallsPage() {
                       <td className="px-5 py-2.5 font-mono text-xs" style={{ color: C.text }}>{formatDuration(call.duration)}</td>
                       <td className="px-5 py-2.5">
                         {call.direction === 'inbound'
-                          ? <ArrowDown size={14} style={{ color: C.good }} />
-                          : <ArrowUp size={14} style={{ color: C.info }} />}
+                          ? <ArrowDown size={14} style={{ color: '#4ade80' }} />
+                          : <ArrowUp size={14} style={{ color: '#38bdf8' }} />}
                       </td>
                       <td className="px-5 py-2.5">
                         <div className="flex items-center gap-2">
                           {hasRec ? (
                             <>
-                              <InlinePlayer recordingUrl={call.recordingUrl!} />
+                              <InlinePlayer callSid={call.callSid!} recordingUrl={call.recordingUrl!} />
                               <a
                                 href={call.recordingUrl! + (call.recordingUrl!.includes('?') ? '&' : '?') + 'download=1'}
                                 download={`recording-${call.callSid}.mp3`}
@@ -415,6 +370,7 @@ export default function CallsPage() {
           </div>
         </Card>
       </div>
+      </ErrorBoundary>
     </>
   );
 }

@@ -3,9 +3,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import NavBar from './NavBar';
 import Card from './Card';
-import { C, capitalize, fmtSpeed, fmtTalkTime, speedGrade, agentColor, formatPhone, formatDuration, formatTime } from '@/lib/constants';
+import { C, capitalize, fmtSpeed, fmtTalkTime, speedGrade, agentColor } from '@/lib/constants';
+import { formatPhone, formatDuration, formatTime } from '@/lib/formatters';
 import type { DashboardData, RawCall, RepAgent } from '@/lib/getDashboard';
-import { Phone, PhoneMissed, TrendingUp, Zap, Users, ArrowDown, ArrowUp, Percent, Timer, Clock, ChevronUp, ChevronDown } from 'lucide-react';
+import { Phone, PhoneMissed, TrendingUp, Zap, Users, ArrowDown, ArrowUp, Percent, Timer, Clock, ChevronUp, ChevronDown, Download } from 'lucide-react';
+import ErrorBoundary from './ErrorBoundary';
+import InlinePlayer from './InlinePlayer';
 
 interface KPIProps {
   label: string;
@@ -14,9 +17,11 @@ interface KPIProps {
   delta?: number | null;
   suffix?: string;
   badge?: { label: string; color: string };
+  inverse?: boolean; // lower is better (e.g. missed calls)
 }
 
-function KPICard({ label, value, icon, delta, suffix, badge }: KPIProps) {
+function KPICard({ label, value, icon, delta, suffix, badge, inverse }: KPIProps) {
+  const isPositive = inverse ? (delta ?? 0) <= 0 : (delta ?? 0) >= 0;
   return (
     <Card className="flex-1 min-w-[160px]">
       <div className="flex items-start justify-between mb-2">
@@ -36,7 +41,7 @@ function KPICard({ label, value, icon, delta, suffix, badge }: KPIProps) {
       </div>
       {delta !== undefined && delta !== null && (
         <div className="flex items-center gap-1 mt-1">
-          <span className="text-xs" style={{ color: delta >= 0 ? C.good : C.bad }}>
+          <span className="text-xs" style={{ color: isPositive ? '#4ade80' : '#f87171' }}>
             {delta >= 0 ? '▲' : '▼'} {Math.abs(delta)} vs yesterday
           </span>
         </div>
@@ -95,7 +100,7 @@ export default function LiveNowPage() {
       <>
         <NavBar />
         <div className="max-w-7xl mx-auto px-4 py-20 text-center">
-          <p style={{ color: C.bad }}>Failed to load: {error}</p>
+          <p style={{ color: '#f87171' }}>Failed to load: {error}</p>
           <button onClick={fetchData} className="mt-4 px-4 py-2 rounded-lg text-sm" style={{ background: C.cyan, color: '#000' }}>
             Retry
           </button>
@@ -163,7 +168,7 @@ export default function LiveNowPage() {
             <span className="text-xs" style={{ color: C.sub }}>
               Yesterday at this time: <span className="font-mono font-semibold" style={{ color: C.text }}>{yesterdayConv}</span> conversions
               {todayConv !== yesterdayConv && (
-                <span style={{ color: todayConv >= yesterdayConv ? C.good : C.bad }}>
+                <span style={{ color: todayConv >= yesterdayConv ? '#4ade80' : '#f87171' }}>
                   {' '}— you&apos;re {todayConv >= yesterdayConv ? 'ahead' : 'behind'} at <span className="font-mono font-semibold">{todayConv}</span>
                 </span>
               )}
@@ -172,6 +177,7 @@ export default function LiveNowPage() {
         )}
 
         {/* KPI Cards */}
+        <ErrorBoundary section="KPI Cards">
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-6">
           <KPICard
             label="Conversions"
@@ -190,6 +196,7 @@ export default function LiveNowPage() {
             value={todayMissed}
             icon={<PhoneMissed size={18} />}
             delta={todayMissed - yesterdayMissed}
+            inverse
           />
           <KPICard
             label="Avg Speed"
@@ -232,8 +239,10 @@ export default function LiveNowPage() {
             </div>
           </Card>
         </div>
+        </ErrorBoundary>
 
         {/* Agent Ranking Table */}
+        <ErrorBoundary section="Agent Ranking">
         {sorted.length > 0 && (
           <Card padding={false} className="mb-6">
             <div className="px-5 pt-5 pb-3">
@@ -279,7 +288,7 @@ export default function LiveNowPage() {
                       <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: C.text }}>{fmtSpeed(row.speedSec)}</td>
                       <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: C.text }}>{fmtSpeed(row.wrapUpSec)}</td>
                       <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: C.sub }}>{row.hoursScheduled}h</td>
-                      <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: row.convsPerHour != null && row.convsPerHour >= 2 ? C.good : C.text }}>
+                      <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: row.convsPerHour != null && row.convsPerHour >= 2 ? '#4ade80' : C.text }}>
                         {row.convsPerHour != null ? row.convsPerHour.toFixed(1) : '—'}
                       </td>
                     </tr>
@@ -289,8 +298,10 @@ export default function LiveNowPage() {
             </div>
           </Card>
         )}
+        </ErrorBoundary>
 
         {/* Recent Calls Table */}
+        <ErrorBoundary section="Recent Calls">
         <Card padding={false}>
           <div className="px-5 pt-5 pb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold" style={{ color: C.text }}>Last 20 Calls</h2>
@@ -300,7 +311,7 @@ export default function LiveNowPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                  {['Time', 'Agent', 'Phone', 'Duration', ''].map(h => (
+                  {['Time', 'Agent', 'Client', 'Phone', 'Duration', '', 'Recording'].map(h => (
                     <th key={h} className="px-5 py-2 text-left text-xs font-medium" style={{ color: C.sub }}>
                       {h}
                     </th>
@@ -316,6 +327,9 @@ export default function LiveNowPage() {
                     <td className="px-5 py-2.5">
                       <span className="font-medium" style={{ color: C.text }}>{capitalize(call.agent)}</span>
                     </td>
+                    <td className="px-5 py-2.5 text-xs" style={{ color: call.account ? C.text : C.border }}>
+                      {call.account || '—'}
+                    </td>
                     <td className="px-5 py-2.5 font-mono text-xs" style={{ color: C.sub }}>
                       {formatPhone(call.phone)}
                     </td>
@@ -324,16 +338,33 @@ export default function LiveNowPage() {
                     </td>
                     <td className="px-5 py-2.5">
                       {call.direction === 'inbound' ? (
-                        <ArrowDown size={14} style={{ color: C.good }} />
+                        <ArrowDown size={14} style={{ color: '#4ade80' }} />
                       ) : (
-                        <ArrowUp size={14} style={{ color: C.info }} />
+                        <ArrowUp size={14} style={{ color: '#38bdf8' }} />
+                      )}
+                    </td>
+                    <td className="px-5 py-2.5">
+                      {call.recordingUrl ? (
+                        <div className="flex items-center gap-1">
+                          <InlinePlayer callSid={call.callSid!} recordingUrl={call.recordingUrl} />
+                          <a
+                            href={call.recordingUrl}
+                            download
+                            className="p-1 rounded-md transition-colors hover:bg-white/5"
+                            title="Download recording"
+                          >
+                            <Download size={13} style={{ color: C.sub }} />
+                          </a>
+                        </div>
+                      ) : (
+                        <span className="text-xs" style={{ color: C.border }}>—</span>
                       )}
                     </td>
                   </tr>
                 ))}
                 {(!data.recentCalls || data.recentCalls.length === 0) && (
                   <tr>
-                    <td colSpan={5} className="px-5 py-8 text-center text-sm" style={{ color: C.sub }}>
+                    <td colSpan={7} className="px-5 py-8 text-center text-sm" style={{ color: C.sub }}>
                       No calls yet today
                     </td>
                   </tr>
@@ -342,6 +373,7 @@ export default function LiveNowPage() {
             </table>
           </div>
         </Card>
+        </ErrorBoundary>
       </div>
     </>
   );
