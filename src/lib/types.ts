@@ -77,6 +77,9 @@ export interface MtdData {
   deficit: number;
   requiredDailyRate: number;
   onTrack: boolean;
+  byAccount?: AcctStat[];
+  hourly?: number[];
+  mtdDaily?: { date: string; total: number }[];
 }
 
 export interface ScheduleData {
@@ -103,9 +106,12 @@ export interface DashboardData {
   mtd: MtdData;
   trend7d: { dates: string[]; conversions: number[]; missed: number[]; conversionRate: (number | null)[] };
   ytd: { total: number; byMonth: { month: string; conversions: number }[]; goal: number; annualPace: number; projectedEOY: number; onTrack: boolean };
+  date?: string;
+  yesterdayDate?: string;
   thisWeek: number;
   lastWeek: number;
   schedule: ScheduleData | null;
   recentCalls: RawCall[];
+  weekend?: { friday: PeriodData; saturday: PeriodData; sunday: PeriodData };
   pulledAt: string;
 }

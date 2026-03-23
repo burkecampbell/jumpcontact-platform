@@ -11,7 +11,7 @@ import { TH, TD } from './TableCells';
 export default function StepMTD({ data }: { data: DashboardData }) {
   const { dayOfMonth, daysInMonth, projected, pacePercent } = computePace(data.mtd.total, data.pulledAt);
   const agents = data.mtd.byAgent;
-  const accounts = data.mtd.byAccount;
+  const accounts = data.mtd.byAccount ?? [];
   const hourly = data.mtd.hourly ?? [];
   const paceColor = pacePercent >= 100 ? '#4ade80' : pacePercent >= 80 ? C.cyan : '#f87171';
   const mtdDaily = data.mtd.mtdDaily ?? [];
@@ -35,7 +35,7 @@ export default function StepMTD({ data }: { data: DashboardData }) {
   // Hourly stats
   const maxHourly = Math.max(...hourly, 1);
   const peakHour = hourly.indexOf(Math.max(...hourly));
-  const totalHourly = hourly.reduce((s, v) => s + v, 0);
+  const totalHourly = hourly.reduce((s: number, v: number) => s + v, 0);
 
   // Gap to goal
   const remaining = Math.max(0, GOAL - data.mtd.total);
@@ -44,7 +44,7 @@ export default function StepMTD({ data }: { data: DashboardData }) {
 
   // Top 5 accounts
   const topAccounts = [...accounts].sort((a, b) => b.count - a.count).slice(0, 8);
-  const accountTotal = accounts.reduce((s, a) => s + a.count, 0);
+  const accountTotal = (accounts ?? []).reduce((s: number, a: { count: number }) => s + a.count, 0);
 
   return (
     <div>
