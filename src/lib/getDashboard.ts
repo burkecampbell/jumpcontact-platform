@@ -1,12 +1,12 @@
 /**
- * getDashboard.ts — Backward-compatible barrel re-export.
+ * getDashboard.ts — Barrel re-export for types and utilities.
  *
- * All logic has been decomposed into focused modules under:
- *   src/lib/types.ts        — shared type definitions
- *   src/lib/auth/           — Google + Twilio auth
- *   src/lib/data/           — data fetchers and orchestrators
+ * VOLTRON MIGRATION: All credential-dependent data fetchers (Twilio, Google Sheets)
+ * have been removed. Data now flows through ops-center API:
+ *   /api/data  → ops-center /api/live
+ *   /api/calls → ops-center /api/calls
  *
- * Existing imports from '@/lib/getDashboard' continue to work unchanged.
+ * This file re-exports types so existing component imports continue to work.
  */
 
 // Types
@@ -23,18 +23,3 @@ export type {
   TwilioCall,
   AgentSchedule,
 } from './types';
-
-// Auth
-export { twilioAuth } from './auth/twilio';
-export { getSheets } from './auth/google';
-
-// Data fetchers
-export { getConversions } from './data/conversions';
-export { getMissedCalls } from './data/missed-calls';
-export { getYticaSpeedStats } from './data/ytica';
-export { fetchCallsForDate, extractRecentCalls, computeSpeedFromCDR, computeWrapUpFromCDR } from './data/twilio-calls';
-export { fetchRecordingSids } from './data/recordings';
-export { fetchSchedule, parseTimeRange, getScheduledHoursFromSchedule, getTotalCoverage } from './data/schedule';
-
-// Main orchestrator
-export { getDashboardData } from './data/index';

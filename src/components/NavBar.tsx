@@ -6,10 +6,16 @@ import Image from 'next/image';
 import { Activity, Phone, Presentation, Trophy } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
-const UserButton = dynamic(
-  () => import('@clerk/nextjs').then(m => m.UserButton),
-  { ssr: false, loading: () => <div className="w-7 h-7 rounded-full bg-white/10" /> }
-);
+// Clerk UserButton — only loads when ClerkProvider exists (Vercel).
+// On Amplify (no Clerk), renders a static avatar placeholder.
+const CLERK_AVAILABLE = !!(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+
+const UserButton = CLERK_AVAILABLE
+  ? dynamic(
+      () => import('@clerk/nextjs').then(m => m.UserButton),
+      { ssr: false, loading: () => <div className="w-7 h-7 rounded-full bg-white/10" /> }
+    )
+  : () => <div className="w-7 h-7 rounded-full bg-white/10" />;
 
 const NAV_ITEMS = [
   { href: '/',        label: 'Live Now',  icon: Activity },

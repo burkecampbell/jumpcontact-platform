@@ -1,69 +1,76 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { twilioAuth, fetchCallsForDate, extractRecentCalls } from '@/lib/getDashboard';
-import type { RawCall, TwilioCall } from '@/lib/getDashboard';
-import { fetchRecordingSids } from '@/lib/data/recordings';
 import { ACTIVE_AGENTS, capitalize } from '@/lib/constants';
-import { cached } from '@/lib/cache';
-import clientsData from '@/data/clients.json';
 
 export const dynamic = 'force-dynamic';
 
+const OPS_CENTER = process.env.NEXT_PUBLIC_OPS_CENTER_URL || 'https://your-ops-center.vercel.app';
+
+/**
+ * Ops-center PairedCall shape (source of truth: operations-center/src/lib/types.ts)
+ */
+interface PairedCall {
+  id: string;
+  time: string;
+  agent: string;
+  from: string;
+  to: string;
+  client: string;
+  direction: 'inbound' | 'outbound';
+  duration: number;
+  totalDuration: number;
+  ringTime: number;
+  status: string;
+  recordingSid?: string;
+  agentLegSid?: string;
+}
+
+/**
+ * GET /api/calls?date=YYYY-MM-DD&limit=50&offset=0
+ *
+ * Proxies to ops-center /api/calls, transforms PairedCall → RawCall,
+ * builds per-agent summary, and paginates.
+ *
+ * Zero credentials — ops-center owns all Twilio/Sheets access.
+ */
 export async function GET(req: NextRequest) {
   const dateParam = req.nextUrl.searchParams.get('date');
-  const date = dateParam
-    ? new Date(dateParam + 'T00:00:00')
-    : new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Edmonton' }));
-
-  // Pagination params (default: first 50 calls)
   const limit  = Math.min(Math.max(Number(req.nextUrl.searchParams.get('limit'))  || 50, 1), 500);
   const offset = Math.max(Number(req.nextUrl.searchParams.get('offset')) || 0, 0);
 
-  const auth = twilioAuth();
-  if (!auth) {
-    return NextResponse.json({ error: 'Twilio credentials missing' }, { status: 500 });
-  }
+  // Build ops-center URL — fetch all calls for the date (we paginate locally for agent summary)
+  const opsUrl = new URL(`${OPS_CENTER}/api/calls`);
+  if (dateParam) opsUrl.searchParams.set('date', dateParam);
+  opsUrl.searchParams.set('limit', '1000');
 
   try {
-    const ds = date.toISOString().slice(0, 10);
-    const raw = await cached(`calls:${ds}`, 30_000, () => fetchCallsForDate(date, auth));
-    const allCalls: RawCall[] = extractRecentCalls(raw, 999);
+    const res = await fetch(opsUrl.toString(), { cache: 'no-store' });
+    if (!res.ok) throw new Error(`ops-center returned ${res.status}`);
 
-    // Build customer-phone → client/account mapping (JC clients only, exclude MSC)
-    const cData = clientsData as { clients: Record<string, string>; brands?: Record<string, string> };
-    const mscPhones = new Set(
-      Object.entries(cData.brands || {}).filter(([, b]) => b === 'msc').map(([p]) => p),
-    );
-    const twilioNumbers = new Map<string, string>(
-      Object.entries(cData.clients).filter(([phone]) => !mscPhones.has(phone)),
-    );
-    const customerToClient = new Map<string, string>();
-    for (const c of raw as TwilioCall[]) {
-      const toClient = twilioNumbers.get(c.to);
-      const fromClient = twilioNumbers.get(c.from);
-      if (toClient) customerToClient.set(c.from, toClient);   // inbound: to=Twilio#, from=customer
-      if (fromClient) customerToClient.set(c.to, fromClient);  // outbound: from=Twilio#, to=customer
-    }
-    for (const call of allCalls) {
-      // phone may be a Twilio# (inbound Flex) or customer# (outbound)
-      call.account = twilioNumbers.get(call.phone) || customerToClient.get(call.phone);
-    }
+    const data = await res.json() as {
+      calls: PairedCall[];
+      total: number;
+      hasMore: boolean;
+      pulledAt: string;
+    };
 
-    // Only fetch recordings if we have calls (skip empty days)
-    let recordingSids = new Set<string>();
-    if (allCalls.length > 0) {
-      recordingSids = await cached(`recordings:${ds}`, 300_000, () => fetchRecordingSids(date, auth));
-    }
-
-    // Annotate calls with recording availability
+    // Transform PairedCall → RawCall format expected by components
     const recKey = process.env.RECORDING_API_KEY;
     const keySuffix = recKey ? `&key=${recKey}` : '';
-    for (const call of allCalls) {
-      if (call.callSid && recordingSids.has(call.callSid)) {
-        call.recordingUrl = `/api/calls/recording?sid=${call.callSid}${keySuffix}`;
-      }
-    }
 
-    // Build per-agent summary (from ALL calls, not paginated subset)
+    const allCalls = data.calls.map(c => ({
+      time: c.time,
+      agent: c.agent,
+      phone: c.direction === 'inbound' ? c.from : c.to,
+      duration: c.duration,
+      direction: c.direction,
+      callSid: c.id,
+      account: c.client || undefined,
+      recordingUrl: c.recordingSid
+        ? `/api/calls/recording?sid=${c.id}${keySuffix}`
+        : undefined,
+    }));
+
+    // Build per-agent summary from ALL calls (before pagination)
     const agentMap: Record<string, { calls: number; talkSec: number }> = {};
     for (const c of allCalls) {
       const key = c.agent.toLowerCase();
@@ -88,12 +95,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       calls:    page,
       agents,
-      pulledAt: new Date().toISOString(),
+      pulledAt: data.pulledAt,
       total,
       hasMore:  offset + limit < total,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[API /calls → ops-center]', msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
