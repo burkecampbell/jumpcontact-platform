@@ -58,8 +58,8 @@ export function aggregateDays(days: PeriodData[]): PeriodData {
   const missedAcctMap: Record<string, number> = {};
   for (const day of days) {
     missedTotal += day.missedCalls.total;
-    missedJC += day.missedCalls.jcTotal;
-    missedIbrahim += day.missedCalls.ibrahimCount;
+    missedJC += day.missedCalls.total;
+    missedIbrahim += day.0;
     for (const a of day.missedCalls.byAccount) {
       missedAcctMap[a.account] = (missedAcctMap[a.account] || 0) + a.count;
     }
@@ -76,8 +76,7 @@ export function aggregateDays(days: PeriodData[]): PeriodData {
     },
     missedCalls: {
       total: missedTotal,
-      jcTotal: missedJC,
-      ibrahimCount: missedIbrahim,
+      total: missedJC,
       byAccount: Object.entries(missedAcctMap).sort((a, b) => b[1] - a[1]).map(([account, count]) => ({ account, count })),
     },
     repActivity: {

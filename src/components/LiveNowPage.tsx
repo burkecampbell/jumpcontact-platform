@@ -113,8 +113,8 @@ export default function LiveNowPage() {
   const yesterdayConv = data.yesterday.conversions.total;
   const todayCalls    = data.today.repActivity.agents.reduce((s, a) => s + a.calls, 0);
   const yesterdayCalls= data.yesterday.repActivity.agents.reduce((s, a) => s + a.calls, 0);
-  const todayMissed   = data.today.missedCalls.jcTotal;
-  const yesterdayMissed= data.yesterday.missedCalls.jcTotal;
+  const todayMissed   = data.today.missedCalls.total;
+  const yesterdayMissed= data.yesterday.missedCalls.total;
   const avgSpeed      = data.today.repActivity.avgSpeedSec;
   const grade         = speedGrade(avgSpeed);
   const activeAgentNames = data.today.repActivity.agents.map(a => capitalize(a.agent));

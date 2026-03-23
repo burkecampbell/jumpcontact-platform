@@ -12,7 +12,7 @@ export default function StepConversions({ period, label }: { period: PeriodData;
   const convAgents = period.conversions.byAgent;
   const convAccounts = period.conversions.byAccount;
   const missed = period.missedCalls;
-  const jcMissed = missed.jcTotal - missed.ibrahimCount;
+  const jcMissed = missed.total;
   const repAgents = period.repActivity.agents;
   const callouts = generateCallouts(period);
   const convRate = period.conversionRate;
@@ -138,11 +138,7 @@ export default function StepConversions({ period, label }: { period: PeriodData;
               <span className="font-bold text-[13px] shrink-0" style={{ color: C.pink }}>{a.count}</span>
             </div>
           ))}
-          {missed.ibrahimCount > 0 && (
-            <div className="text-xs mt-2 pt-2" style={{ color: C.sub, borderTop: `1px solid ${C.border}` }}>
-              + {missed.ibrahimCount} Ibrahim Law (separate)
-            </div>
-          )}
+          {/* Ibrahim Law separate count removed — unified contract uses total */}
           {missed.byAccount.length === 0 && <p className="text-center text-[13px] py-3" style={{ color: C.sub }}>None — great job!</p>}
         </Card>
       </div>

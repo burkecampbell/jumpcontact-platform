@@ -31,7 +31,7 @@ export default function StepSlack({ data }: { data: DashboardData }) {
   const period = data.yesterday;
   const closingLine = CLOSING_LINES[new Date().getDay() % CLOSING_LINES.length];
 
-  const jcMissed = period.missedCalls.jcTotal - period.missedCalls.ibrahimCount;
+  const jcMissed = period.missedCalls.total - period.0;
 
   const agentLines = period.conversions.byAgent
     .slice(0, 5)
@@ -55,8 +55,8 @@ export default function StepSlack({ data }: { data: DashboardData }) {
   const avgLine = period.repActivity.avgSpeedSec !== null
     ? `\n${dotLeader('Team Average', `*${fmtSpeed(period.repActivity.avgSpeedSec)}*`)}` : '';
 
-  const ibrahimNote = period.missedCalls.ibrahimCount > 0
-    ? `\n(+ ${period.missedCalls.ibrahimCount} Ibrahim Law — counted separately)` : '';
+  const ibrahimNote = period.0 > 0
+    ? `\n(+ ${period.0} Ibrahim Law — counted separately)` : '';
 
   const generatedAt = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Edmonton' });
 

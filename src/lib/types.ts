@@ -1,20 +1,14 @@
 /**
- * Shared type definitions for the JumpContact Platform data layer.
+ * UNIFIED DATA CONTRACT — Jump Contact Platform
+ *
+ * These types match ops-center's /api/live response exactly.
+ * No transforms, no adapters. Direct consumption.
+ *
+ * Source of truth: operations-center/src/lib/contract.ts
  */
 
-/** Agent name → [Sun, Mon, Tue, Wed, Thu, Fri, Sat] net hours per day */
-export type AgentSchedule = Record<string, number[]>;
-
-export interface AgentStat {
-  agent: string;
-  count: number;
-  daily?: Record<string, number>;
-}
-
-export interface AcctStat {
-  account: string;
-  count: number;
-}
+export interface AgentStat { agent: string; count: number }
+export interface AcctStat { account: string; count: number }
 
 export interface RepAgent {
   agent: string;
@@ -24,6 +18,7 @@ export interface RepAgent {
   wrapUpSec: number | null;
   hoursScheduled: number;
   convsPerHour?: number;
+  conversions: number;
 }
 
 export interface OutboundAgent {
@@ -32,19 +27,30 @@ export interface OutboundAgent {
   talkMin: number;
 }
 
-export interface MissedData {
-  total: number;
-  jcTotal: number;
-  ibrahimCount: number;
-  byAccount: AcctStat[];
-}
-
 export interface ConvPeriod {
   total: number;
   byAgent: AgentStat[];
   byAccount: AcctStat[];
-  hourly?: number[];
-  mtdDaily?: { date: string; total: number }[];
+  hourly: number[];
+}
+
+export interface MissedPeriod {
+  total: number;
+  byAccount: AcctStat[];
+}
+
+export interface RepActivity {
+  agents: RepAgent[];
+  outbound: OutboundAgent[];
+  avgSpeedSec: number | null;
+}
+
+export interface PeriodData {
+  date: string;
+  conversions: ConvPeriod;
+  missedCalls: MissedPeriod;
+  repActivity: RepActivity;
+  conversionRate: number | null;
 }
 
 export interface RawCall {
@@ -58,33 +64,48 @@ export interface RawCall {
   account?: string;
 }
 
-export interface PeriodData {
-  conversions: ConvPeriod;
-  missedCalls: MissedData;
-  repActivity: { agents: RepAgent[]; outbound: OutboundAgent[]; avgSpeedSec: number | null };
-  conversionRate?: number;
+export interface MtdData {
+  total: number;
+  byAgent: AgentStat[];
+  goal: number;
+  dailyGoal: number;
+  dayOfMonth: number;
+  daysInMonth: number;
+  daysRemaining: number;
+  goalPace: number;
+  projectedEOM: number;
+  deficit: number;
+  requiredDailyRate: number;
+  onTrack: boolean;
 }
 
+export interface ScheduleData {
+  agents: {
+    name: string;
+    schedule: Record<string, string>;
+    hrsPerWeek: number;
+    isOnShift: boolean;
+  }[];
+}
+
+/** Full payload from ops-center /api/live */
 export interface DashboardData {
-  date: string;
-  yesterdayDate: string;
-  pulledAt: string;
-  today: PeriodData;
+  today: PeriodData & {
+    totalCalls: number;
+    answeredCalls: number;
+    answerRate: number;
+    missedCallRate: number;
+    teamAvgSpeed: number;
+    fastestPickup: number;
+    convPerHour: number;
+  };
   yesterday: PeriodData;
-  mtd: ConvPeriod;
+  mtd: MtdData;
+  trend7d: { dates: string[]; conversions: number[]; missed: number[]; conversionRate: (number | null)[] };
+  ytd: { total: number; byMonth: { month: string; conversions: number }[]; goal: number; annualPace: number; projectedEOY: number; onTrack: boolean };
+  thisWeek: number;
+  lastWeek: number;
+  schedule: ScheduleData | null;
   recentCalls: RawCall[];
-  weekend?: { friday: PeriodData; saturday: PeriodData; sunday: PeriodData };
-  schedule?: AgentSchedule;
-}
-
-export interface TwilioCall {
-  sid: string;
-  to: string;
-  from: string;
-  duration: string;
-  date_created: string;
-  start_time: string;
-  end_time: string;
-  status: string;
-  parent_call_sid?: string;
+  pulledAt: string;
 }

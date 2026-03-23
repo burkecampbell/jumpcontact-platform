@@ -1,25 +1,21 @@
 /**
- * getDashboard.ts — Barrel re-export for types and utilities.
+ * getDashboard.ts — Barrel re-export for types.
  *
- * VOLTRON MIGRATION: All credential-dependent data fetchers (Twilio, Google Sheets)
- * have been removed. Data now flows through ops-center API:
- *   /api/data  → ops-center /api/live
- *   /api/calls → ops-center /api/calls
- *
- * This file re-exports types so existing component imports continue to work.
+ * UNIFIED CONTRACT: All types match ops-center /api/live exactly.
+ * No transforms, no adapters. Direct consumption.
  */
 
-// Types
 export type {
   AgentStat,
   AcctStat,
   RepAgent,
   OutboundAgent,
-  MissedData,
+  MissedPeriod,
   ConvPeriod,
   RawCall,
   PeriodData,
   DashboardData,
-  TwilioCall,
-  AgentSchedule,
+  MtdData,
+  RepActivity,
+  ScheduleData,
 } from './types';
