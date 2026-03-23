@@ -7,7 +7,7 @@
  * Source of truth: operations-center/src/lib/contract.ts
  */
 
-export interface AgentStat { agent: string; count: number }
+export interface AgentStat { agent: string; count: number; daily?: Record<string, number> }
 export interface AcctStat { account: string; count: number }
 
 export interface RepAgent {
