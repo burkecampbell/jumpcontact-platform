@@ -4,25 +4,9 @@ import { useEffect, useState, useCallback } from 'react';
 import NavBar from './NavBar';
 import Card from './Card';
 import { C, GOAL, capitalize, computePace, agentColor, AGENT_SCHEDULE } from '@/lib/constants';
+import { TH, TD } from './TableHelpers';
 import type { DashboardData, AcctStat } from '@/lib/getDashboard';
 import { Target, BarChart3 } from 'lucide-react';
-
-// ── Shared Table Cells ─────────────────────────────────────────────────────
-function TH({ children, right }: { children: React.ReactNode; right?: boolean }) {
-  return (
-    <th className={`px-3 py-2 text-xs font-medium whitespace-nowrap ${right ? 'text-right' : 'text-left'}`} style={{ color: C.sub }}>
-      {children}
-    </th>
-  );
-}
-
-function TD({ children, mono, right, color }: { children: React.ReactNode; mono?: boolean; right?: boolean; color?: string }) {
-  return (
-    <td className={`px-3 py-2.5 text-[13px] ${mono ? 'font-mono' : ''} ${right ? 'text-right' : ''}`} style={{ color: color || C.text }}>
-      {children}
-    </td>
-  );
-}
 
 // ── SVG Ring Chart ──────────────────────────────────────────────────────────
 
@@ -128,7 +112,7 @@ export default function RacePage() {
       <>
         <NavBar />
         <div className="max-w-6xl mx-auto px-4 py-20 text-center">
-          <p style={{ color: '#f87171' }}>Failed to load: {error}</p>
+          <p style={{ color: C.bad }}>Failed to load: {error}</p>
           <button onClick={fetchData} className="mt-4 px-4 py-2 rounded-lg text-sm" style={{ background: C.cyan, color: '#000' }}>
             Retry
           </button>
@@ -142,7 +126,7 @@ export default function RacePage() {
   const daysLeft = pace.daysInMonth - pace.dayOfMonth;
   const remaining = Math.max(GOAL - mtd.total, 0);
   const dailyNeeded = daysLeft > 0 ? Math.ceil(remaining / daysLeft) : remaining;
-  const paceColor = pace.pacePercent >= 100 ? '#4ade80' : pace.pacePercent >= 85 ? '#fbbf24' : '#f87171';
+  const paceColor = pace.pacePercent >= 100 ? C.good : pace.pacePercent >= 85 ? C.warn : C.bad;
 
   // Build date lookup for daily grid
   const now = new Date(data.pulledAt);
@@ -236,7 +220,7 @@ export default function RacePage() {
                     <TD mono right color={a.convPerHr !== null && a.convPerHr >= 1 ? C.lime : C.sub}>
                       {a.convPerHr !== null ? a.convPerHr.toFixed(1) : '—'}
                     </TD>
-                    <TD mono right color={a.projected >= Math.round(GOAL / agentStats.length) ? '#4ade80' : C.sub}>
+                    <TD mono right color={a.projected >= Math.round(GOAL / agentStats.length) ? C.good : C.sub}>
                       {a.projected}
                     </TD>
                     <TD mono right color={C.sub}>{a.bestDay || '—'}</TD>
@@ -313,7 +297,7 @@ export default function RacePage() {
                       const total = dayEntry?.total ?? 0;
                       return (
                         <td key={d} className="text-center font-mono font-bold text-[10px]" style={{
-                          color: total >= 30 ? '#4ade80' : total > 0 ? C.text : C.sub,
+                          color: total >= 30 ? C.good : total > 0 ? C.text : C.sub,
                           padding: '3px 2px',
                         }}>
                           {total > 0 ? total : '·'}
