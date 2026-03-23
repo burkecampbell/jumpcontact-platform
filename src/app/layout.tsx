@@ -1,6 +1,4 @@
 import type { Metadata } from 'next';
-import { ClerkProvider } from '@clerk/nextjs';
-import { dark } from '@clerk/themes';
 import { getClerkThemeVariables, getPageBackground } from '@/lib/theme';
 import './globals.css';
 
@@ -10,8 +8,8 @@ export const metadata: Metadata = {
   icons: { icon: '/logo.png' },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const inner = (
     <html lang="en" className="dark">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -19,18 +17,25 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
       </head>
       <body className="antialiased min-h-screen" style={{ background: getPageBackground() }}>
-        <ClerkProvider
-          afterSignOutUrl="/sign-in"
-          appearance={{
-            baseTheme: dark,
-            variables: getClerkThemeVariables(),
-          }}
-        >
-          <main className="pt-14">
-            {children}
-          </main>
-        </ClerkProvider>
+        <main className="pt-14">
+          {children}
+        </main>
       </body>
     </html>
   );
+
+  if (process.env.CLERK_SECRET_KEY) {
+    const { ClerkProvider } = await import('@clerk/nextjs');
+    const { dark } = await import('@clerk/themes');
+    return (
+      <ClerkProvider
+        afterSignOutUrl="/sign-in"
+        appearance={{ baseTheme: dark, variables: getClerkThemeVariables() }}
+      >
+        {inner}
+      </ClerkProvider>
+    );
+  }
+
+  return inner;
 }

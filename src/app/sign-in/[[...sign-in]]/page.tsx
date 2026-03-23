@@ -1,6 +1,13 @@
-import { SignIn } from '@clerk/nextjs';
+'use client';
+
+import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { getClerkPageElements, getPageBackground, getSubtitleColor } from '@/lib/theme';
+
+const SignIn = dynamic(
+  () => import('@clerk/nextjs').then(m => m.SignIn),
+  { ssr: false, loading: () => <p className="text-sm text-gray-400">Loading...</p> }
+);
 
 export default function SignInPage() {
   return (

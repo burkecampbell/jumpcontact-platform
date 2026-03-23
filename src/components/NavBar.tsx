@@ -4,7 +4,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import { Activity, Phone, Presentation, Trophy } from 'lucide-react';
-import { UserButton } from '@clerk/nextjs';
+import dynamic from 'next/dynamic';
+
+const UserButton = dynamic(
+  () => import('@clerk/nextjs').then(m => m.UserButton),
+  { ssr: false, loading: () => <div className="w-7 h-7 rounded-full bg-white/10" /> }
+);
 
 const NAV_ITEMS = [
   { href: '/',        label: 'Live Now',  icon: Activity },
