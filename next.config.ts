@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 // Amplify SSR Lambda doesn't receive app-level env vars at runtime.
 // Embed server-side env vars at build time.
 const serverEnvKeys = [
-  'CLERK_SECRET_KEY',
+  // CLERK_SECRET_KEY intentionally excluded — Amplify runs auth-free.
   'NEXT_PUBLIC_OPS_CENTER_URL',
 ];
 
