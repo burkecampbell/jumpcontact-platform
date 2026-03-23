@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { getClerkThemeVariables, getPageBackground } from '@/lib/theme';
+import { getPageBackground } from '@/lib/theme';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const inner = (
+  return (
     <html lang="en" className="dark">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -23,19 +23,4 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </body>
     </html>
   );
-
-  if (process.env.CLERK_SECRET_KEY) {
-    const { ClerkProvider } = await import('@clerk/nextjs');
-    const { dark } = await import('@clerk/themes');
-    return (
-      <ClerkProvider
-        afterSignOutUrl="/sign-in"
-        appearance={{ baseTheme: dark, variables: getClerkThemeVariables() }}
-      >
-        {inner}
-      </ClerkProvider>
-    );
-  }
-
-  return inner;
 }

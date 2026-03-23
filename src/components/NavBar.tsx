@@ -4,18 +4,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import { Activity, Phone, Presentation, Trophy } from 'lucide-react';
-import dynamic from 'next/dynamic';
-
-// Clerk UserButton — only loads when ClerkProvider exists (Vercel).
-// On Amplify (no Clerk), renders a static avatar placeholder.
-const CLERK_AVAILABLE = !!(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
-
-const UserButton = CLERK_AVAILABLE
-  ? dynamic(
-      () => import('@clerk/nextjs').then(m => m.UserButton),
-      { ssr: false, loading: () => <div className="w-7 h-7 rounded-full bg-white/10" /> }
-    )
-  : () => <div className="w-7 h-7 rounded-full bg-white/10" />;
+// Avatar placeholder — Clerk UserButton removed for Amplify compatibility.
+// Auth will be added back via AWS Cognito.
+const Avatar = () => <div className="w-7 h-7 rounded-full bg-white/10" />;
 
 const NAV_ITEMS = [
   { href: '/',        label: 'Live Now',  icon: Activity },
@@ -73,13 +64,7 @@ export default function NavBar({ pulledAt }: { pulledAt?: string }) {
               Pulled {timeStr}
             </span>
           )}
-          <UserButton
-            appearance={{
-              elements: {
-                avatarBox: 'w-8 h-8',
-              },
-            }}
-          />
+          <Avatar />
         </div>
       </div>
     </nav>

@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// Clerk is optional — when CLERK_SECRET_KEY is missing (Amplify), skip auth.
-const HAS_CLERK = !!(process.env.CLERK_SECRET_KEY);
+// Auth removed for AWS Amplify migration. Will be replaced by Cognito.
+// CORS on all /api/* routes.
 
-function corsOnly(req: NextRequest): NextResponse {
+export default function handler(req: NextRequest): NextResponse {
   if (req.method === 'OPTIONS' && req.nextUrl.pathname.startsWith('/api/')) {
     return new NextResponse(null, {
       status: 204,
@@ -24,27 +24,6 @@ function corsOnly(req: NextRequest): NextResponse {
   }
   return res;
 }
-
-let handler: (req: NextRequest) => NextResponse | Promise<NextResponse>;
-
-if (HAS_CLERK) {
-  const { clerkMiddleware, createRouteMatcher } = await import('@clerk/nextjs/server');
-  const isPublicRoute = createRouteMatcher(['/sign-in(.*)', '/sign-up(.*)', '/api/(.*)']);
-
-  handler = clerkMiddleware(async (auth, req) => {
-    if (req.method === 'OPTIONS' && req.nextUrl.pathname.startsWith('/api/')) {
-      return corsOnly(req);
-    }
-    if (!isPublicRoute(req)) {
-      await auth.protect();
-    }
-    return NextResponse.next();
-  }) as unknown as typeof handler;
-} else {
-  handler = corsOnly;
-}
-
-export default handler;
 
 export const config = {
   matcher: [
