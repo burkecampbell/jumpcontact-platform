@@ -26,7 +26,7 @@ const REQUIRED_VARS = [
 const DEPLOY_URLS: Record<string, string> = {
   'current':  'https://morning-dashboard-gilt-six.vercel.app',
   'stable':   'https://morning-dashboard-stable.vercel.app',
-  'platform': 'https://jumpcontact-platform.vercel.app',
+  'platform': 'https://main.d2t3zyuv8zobb7.amplifyapp.com',
 };
 
 // ── Colors ──────────────────────────────────────────────────────────────

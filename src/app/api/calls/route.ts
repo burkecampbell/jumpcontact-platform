@@ -3,7 +3,7 @@ import { ACTIVE_AGENTS, capitalize } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
 
-const OPS_CENTER = process.env.NEXT_PUBLIC_OPS_CENTER_URL || 'https://your-ops-center.vercel.app';
+const OPS_CENTER = process.env.NEXT_PUBLIC_OPS_CENTER_URL || 'https://main.d2t3zyuv8zobb7.amplifyapp.com';
 
 /**
  * Ops-center PairedCall shape (source of truth: operations-center/src/lib/types.ts)

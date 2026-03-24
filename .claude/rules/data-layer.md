@@ -26,7 +26,7 @@ All data modules live in `src/lib/data/`. Each file is a focused fetcher:
 5. **Sheet IDs** live in `src/lib/constants.ts` with env var fallbacks
 6. **`getDashboard.ts`** is a barrel re-export only — never add logic there
 7. **All dates are MST** (`America/Edmonton`) — use `dateStr()` from conversions.ts
-8. **Agent names** must go through `normalizeAgent()` (Jose/Daniel → Danny)
+8. **Agent names** must go through `normalizeAgent()` — Daniel and Danny are SEPARATE people
 9. **MSC filtering** — check `isJCAccount()` to exclude MSC phone numbers
 10. **Conversion rate** = conversions / calls answered (computed in `period.ts`)
 

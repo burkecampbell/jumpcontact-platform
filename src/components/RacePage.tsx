@@ -199,7 +199,39 @@ export default function RacePage() {
   const month = now.getMonth();
 
   // Compute MTD scheduled hours per agent (sum day 1 through dayOfMonth)
-  const scheduleSource = data.schedule ?? AGENT_SCHEDULE;
+  // data.schedule is ScheduleData { agents: [{ name, schedule, hrsPerWeek }] }
+  // AGENT_SCHEDULE is Record<string, number[]> (agent -> [Sun..Sat] hours)
+  // Normalize both to Record<string, number[]> for iteration
+  const scheduleSource: Record<string, number[]> = (() => {
+    if (data.schedule && Array.isArray(data.schedule.agents)) {
+      const DOW_MAP: Record<string, number> = { sun: 0, sunday: 0, mon: 1, monday: 1, tue: 2, tuesday: 2, wed: 3, wednesday: 3, thu: 4, thursday: 4, fri: 5, friday: 5, sat: 6, saturday: 6 };
+      const result: Record<string, number[]> = {};
+      for (const ag of data.schedule.agents) {
+        const hours = [0, 0, 0, 0, 0, 0, 0]; // Sun..Sat
+        for (const [day, shift] of Object.entries(ag.schedule)) {
+          const idx = DOW_MAP[day.toLowerCase()];
+          if (idx === undefined) continue;
+          if (!shift || shift.toLowerCase() === 'off') { hours[idx] = 0; continue; }
+          // Parse "8a-5p" or "10a-6p" style shifts
+          const m = shift.match(/(\d+)([ap]?)\s*-\s*(\d+)([ap]?)/i);
+          if (m) {
+            let start = parseInt(m[1]);
+            let end = parseInt(m[3]);
+            if (m[2]?.toLowerCase() === 'p' && start < 12) start += 12;
+            if (m[4]?.toLowerCase() === 'p' && end < 12) end += 12;
+            if (m[2]?.toLowerCase() === 'a' && start === 12) start = 0;
+            if (m[4]?.toLowerCase() === 'a' && end === 12) end = 0;
+            hours[idx] = end > start ? end - start : (24 - start + end);
+          } else {
+            hours[idx] = ag.hrsPerWeek / 7; // fallback
+          }
+        }
+        result[ag.name.toLowerCase()] = hours;
+      }
+      return result;
+    }
+    return AGENT_SCHEDULE;
+  })();
   const mtdHoursMap: Record<string, number> = {};
   for (const [agent, agentSched] of Object.entries(scheduleSource)) {
     let total = 0;

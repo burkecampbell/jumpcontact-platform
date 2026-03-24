@@ -348,7 +348,7 @@ export default function LiveNowPage() {
                         <div className="flex items-center gap-1">
                           <InlinePlayer callSid={call.callSid!} recordingUrl={call.recordingUrl} />
                           <a
-                            href={call.recordingUrl}
+                            href={`${call.recordingUrl}${call.recordingUrl.includes('?') ? '&' : '?'}download=1`}
                             download
                             className="p-1 rounded-md transition-colors hover:bg-white/5"
                             title="Download recording"

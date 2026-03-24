@@ -2,9 +2,11 @@
 
 export const GOAL = 900;
 
-export const ACTIVE_AGENTS   = (process.env.ACTIVE_AGENTS   || 'omar,burke,ian,danny,chris,george').split(',');
+export const ACTIVE_AGENTS   = (process.env.ACTIVE_AGENTS   || 'omar,burke,ian,danny,chris,george,wendy,sara,jose').split(',');
 export const OUTBOUND_AGENTS = (process.env.OUTBOUND_AGENTS  || 'william,joseph').split(',');
-export const EXCLUDED_AGENTS_LOWER = (process.env.EXCLUDED_AGENTS || 'sara').split(',');
+// MSC-only agents — NEVER appear on JC dashboards
+export const MSC_ONLY_AGENTS = new Set(['desi', 'natalie', 'sofia', 'sue', 'rebecca', 'francis', 'richard']);
+export const EXCLUDED_AGENTS_LOWER = (process.env.EXCLUDED_AGENTS || '').split(',').filter(Boolean);
 
 export const AGENT_COLORS: Record<string, string> = {
   omar:   '#0369a1',
@@ -13,6 +15,9 @@ export const AGENT_COLORS: Record<string, string> = {
   danny:  '#b45309',
   chris:  '#9f1239',
   george: '#0891b2',
+  wendy:  '#e879f9',
+  sara:   '#94a3b8',
+  jose:   '#34d399',
 };
 
 export const C = {
@@ -49,11 +54,10 @@ export function agentColor(name: string): string {
   return AGENT_COLORS[name.toLowerCase()] ?? '#64748b';
 }
 
+// Daniel and Danny are SEPARATE people per Burke directive — no aliases.
 export function normalizeAgent(name: string): string {
   if (!name) return '';
-  const n = name.trim();
-  if (n.toLowerCase() === 'jose' || n.toLowerCase() === 'daniel') return 'Danny';
-  return n;
+  return name.trim();
 }
 
 export function decodeAgent(identifier: string): string | null {

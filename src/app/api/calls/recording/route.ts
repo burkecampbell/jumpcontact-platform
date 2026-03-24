@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-const OPS_CENTER = process.env.NEXT_PUBLIC_OPS_CENTER_URL || 'https://your-ops-center.vercel.app';
+const OPS_CENTER = process.env.NEXT_PUBLIC_OPS_CENTER_URL || 'https://main.d2t3zyuv8zobb7.amplifyapp.com';
 
 /**
  * GET /api/calls/recording?sid=CAxxxx[&key=xxx][&download=1]

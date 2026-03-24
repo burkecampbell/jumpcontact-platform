@@ -24,7 +24,7 @@ client:omar_40jumpcontact_2Ecom → omar
 
 ## Critical Agent Rules
 
-1. **"Jose" and "Daniel" → "Danny"** — `normalizeAgent()` handles this everywhere
+1. **Daniel and Danny are SEPARATE people** — do NOT alias one to the other. Jose is the CEO, also separate.
 2. Never display raw Twilio usernames — always run through `normalizeAgent()` then `capitalize()`
 3. Agent colors are in `AGENT_COLORS` map in constants.ts — use `agentColor(name)` helper
 4. Agent schedule is in `AGENT_SCHEDULE` (7-element array: [Sun..Sat] hours per day)
