@@ -3,8 +3,11 @@ import type { NextConfig } from "next";
 // Amplify SSR Lambda doesn't receive app-level env vars at runtime.
 // Embed server-side env vars at build time.
 const serverEnvKeys = [
-  // CLERK_SECRET_KEY intentionally excluded — Amplify runs auth-free.
   'NEXT_PUBLIC_OPS_CENTER_URL',
+  // Cognito auth (non-AWS_ prefix for Amplify compatibility)
+  'COGNITO_POOL_ID',
+  'COGNITO_CLIENT_ID',
+  'COGNITO_DOMAIN',
 ];
 
 const embeddedEnv: Record<string, string> = {};

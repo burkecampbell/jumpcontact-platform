@@ -11,6 +11,7 @@
     "verify:deploys": "npx tsx scripts/verify-env.ts --all-deploys"
   },
   "dependencies": {
+    "aws-jwt-verify": "^5.1.1",
     "lucide-react": "^0.577.0",
     "next": "16.1.6",
     "react": "19.2.3",
