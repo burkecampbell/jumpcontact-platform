@@ -13,12 +13,57 @@ import InlinePlayer from './InlinePlayer';
 
 // ── CSV Export ──────────────────────────────────────────────────────────────
 
-function downloadCSV(calls: RawCall[], filename: string) {
-  const header = 'Time,Agent,Client,Phone,Duration (sec),Direction\n';
-  const rows = calls.map(c =>
-    `"${new Date(c.time).toLocaleString('en-US', { timeZone: 'America/Edmonton' })}","${c.agent}","${c.account || ''}","${formatPhone(c.phone)}",${c.duration},"${c.direction}"`
-  ).join('\n');
-  const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+function fmtDurCSV(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function fmtTimeCSV(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', {
+    timeZone: 'America/Edmonton',
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  });
+}
+
+function buildRecordingUrl(call: RawCall): string {
+  if (!call.recordingUrl) return '';
+  return `${window.location.origin}${call.recordingUrl}`;
+}
+
+function downloadCSV(calls: RawCall[], filename: string, date: string) {
+  const reportDate = new Date(date + 'T12:00:00').toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
+  const totalCalls = calls.length;
+  const totalDurSec = calls.reduce((s, c) => s + c.duration, 0);
+  const inbound = calls.filter(c => c.direction === 'inbound').length;
+  const outbound = totalCalls - inbound;
+  const withRec = calls.filter(c => c.recordingUrl).length;
+
+  const lines: string[] = [];
+  // Report header
+  lines.push('JUMP CONTACT — Call Detail Report');
+  lines.push(`"Date: ${reportDate}"`,);
+  lines.push(`"Total Calls: ${totalCalls}","Inbound: ${inbound}","Outbound: ${outbound}","Recordings: ${withRec}","Total Talk Time: ${fmtDurCSV(totalDurSec)}"`);
+  lines.push('');
+  // Column headers
+  lines.push('Time,Agent,Client,Phone,Duration,Direction,Recording URL');
+  // Data rows
+  for (const c of calls) {
+    lines.push([
+      `"${fmtTimeCSV(c.time)}"`,
+      `"${capitalize(c.agent)}"`,
+      `"${c.account || '—'}"`,
+      `"${formatPhone(c.phone)}"`,
+      `"${fmtDurCSV(c.duration)}"`,
+      `"${capitalize(c.direction)}"`,
+      `"${buildRecordingUrl(c)}"`,
+    ].join(','));
+  }
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -138,8 +183,8 @@ export default function CallsPage() {
 
   const handleDownload = () => {
     if (!filtered.length) return;
-    const suffix = agentFilter !== 'all' ? `-${agentFilter}` : '';
-    downloadCSV(filtered, `calls-${selectedDate}${suffix}.csv`);
+    const subject = agentFilter !== 'all' ? agentFilter : 'all-agents';
+    downloadCSV(filtered, `${selectedDate}_call-detail_${subject}.csv`, selectedDate);
   };
 
   // Selection helpers
