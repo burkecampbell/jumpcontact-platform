@@ -187,6 +187,7 @@ export function pairCallLegs(legs: CallLeg[]): PairedCall[] {
       !leg.parentCallSid &&
       !usedSids.has(leg.sid)
     ) {
+      if (!isJCPhone(leg.from)) continue;
       const client = resolveClient(leg.from) || '';
       paired.push({
         id: leg.sid,
