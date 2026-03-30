@@ -11,7 +11,7 @@ import { ArrowDown, ArrowUp, Filter, Download, Volume2, Square, CheckSquare } fr
 import ErrorBoundary from './ErrorBoundary';
 import InlinePlayer from './InlinePlayer';
 
-// ── CSV Export ──────────────────────────────────────────────────────────────
+// ── CSV Export (v2 — with recording URLs) ───────────────────────────────────
 
 function fmtDurCSV(sec: number): string {
   const m = Math.floor(sec / 60);

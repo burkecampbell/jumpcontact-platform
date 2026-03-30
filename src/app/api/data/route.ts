@@ -252,16 +252,19 @@ function addTodayFields(
 // ── Build recentCalls (last 20 paired calls) ───────────────────────
 
 function buildRecentCalls(calls: PairedCall[]): RawCall[] {
-  return calls.slice(0, 20).map(c => ({
-    time: c.time,
-    agent: c.agent,
-    phone: c.direction === 'inbound' ? c.from : c.to,
-    duration: c.duration,
-    direction: c.direction,
-    callSid: c.id,
-    recordingUrl: c.id ? `/api/calls/recording?sid=${c.id}` : undefined,
-    account: c.client || undefined,
-  }));
+  return calls
+    .filter(c => c.agent) // Only include calls with a matched agent
+    .slice(0, 20)
+    .map(c => ({
+      time: c.time,
+      agent: c.agent,
+      phone: c.direction === 'inbound' ? c.from : c.to,
+      duration: c.duration,
+      direction: c.direction,
+      callSid: c.id,
+      recordingUrl: c.agentLegSid ? `/api/calls/recording?sid=${c.id}` : undefined,
+      account: c.client || undefined,
+    }));
 }
 
 // ── Build MTD ──────────────────────────────────────────────────────
