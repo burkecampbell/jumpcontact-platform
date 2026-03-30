@@ -1,11 +1,123 @@
-/**
- * UNIFIED DATA CONTRACT — Jump Contact Platform
- *
- * These types match ops-center's /api/live response exactly.
- * No transforms, no adapters. Direct consumption.
- *
- * Source of truth: operations-center/src/lib/contract.ts
- */
+// ── Call Types ───────────────────────────────────────────────────────
+
+export interface CallLeg {
+  sid: string;
+  from: string;
+  to: string;
+  direction: 'inbound' | 'outbound-dial' | 'outbound-api' | string;
+  status: string;
+  startTime: string;
+  endTime: string;
+  duration: number;
+  queueTime: number;
+  parentCallSid?: string;
+}
+
+export interface PairedCall {
+  id: string;
+  time: string;
+  agent: string;
+  from: string;
+  to: string;
+  client: string;
+  direction: 'inbound' | 'outbound';
+  duration: number;
+  totalDuration: number;
+  ringTime: number;
+  status: string;
+  recordingSid?: string;
+  agentLegSid?: string;
+}
+
+export interface CallsResponse {
+  calls: PairedCall[];
+  total: number;
+  hasMore: boolean;
+  pulledAt: string;
+}
+
+// ── Agent Stats ─────────────────────────────────────────────────────
+
+export interface ActivityBreakdown {
+  availableSec: number;
+  busySec: number;
+  wrapUpSec: number;
+  offlineSec: number;
+  totalActiveSec: number;
+  reservationsCreated: number;
+  reservationsAccepted: number;
+  reservationsRejected: number;
+  reservationsTimedOut: number;
+  taskAcceptanceRate: number;
+}
+
+export interface AgentEfficiency {
+  name: string;
+  calls: number;
+  inbound: number;
+  outbound: number;
+  answered: number;
+  missed: number;
+  totalDuration: number;
+  avgCallDuration: number;
+  avgSpeed: number;
+  avgWrapUp: number;
+  avgRingTime: number;
+  speedGrade: string;
+  conversions: number;
+  conversionRate: number | null;
+  missedCallRate: number;
+  firstConversionTime: string;
+  lastConversionTime: string;
+  conversionsPerHour: number;
+  callsPerHour: number;
+  hoursScheduled: number;
+  hoursActive: number;
+  utilization: number;
+  activity: ActivityBreakdown;
+}
+
+export interface AnalyticsData {
+  date: string;
+  totalCalls: number;
+  totalInbound: number;
+  totalOutbound: number;
+  totalAnswered: number;
+  totalMissed: number;
+  totalConversions: number;
+  teamConversionRate: number | null;
+  missedCallRate: number;
+  activeAgentCount: number;
+  teamConvPerHour: number | null;
+  teamCallsPerHour: number | null;
+  teamAvgSpeed: number;
+  teamAvgWrapUp: number;
+  teamAvgRingTime: number;
+  answerRate: number;
+  avgCallDuration: number;
+  totalTalkMinutes: number;
+  peakHour: number;
+  peakHourCalls: number;
+  agents: AgentEfficiency[];
+  hourly: Record<string, number[]>;
+  hourlyTotal: number[];
+  hourlyAnswered: number[];
+  hourlyMissed: number[];
+  convByHour: number[];
+  convByAgent: Record<string, number>;
+  convByAccount: { account: string; count: number }[];
+  pulledAt: string;
+}
+
+// ── Schedule ────────────────────────────────────────────────────────
+
+export interface ScheduleEntry {
+  name: string;
+  schedule: Record<string, string>;
+  hrsPerWeek: number;
+}
+
+// ── Contract Types ──────────────────────────────────────────────────
 
 export interface AgentStat { agent: string; count: number; daily?: Record<string, number> }
 export interface AcctStat { account: string; count: number }
@@ -45,11 +157,24 @@ export interface RepActivity {
   avgSpeedSec: number | null;
 }
 
+export interface TeamStats {
+  totalCalls: number;
+  inbound: number;
+  outbound: number;
+  talkTime: string;
+  avgTalk: string;
+  missed: number;
+  missedOver15: number;
+  missedPct: string;
+  source: 'ytica';
+}
+
 export interface PeriodData {
   date: string;
   conversions: ConvPeriod;
   missedCalls: MissedPeriod;
   repActivity: RepActivity;
+  teamStats: TeamStats | null;
   conversionRate: number | null;
 }
 
@@ -91,7 +216,22 @@ export interface ScheduleData {
   }[];
 }
 
-/** Full payload from ops-center /api/live */
+export interface TrendData {
+  dates: string[];
+  conversions: number[];
+  missed: number[];
+  conversionRate: (number | null)[];
+}
+
+export interface YtdData {
+  total: number;
+  byMonth: { month: string; conversions: number }[];
+  goal: number;
+  annualPace: number;
+  projectedEOY: number;
+  onTrack: boolean;
+}
+
 export interface DashboardData {
   today: PeriodData & {
     totalCalls: number;
@@ -104,8 +244,8 @@ export interface DashboardData {
   };
   yesterday: PeriodData;
   mtd: MtdData;
-  trend7d: { dates: string[]; conversions: number[]; missed: number[]; conversionRate: (number | null)[] };
-  ytd: { total: number; byMonth: { month: string; conversions: number }[]; goal: number; annualPace: number; projectedEOY: number; onTrack: boolean };
+  trend7d: TrendData;
+  ytd: YtdData;
   date?: string;
   yesterdayDate?: string;
   thisWeek: number;

@@ -1,26 +1,28 @@
 {
   "name": "jumpcontact-platform",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3003",
     "build": "next build",
     "start": "next start -p 3003",
-    "lint": "eslint",
-    "verify": "npx tsx scripts/verify-env.ts",
-    "verify:deploys": "npx tsx scripts/verify-env.ts --all-deploys"
+    "lint": "eslint"
   },
   "dependencies": {
-    "@jump-contact/metrics": "file:../../packages/metrics",
     "aws-jwt-verify": "^5.1.1",
     "lucide-react": "^0.577.0",
     "next": "16.1.6",
+    "node-forge": "^1.3.3",
     "react": "19.2.3",
     "react-dom": "19.2.3"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/node-forge": "^1.3.14",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

@@ -83,6 +83,7 @@ export function aggregateDays(days: PeriodData[]): PeriodData {
       outbound: [],
       avgSpeedSec: avgSpeeds.length > 0 ? +(avgSpeeds.reduce((a, b) => a + b, 0) / avgSpeeds.length).toFixed(1) : null,
     },
+    teamStats: null,
     conversionRate: null,
   };
 }

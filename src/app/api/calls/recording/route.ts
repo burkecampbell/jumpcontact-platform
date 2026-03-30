@@ -1,22 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { fetchRecordingSid } from '@/lib/twilio';
+import { twilioAuth, twilioAccountSid } from '@/lib/auth/twilio';
 
 export const dynamic = 'force-dynamic';
-
-const OPS_CENTER = process.env.NEXT_PUBLIC_OPS_CENTER_URL || 'https://main.d2t3zyuv8zobb7.amplifyapp.com';
 
 /**
  * GET /api/calls/recording?sid=CAxxxx[&key=xxx][&download=1]
  *
- * Proxies recording audio through ops-center → Twilio.
- * Zero credentials — ops-center owns the Twilio auth.
- *
- * Ops-center endpoint: GET /api/calls/recording?sid=CAxxxx
+ * Looks up the Twilio recording for a given call SID and streams the
+ * MP3 audio directly back to the browser.  Replaces the old ops-center
+ * proxy with direct Twilio Recording API access.
  */
 export async function GET(req: NextRequest) {
-  // Optional API key gate — only active when RECORDING_API_KEY is configured
+  // ── Optional API key gate ────────────────────────────────────────
   const API_KEY = process.env.RECORDING_API_KEY;
   if (API_KEY) {
-    const provided = req.nextUrl.searchParams.get('key') || req.headers.get('x-api-key');
+    const provided =
+      req.nextUrl.searchParams.get('key') || req.headers.get('x-api-key');
     if (provided !== API_KEY) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -24,38 +24,104 @@ export async function GET(req: NextRequest) {
 
   const callSid = req.nextUrl.searchParams.get('sid');
   const download = req.nextUrl.searchParams.get('download') === '1';
+
   if (!callSid) {
     return NextResponse.json({ error: 'Missing sid parameter' }, { status: 400 });
   }
 
+  const accountSid = twilioAccountSid();
+  const auth = twilioAuth();
+
   try {
-    // Proxy to ops-center recording endpoint (handles callSid → recordingSid → audio stream)
-    const opsUrl = `${OPS_CENTER}/api/calls/recording?sid=${callSid}`;
-    const audioRes = await fetch(opsUrl);
+    // ── 1. Try the primary call SID first ────────────────────────
+    let recordingSid = await fetchRecordingSid(callSid);
+
+    // ── 2. Fallback: check direct recordings endpoint ────────────
+    if (!recordingSid) {
+      recordingSid = await fetchRecordingFromCall(accountSid, auth, callSid);
+    }
+
+    // ── 3. Fallback: check child calls ───────────────────────────
+    if (!recordingSid) {
+      recordingSid = await fetchRecordingFromChildCalls(accountSid, auth, callSid);
+    }
+
+    if (!recordingSid) {
+      return NextResponse.json(
+        { error: 'No recording found for this call' },
+        { status: 404 },
+      );
+    }
+
+    // ── 4. Fetch the MP3 audio from Twilio ───────────────────────
+    const audioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings/${recordingSid}.mp3`;
+    const audioRes = await fetch(audioUrl, {
+      headers: { Authorization: auth },
+    });
 
     if (!audioRes.ok) {
-      const errText = await audioRes.text().catch(() => `HTTP ${audioRes.status}`);
       return NextResponse.json(
-        { error: errText || `Recording fetch failed: ${audioRes.status}` },
+        { error: `Failed to fetch recording audio: ${audioRes.status}` },
         { status: audioRes.status },
       );
     }
 
     if (!audioRes.body) {
-      return NextResponse.json({ error: 'No audio body returned' }, { status: 502 });
+      return NextResponse.json(
+        { error: 'No audio body returned from Twilio' },
+        { status: 502 },
+      );
     }
 
+    // ── 5. Stream audio back to the browser ──────────────────────
     return new NextResponse(audioRes.body as ReadableStream, {
       status: 200,
       headers: {
-        'Content-Type': audioRes.headers.get('Content-Type') || 'audio/mpeg',
+        'Content-Type': 'audio/mpeg',
         'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename="recording-${callSid}.mp3"`,
         'Cache-Control': 'private, max-age=3600',
       },
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[API /calls/recording → ops-center]', msg);
+    console.error('[API /calls/recording]', msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+/** Fetch the first recording SID directly from a call's recordings endpoint. */
+async function fetchRecordingFromCall(
+  accountSid: string,
+  auth: string,
+  callSid: string,
+): Promise<string | null> {
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls/${callSid}/Recordings.json?PageSize=1`;
+  const res = await fetch(url, { headers: { Authorization: auth } });
+  if (!res.ok) return null;
+  const json = await res.json();
+  return json.recordings?.[0]?.sid || null;
+}
+
+/** Check each child call for a recording, return the first recording SID found. */
+async function fetchRecordingFromChildCalls(
+  accountSid: string,
+  auth: string,
+  parentCallSid: string,
+): Promise<string | null> {
+  const childrenUrl =
+    `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json` +
+    `?ParentCallSid=${parentCallSid}&PageSize=5`;
+  const childRes = await fetch(childrenUrl, { headers: { Authorization: auth } });
+  if (!childRes.ok) return null;
+  const childJson = await childRes.json();
+  const childCalls: { sid: string }[] = childJson.calls || [];
+
+  for (const child of childCalls) {
+    const recSid = await fetchRecordingFromCall(accountSid, auth, child.sid);
+    if (recSid) return recSid;
+  }
+
+  return null;
 }

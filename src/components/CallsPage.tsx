@@ -82,6 +82,8 @@ function AgentMiniCard({ agent, calls, talkMin }: AgentCallSummary) {
 // ── Main Component ──────────────────────────────────────────────────────────
 
 export default function CallsPage() {
+  const todayMST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Edmonton' });
+  const [selectedDate, setSelectedDate] = useState(todayMST);
   const [data, setData] = useState<CallsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -90,10 +92,10 @@ export default function CallsPage() {
   const [dirFilter, setDirFilter] = useState<'all' | 'inbound' | 'outbound'>('all');
   const [selectedSids, setSelectedSids] = useState<Set<string>>(new Set());
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (date: string) => {
+    setLoading(true);
     try {
-      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Edmonton' });
-      const res = await fetch(`/api/calls?date=${today}&limit=500`);
+      const res = await fetch(`/api/calls?date=${date}&limit=500`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setData(await res.json());
       setError(null);
@@ -105,10 +107,13 @@ export default function CallsPage() {
   }, []);
 
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 120_000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
+    fetchData(selectedDate);
+    // Only auto-refresh if viewing today
+    if (selectedDate === todayMST) {
+      const interval = setInterval(() => fetchData(selectedDate), 120_000);
+      return () => clearInterval(interval);
+    }
+  }, [fetchData, selectedDate, todayMST]);
 
   // Build unique client list from call data
   const clientOptions = useMemo(() => {
@@ -132,9 +137,8 @@ export default function CallsPage() {
 
   const handleDownload = () => {
     if (!filtered.length) return;
-    const today = new Date().toISOString().slice(0, 10);
     const suffix = agentFilter !== 'all' ? `-${agentFilter}` : '';
-    downloadCSV(filtered, `calls-${today}${suffix}.csv`);
+    downloadCSV(filtered, `calls-${selectedDate}${suffix}.csv`);
   };
 
   // Selection helpers
@@ -161,16 +165,25 @@ export default function CallsPage() {
     }
   };
 
+  const downloadRecording = async (url: string, filename: string) => {
+    const res = await fetch(url);
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(blobUrl);
+  };
+
   const handleBulkDownload = async () => {
     for (const sid of selectedSids) {
       const call = filtered.find(c => c.callSid === sid);
       if (!call?.recordingUrl) continue;
       const url = call.recordingUrl + (call.recordingUrl.includes('?') ? '&' : '?') + 'download=1';
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `recording-${sid}.mp3`;
-      a.click();
-      await new Promise(r => setTimeout(r, 500)); // stagger downloads
+      await downloadRecording(url, `recording-${sid}.mp3`);
+      await new Promise(r => setTimeout(r, 500));
     }
   };
 
@@ -194,7 +207,7 @@ export default function CallsPage() {
         <NavBar />
         <div className="max-w-6xl mx-auto px-4 py-20 text-center">
           <p style={{ color: '#f87171' }}>Failed to load: {error}</p>
-          <button onClick={fetchData} className="mt-4 px-4 py-2 rounded-lg text-sm" style={{ background: C.cyan, color: '#000' }}>
+          <button onClick={() => fetchData(selectedDate)} className="mt-4 px-4 py-2 rounded-lg text-sm" style={{ background: C.cyan, color: '#000' }}>
             Retry
           </button>
         </div>
@@ -221,6 +234,24 @@ export default function CallsPage() {
 
         {/* Filter Bar + Actions */}
         <div className="flex flex-wrap items-center gap-3">
+          <input
+            type="date"
+            value={selectedDate}
+            max={todayMST}
+            onChange={e => { setSelectedDate(e.target.value); setSelectedSids(new Set()); }}
+            className="px-3 py-1.5 rounded-lg text-xs font-mono border-none cursor-pointer"
+            style={{ background: 'rgba(255,255,255,0.06)', color: C.text, colorScheme: 'dark' }}
+          />
+          {selectedDate !== todayMST && (
+            <button
+              onClick={() => { setSelectedDate(todayMST); setSelectedSids(new Set()); }}
+              className="px-2 py-1.5 rounded-lg text-xs font-semibold border-none cursor-pointer"
+              style={{ background: C.cyan + '22', color: C.cyan }}
+            >
+              Today
+            </button>
+          )}
+          <div style={{ width: 1, height: 20, background: C.border }} />
           <Filter size={14} style={{ color: C.sub }} />
           <FilterDropdown
             value={agentFilter}
@@ -341,14 +372,16 @@ export default function CallsPage() {
                           {hasRec ? (
                             <>
                               <InlinePlayer callSid={call.callSid!} recordingUrl={call.recordingUrl!} />
-                              <a
-                                href={call.recordingUrl! + (call.recordingUrl!.includes('?') ? '&' : '?') + 'download=1'}
-                                download={`recording-${call.callSid}.mp3`}
-                                className="p-1 rounded-md transition-colors hover:bg-white/5"
+                              <button
+                                onClick={() => downloadRecording(
+                                  call.recordingUrl! + (call.recordingUrl!.includes('?') ? '&' : '?') + 'download=1',
+                                  `recording-${call.callSid}.mp3`
+                                )}
+                                className="p-1 rounded-md transition-colors hover:bg-white/5 border-none bg-transparent cursor-pointer"
                                 title="Download recording"
                               >
                                 <Download size={13} style={{ color: C.sub }} />
-                              </a>
+                              </button>
                             </>
                           ) : (
                             <span className="text-xs" style={{ color: C.border }}>—</span>

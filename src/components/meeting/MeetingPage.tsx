@@ -111,35 +111,35 @@ export default function MeetingPage() {
     <>
       <NavBar pulledAt={data.pulledAt} />
       <div className="max-w-[640px] mx-auto px-5 pb-24">
+        {/* Day selector */}
+        <div className="flex gap-1.5 pt-4 mb-3">
+          {(monday
+            ? [{ key: 'today', label: 'Today' }, { key: 'friday', label: 'Friday' }, { key: 'weekend', label: 'Weekend' }]
+            : [{ key: 'today', label: 'Today' }, { key: 'yesterday', label: 'Yesterday' }]
+          ).map(d => (
+            <button key={d.key} onClick={() => setActiveDay(d.key as typeof activeDay)} className="px-3 py-1.5 rounded-md border-none text-xs cursor-pointer"
+              style={{
+                background: activeDay === d.key ? C.lime : 'rgba(255,255,255,0.06)',
+                color: activeDay === d.key ? '#0A0E1A' : C.sub,
+                fontWeight: 600,
+              }}>
+              {d.label}
+            </button>
+          ))}
+        </div>
+
         {/* Step tab bar */}
-        <div className="flex items-center gap-2 mb-4 pt-4">
-          <div className="flex gap-1 overflow-x-auto pb-1 flex-1">
-            {STEP_LABELS.map((lbl, i) => (
-              <button key={i} onClick={() => goTo(i)} className="shrink-0 px-3 py-1.5 rounded-lg border-none text-[13px] cursor-pointer transition-all whitespace-nowrap"
-                style={{
-                  background: step === i ? C.cyan : 'rgba(255,255,255,0.05)',
-                  color: step === i ? '#0A0E1A' : C.sub,
-                  fontWeight: step === i ? 700 : 500,
-                }}>
-                {i + 1}. {lbl}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-1 shrink-0">
-            {(monday
-              ? [{ key: 'today', label: 'Today' }, { key: 'friday', label: 'Friday' }, { key: 'weekend', label: 'Weekend' }]
-              : [{ key: 'today', label: 'Today' }, { key: 'yesterday', label: 'Yesterday' }]
-            ).map(d => (
-              <button key={d.key} onClick={() => setActiveDay(d.key as typeof activeDay)} className="px-2.5 py-1 rounded-md border-none text-xs cursor-pointer"
-                style={{
-                  background: activeDay === d.key ? C.lime : 'rgba(255,255,255,0.06)',
-                  color: activeDay === d.key ? '#0A0E1A' : C.sub,
-                  fontWeight: 600,
-                }}>
-                {d.label}
-              </button>
-            ))}
-          </div>
+        <div className="flex gap-1 overflow-x-auto pb-1 mb-4">
+          {STEP_LABELS.map((lbl, i) => (
+            <button key={i} onClick={() => goTo(i)} className="shrink-0 px-3 py-1.5 rounded-lg border-none text-[13px] cursor-pointer transition-all whitespace-nowrap"
+              style={{
+                background: step === i ? C.cyan : 'rgba(255,255,255,0.05)',
+                color: step === i ? '#0A0E1A' : C.sub,
+                fontWeight: step === i ? 700 : 500,
+              }}>
+              {i + 1}. {lbl}
+            </button>
+          ))}
         </div>
 
         {/* Step content */}
