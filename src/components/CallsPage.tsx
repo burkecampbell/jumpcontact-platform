@@ -126,10 +126,20 @@ function AgentMiniCard({ agent, calls, talkMin }: AgentCallSummary) {
 
 // ── Main Component ──────────────────────────────────────────────────────────
 
-const TODAY_MST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Edmonton' });
+function getTodayMST() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Edmonton' });
+}
 
 export default function CallsPage() {
-  const [selectedDate, setSelectedDate] = useState(TODAY_MST);
+  const [todayMST, setTodayMST] = useState('');
+  const [selectedDate, setSelectedDate] = useState('');
+
+  // Initialize dates on client only to avoid SSR hydration mismatch
+  useEffect(() => {
+    const t = getTodayMST();
+    setTodayMST(t);
+    setSelectedDate(t);
+  }, []);
   const [data, setData] = useState<CallsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -153,13 +163,14 @@ export default function CallsPage() {
   }, []);
 
   useEffect(() => {
+    if (!selectedDate) return; // Wait for client-side init
     fetchData(selectedDate);
     // Only auto-refresh if viewing today
-    if (selectedDate === TODAY_MST) {
+    if (selectedDate === todayMST) {
       const interval = setInterval(() => fetchData(selectedDate), 120_000);
       return () => clearInterval(interval);
     }
-  }, [fetchData, selectedDate, TODAY_MST]);
+  }, [fetchData, selectedDate, todayMST]);
 
   // Build unique client list from call data
   const clientOptions = useMemo(() => {
@@ -285,15 +296,15 @@ export default function CallsPage() {
             <input
               type="date"
               value={selectedDate}
-              max={TODAY_MST}
+              max={todayMST}
               onChange={e => { if (e.target.value) { setSelectedDate(e.target.value); setSelectedSids(new Set()); } }}
               className="bg-transparent border-none text-xs font-mono cursor-pointer outline-none"
               style={{ color: C.text, colorScheme: 'dark', width: '120px' }}
             />
           </div>
-          {selectedDate !== TODAY_MST && (
+          {selectedDate !== todayMST && (
             <button
-              onClick={() => { setSelectedDate(TODAY_MST); setSelectedSids(new Set()); }}
+              onClick={() => { setSelectedDate(todayMST); setSelectedSids(new Set()); }}
               className="px-3 py-1.5 rounded-lg text-xs font-bold border-none cursor-pointer transition-colors"
               style={{ background: C.cyan, color: '#0A0E1A' }}
             >
