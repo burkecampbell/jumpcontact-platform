@@ -81,9 +81,10 @@ function AgentMiniCard({ agent, calls, talkMin }: AgentCallSummary) {
 
 // ── Main Component ──────────────────────────────────────────────────────────
 
+const TODAY_MST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Edmonton' });
+
 export default function CallsPage() {
-  const todayMST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Edmonton' });
-  const [selectedDate, setSelectedDate] = useState(todayMST);
+  const [selectedDate, setSelectedDate] = useState(TODAY_MST);
   const [data, setData] = useState<CallsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -109,11 +110,11 @@ export default function CallsPage() {
   useEffect(() => {
     fetchData(selectedDate);
     // Only auto-refresh if viewing today
-    if (selectedDate === todayMST) {
+    if (selectedDate === TODAY_MST) {
       const interval = setInterval(() => fetchData(selectedDate), 120_000);
       return () => clearInterval(interval);
     }
-  }, [fetchData, selectedDate, todayMST]);
+  }, [fetchData, selectedDate, TODAY_MST]);
 
   // Build unique client list from call data
   const clientOptions = useMemo(() => {
@@ -232,23 +233,26 @@ export default function CallsPage() {
           ))}
         </div>
 
-        {/* Filter Bar + Actions */}
+        {/* Date Picker + Filter Bar */}
         <div className="flex flex-wrap items-center gap-3">
-          <input
-            type="date"
-            value={selectedDate}
-            max={todayMST}
-            onChange={e => { setSelectedDate(e.target.value); setSelectedSids(new Set()); }}
-            className="px-3 py-1.5 rounded-lg text-xs font-mono border-none cursor-pointer"
-            style={{ background: 'rgba(255,255,255,0.06)', color: C.text, colorScheme: 'dark' }}
-          />
-          {selectedDate !== todayMST && (
+          <div className="flex items-center gap-2 rounded-lg px-3 py-1.5 border" style={{ background: C.card, borderColor: C.cyan + '44' }}>
+            <span className="text-xs font-semibold" style={{ color: C.cyan }}>📅</span>
+            <input
+              type="date"
+              value={selectedDate}
+              max={TODAY_MST}
+              onChange={e => { if (e.target.value) { setSelectedDate(e.target.value); setSelectedSids(new Set()); } }}
+              className="bg-transparent border-none text-xs font-mono cursor-pointer outline-none"
+              style={{ color: C.text, colorScheme: 'dark', width: '120px' }}
+            />
+          </div>
+          {selectedDate !== TODAY_MST && (
             <button
-              onClick={() => { setSelectedDate(todayMST); setSelectedSids(new Set()); }}
-              className="px-2 py-1.5 rounded-lg text-xs font-semibold border-none cursor-pointer"
-              style={{ background: C.cyan + '22', color: C.cyan }}
+              onClick={() => { setSelectedDate(TODAY_MST); setSelectedSids(new Set()); }}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold border-none cursor-pointer transition-colors"
+              style={{ background: C.cyan, color: '#0A0E1A' }}
             >
-              Today
+              ← Today
             </button>
           )}
           <div style={{ width: 1, height: 20, background: C.border }} />
