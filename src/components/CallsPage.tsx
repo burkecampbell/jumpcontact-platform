@@ -11,15 +11,17 @@ import { ArrowDown, ArrowUp, Filter, Download, Volume2, Square, CheckSquare } fr
 import ErrorBoundary from './ErrorBoundary';
 import InlinePlayer from './InlinePlayer';
 
-// ── CSV Export (v2 — with recording URLs) ───────────────────────────────────
+// ── XLSX Export (branded Jump Contact report) ──────────────────────────────
 
-function fmtDurCSV(sec: number): string {
+import * as XLSX from 'xlsx';
+
+function fmtDur(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-function fmtTimeCSV(iso: string): string {
+function fmtTimeXLS(iso: string): string {
   return new Date(iso).toLocaleString('en-US', {
     timeZone: 'America/Edmonton',
     month: 'short', day: 'numeric', year: 'numeric',
@@ -32,7 +34,7 @@ function buildRecordingUrl(call: RawCall): string {
   return `${window.location.origin}${call.recordingUrl}`;
 }
 
-function downloadCSV(calls: RawCall[], filename: string, date: string) {
+function downloadReport(calls: RawCall[], filename: string, date: string) {
   const reportDate = new Date(date + 'T12:00:00').toLocaleDateString('en-US', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
@@ -42,34 +44,92 @@ function downloadCSV(calls: RawCall[], filename: string, date: string) {
   const outbound = totalCalls - inbound;
   const withRec = calls.filter(c => c.recordingUrl).length;
 
-  const lines: string[] = [];
-  // Report header
-  lines.push('JUMP CONTACT — Call Detail Report');
-  lines.push(`"Date: ${reportDate}"`,);
-  lines.push(`"Total Calls: ${totalCalls}","Inbound: ${inbound}","Outbound: ${outbound}","Recordings: ${withRec}","Total Talk Time: ${fmtDurCSV(totalDurSec)}"`);
-  lines.push('');
+  // Build rows array
+  const rows: (string | number)[][] = [];
+
+  // Header section
+  rows.push(['JUMP CONTACT', '', '', '', '', '', '']);
+  rows.push(['Call Detail Report', '', '', '', '', '', '']);
+  rows.push([reportDate, '', '', '', '', '', '']);
+  rows.push([]);
+  // Summary row
+  rows.push([
+    'Total Calls', totalCalls,
+    'Inbound', inbound,
+    'Outbound', outbound,
+    'Talk Time',
+  ]);
+  rows.push([
+    'Recordings', withRec,
+    '', '',
+    '', '',
+    fmtDur(totalDurSec),
+  ]);
+  rows.push([]);
   // Column headers
-  lines.push('Time,Agent,Client,Phone,Duration,Direction,Recording URL');
+  const headerRow = 7; // 0-indexed
+  rows.push(['Time', 'Agent', 'Client', 'Phone', 'Duration', 'Direction', 'Recording URL']);
+
   // Data rows
   for (const c of calls) {
-    lines.push([
-      `"${fmtTimeCSV(c.time)}"`,
-      `"${capitalize(c.agent)}"`,
-      `"${c.account || '—'}"`,
-      `"${formatPhone(c.phone)}"`,
-      `"${fmtDurCSV(c.duration)}"`,
-      `"${capitalize(c.direction)}"`,
-      `"${buildRecordingUrl(c)}"`,
-    ].join(','));
+    rows.push([
+      fmtTimeXLS(c.time),
+      capitalize(c.agent),
+      c.account || '',
+      formatPhone(c.phone),
+      fmtDur(c.duration),
+      capitalize(c.direction),
+      buildRecordingUrl(c),
+    ]);
   }
 
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+  // Agent summary section
+  rows.push([]);
+  rows.push(['Agent Summary', '', '', '', '', '', '']);
+  const agentMap = new Map<string, { calls: number; durSec: number; inbound: number; outbound: number }>();
+  for (const c of calls) {
+    const name = capitalize(c.agent) || 'Unassigned';
+    const prev = agentMap.get(name) || { calls: 0, durSec: 0, inbound: 0, outbound: 0 };
+    prev.calls += 1;
+    prev.durSec += c.duration;
+    if (c.direction === 'inbound') prev.inbound += 1; else prev.outbound += 1;
+    agentMap.set(name, prev);
+  }
+  rows.push(['Agent', 'Calls', 'Inbound', 'Outbound', 'Talk Time', '', '']);
+  for (const [name, stats] of agentMap) {
+    rows.push([name, stats.calls, stats.inbound, stats.outbound, fmtDur(stats.durSec), '', '']);
+  }
+
+  // Create workbook
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+
+  // Column widths
+  ws['!cols'] = [
+    { wch: 24 }, // Time
+    { wch: 14 }, // Agent
+    { wch: 30 }, // Client
+    { wch: 18 }, // Phone
+    { wch: 12 }, // Duration
+    { wch: 12 }, // Direction
+    { wch: 55 }, // Recording URL
+  ];
+
+  // Merge header cells for branding
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }, // JUMP CONTACT
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } }, // Call Detail Report
+    { s: { r: 2, c: 0 }, e: { r: 2, c: 6 } }, // Date
+  ];
+
+  // Agent summary header merge
+  const summaryHeaderRow = headerRow + 1 + calls.length + 1;
+  ws['!merges'].push(
+    { s: { r: summaryHeaderRow, c: 0 }, e: { r: summaryHeaderRow, c: 6 } },
+  );
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Call Detail');
+  XLSX.writeFile(wb, filename);
 }
 
 // ── Filter Dropdown ──────────────────────────────────────────────────────────
@@ -195,7 +255,7 @@ export default function CallsPage() {
   const handleDownload = () => {
     if (!filtered.length) return;
     const subject = agentFilter !== 'all' ? agentFilter : 'all-agents';
-    downloadCSV(filtered, `${selectedDate}_call-detail_${subject}.csv`, selectedDate);
+    downloadReport(filtered, `JC_Call-Report_${selectedDate}_${subject}.xlsx`, selectedDate);
   };
 
   // Selection helpers
@@ -370,7 +430,7 @@ export default function CallsPage() {
               }}
             >
               <Download size={13} />
-              Export CSV
+              Export Report
             </button>
           </div>
         </div>

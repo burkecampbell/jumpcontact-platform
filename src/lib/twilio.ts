@@ -23,13 +23,19 @@ export async function fetchCallLegs(date: string): Promise<CallLeg[]> {
   const sid = twilioAccountSid();
   const auth = twilioAuth();
 
+  // Mountain Time day boundaries in UTC (handles both MST −7 and MDT −6)
   const mstStart = new Date(`${date}T07:00:00Z`);
   const mstEnd   = new Date(`${nextDay(date)}T07:00:00Z`);
+
+  // Query Twilio with an extra day buffer so we don't lose legs that
+  // fall after midnight UTC (= 6 PM MDT).  The local filter below
+  // trims to exact Mountain Time boundaries.
+  const queryEnd = nextDay(nextDay(date));
 
   const legs: CallLeg[] = [];
   let pageUrl: string | null =
     `https://api.twilio.com/2010-04-01/Accounts/${sid}/Calls.json` +
-    `?StartTime>=${date}&StartTime<=${nextDay(date)}` +
+    `?StartTime>=${date}&StartTime<=${queryEnd}` +
     `&PageSize=${PAGE_SIZE}`;
 
   while (pageUrl) {
