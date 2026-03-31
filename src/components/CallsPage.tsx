@@ -13,8 +13,6 @@ import InlinePlayer from './InlinePlayer';
 
 // ── XLSX Export (branded Jump Contact report) ──────────────────────────────
 
-import * as XLSX from 'xlsx';
-
 function fmtDur(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
@@ -34,7 +32,8 @@ function buildRecordingUrl(call: RawCall): string {
   return `${window.location.origin}${call.recordingUrl}`;
 }
 
-function downloadReport(calls: RawCall[], filename: string, date: string) {
+async function downloadReport(calls: RawCall[], filename: string, date: string) {
+  const XLSX = await import('xlsx');
   const reportDate = new Date(date + 'T12:00:00').toLocaleDateString('en-US', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
