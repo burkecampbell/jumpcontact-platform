@@ -31,6 +31,7 @@ function buildPlayerUrl(call: RawCall): string {
   if (!call.recordingUrl || !call.callSid) return '';
   const p = new URLSearchParams({
     sid: call.callSid,
+    ...(call.agentLegSid ? { agent_sid: call.agentLegSid } : {}),
     agent: capitalize(call.agent),
     client: call.account || '',
     phone: formatPhone(call.phone),

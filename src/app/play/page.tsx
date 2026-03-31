@@ -19,6 +19,7 @@ const C = {
 function PlayerInner() {
   const params = useSearchParams();
   const sid = params.get('sid') || '';
+  const agentSid = params.get('agent_sid') || '';
   const agent = params.get('agent') || '';
   const client = params.get('client') || '';
   const phone = params.get('phone') || '';
@@ -32,7 +33,7 @@ function PlayerInner() {
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
 
-  const audioUrl = sid ? `/api/calls/recording?sid=${sid}` : '';
+  const audioUrl = sid ? `/api/calls/recording?sid=${sid}${agentSid ? `&agent_sid=${agentSid}` : ''}` : '';
 
   const load = useCallback(() => {
     if (!audioRef.current || !audioUrl) return;

@@ -185,6 +185,7 @@ export interface RawCall {
   duration: number;
   direction: 'inbound' | 'outbound';
   callSid?: string;
+  agentLegSid?: string;
   recordingUrl?: string;
   account?: string;
 }

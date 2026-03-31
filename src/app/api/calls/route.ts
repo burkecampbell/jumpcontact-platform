@@ -13,6 +13,7 @@ interface RawCall {
   duration: number;
   direction: 'inbound' | 'outbound';
   callSid?: string;
+  agentLegSid?: string;
   recordingUrl?: string;
   account?: string;
 }
@@ -31,7 +32,7 @@ function toRawCall(c: PairedCall): RawCall {
     duration: c.duration,
     direction: c.direction,
     callSid: c.id,
-    account: c.client || undefined,
+    agentLegSid: c.agentLegSid,
     recordingUrl: c.agentLegSid
       ? `/api/calls/recording?sid=${c.id}&agent_sid=${c.agentLegSid}`
       : undefined,
