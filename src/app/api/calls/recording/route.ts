@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
   }
 
   const callSid = req.nextUrl.searchParams.get('sid');
+  const agentSid = req.nextUrl.searchParams.get('agent_sid');
   const download = req.nextUrl.searchParams.get('download') === '1';
 
   if (!callSid) {
@@ -33,17 +34,34 @@ export async function GET(req: NextRequest) {
   const auth = twilioAuth();
 
   try {
-    // ── 1. Try the primary call SID first ────────────────────────
+    // ── 1. Try the primary (inbound) call SID ───────────────────
     let recordingSid = await fetchRecordingSid(callSid);
 
-    // ── 2. Fallback: check direct recordings endpoint ────────────
-    if (!recordingSid) {
-      recordingSid = await fetchRecordingFromCall(accountSid, auth, callSid);
+    // ── 2. Try the agent leg SID (recordings often live here) ───
+    if (!recordingSid && agentSid) {
+      recordingSid = await fetchRecordingFromCall(accountSid, auth, agentSid);
     }
 
-    // ── 3. Fallback: check child calls ───────────────────────────
+    // ── 3. Fallback: check child calls of inbound leg ───────────
     if (!recordingSid) {
       recordingSid = await fetchRecordingFromChildCalls(accountSid, auth, callSid);
+    }
+
+    // ── 4. Fallback: check parent call if inbound has one ───────
+    if (!recordingSid) {
+      const parentRes = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls/${callSid}.json`,
+        { headers: { Authorization: auth } },
+      );
+      if (parentRes.ok) {
+        const callData = await parentRes.json();
+        if (callData.parent_call_sid) {
+          recordingSid = await fetchRecordingFromCall(accountSid, auth, callData.parent_call_sid);
+          if (!recordingSid) {
+            recordingSid = await fetchRecordingFromChildCalls(accountSid, auth, callData.parent_call_sid);
+          }
+        }
+      }
     }
 
     if (!recordingSid) {

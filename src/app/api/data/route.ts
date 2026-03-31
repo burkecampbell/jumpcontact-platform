@@ -262,7 +262,7 @@ function buildRecentCalls(calls: PairedCall[]): RawCall[] {
       duration: c.duration,
       direction: c.direction,
       callSid: c.id,
-      recordingUrl: c.agentLegSid ? `/api/calls/recording?sid=${c.id}` : undefined,
+      recordingUrl: c.agentLegSid ? `/api/calls/recording?sid=${c.id}&agent_sid=${c.agentLegSid}` : undefined,
       account: c.client || undefined,
     }));
 }
