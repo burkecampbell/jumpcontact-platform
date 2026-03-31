@@ -380,7 +380,11 @@ function parseTimeSec(val: string): number | null {
 
 export async function fetchYticaRepActivity(dateStr: string): Promise<YticaRepActivity | null> {
   try {
-    const rows = await readSheet(YTICA_SHEET_ID, 'Rep Activity!A:L');
+    // Sheet1 is populated by the ytica-email-parser Apps Script.
+    // Columns: A=Date, B=Agent, C=Total Talk Time, D=Avg Ring Time,
+    //          E=Avg Talk Time, F=Avg Speed to Answer,
+    //          G=Call Conversations, H=Avg Wrap Up Time, I=Schedule Activity
+    const rows = await readSheet(YTICA_SHEET_ID, 'Sheet1!A:I');
     if (rows.length < 2) return null;
 
     const dateRows = rows.slice(1).filter(row => (row[0] || '').trim() === dateStr);
@@ -393,11 +397,11 @@ export async function fetchYticaRepActivity(dateStr: string): Promise<YticaRepAc
 
       agents.push({
         agent,
-        calls: parseInt(row[2]) || 0,
-        talkMin: +parseTimeMins(row[3]).toFixed(1),
-        speedSec: parseFloat(row[8]) || null,
-        wrapUpSec: parseTimeSec(row[9]),
-        avgHandlingMin: row[10] ? +parseTimeMins(row[10]).toFixed(1) : null,
+        calls: parseInt(row[6]) || 0,           // G: Call Conversations
+        talkMin: +parseTimeMins(row[2]).toFixed(1), // C: Total Talk Time
+        speedSec: parseTimeSec(row[5]),           // F: Avg Speed to Answer
+        wrapUpSec: parseTimeSec(row[7]),           // H: Avg Wrap Up Time
+        avgHandlingMin: null,
         inboundConversations: 0,
         holdTimeSec: null,
       });
