@@ -27,9 +27,18 @@ function fmtTimeXLS(iso: string): string {
   });
 }
 
-function buildRecordingUrl(call: RawCall): string {
-  if (!call.recordingUrl) return '';
-  return `${window.location.origin}${call.recordingUrl}`;
+function buildPlayerUrl(call: RawCall): string {
+  if (!call.recordingUrl || !call.callSid) return '';
+  const p = new URLSearchParams({
+    sid: call.callSid,
+    agent: capitalize(call.agent),
+    client: call.account || '',
+    phone: formatPhone(call.phone),
+    dur: fmtDur(call.duration),
+    dir: call.direction,
+    time: call.time,
+  });
+  return `${window.location.origin}/play?${p}`;
 }
 
 async function downloadReport(calls: RawCall[], filename: string, date: string) {
@@ -78,7 +87,7 @@ async function downloadReport(calls: RawCall[], filename: string, date: string) 
       formatPhone(c.phone),
       fmtDur(c.duration),
       capitalize(c.direction),
-      buildRecordingUrl(c),
+      buildPlayerUrl(c),
     ]);
   }
 
