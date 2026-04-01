@@ -17,7 +17,7 @@ Internal operations dashboard for Jump Contact (24/7 virtual receptionist). Four
 | Data | Google Sheets API + Twilio CDR API |
 | Icons | lucide-react |
 | Font | Inter (body) + JetBrains Mono (data) |
-| Deploy | Vercel (auto-deploy from git) |
+| Deploy | Vercel project `jump-contact-dashboard` under `burke-5005s-projects` (burke@jumpcontact.com) |
 | Port | 3003 (local dev) |
 
 ## Critical Rules
@@ -96,7 +96,8 @@ src/
 ├── data/
 │   └── clients.json              # Phone→client mapping (from Twilio IncomingPhoneNumbers)
 │
-└── proxy.ts                      # Clerk middleware (Next.js 16 convention)
+├── recording-map.ts              # Static CA→RE pairs (24,569 entries, auto-generated)
+└── proxy.ts                      # Clerk middleware (clerkMiddleware from @clerk/nextjs/server)
 ```
 
 ## Data Pipeline
@@ -143,6 +144,8 @@ TWILIO_WORKSPACE_SID=WSxxxxxxx
 # Clerk auth (required for production)
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_xxxxx
 CLERK_SECRET_KEY=sk_xxxxx
+NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
+NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
 
 # Optional overrides
 ACTIVE_AGENTS=omar,burke,ian,danny,chris,george
@@ -265,6 +268,18 @@ npm run build        # production build (must pass clean)
 npm run verify       # env var health check
 # Deploy: push to git → Vercel auto-deploys
 ```
+
+### Deployment Details
+
+| Item | Value |
+|------|-------|
+| Vercel project | `jump-contact-dashboard` |
+| Vercel team | `burke-5005s-projects` (burke@jumpcontact.com) |
+| GitHub repo | `burke-jpg/jumpcontact-platform` |
+| Auto-deploy | Pushes to `main` trigger production deploys |
+| Production URL | `jump-contact-dashboard-burke-5005s-projects.vercel.app` |
+
+**Important**: Always verify `.vercel/project.json` exists and points to `prj_WcgTCC74L7S64tJoxXd64UWuosjC` / `team_1g0g9of1Ai0ApouxqAKlBAlT`. If CLI deploys go to the wrong account, delete `.vercel/` and re-link.
 
 ## Page-Specific Notes
 
