@@ -33,8 +33,8 @@ function toRawCall(c: PairedCall): RawCall {
     direction: c.direction,
     callSid: c.id,
     agentLegSid: c.agentLegSid,
-    recordingUrl: c.agentLegSid
-      ? `/api/calls/recording?sid=${c.id}&agent_sid=${c.agentLegSid}`
+    recordingUrl: c.id
+      ? `/api/calls/recording?sid=${c.id}${c.agentLegSid ? `&agent_sid=${c.agentLegSid}` : ''}`
       : undefined,
   };
 }

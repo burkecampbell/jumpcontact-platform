@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchRecordingSid } from '@/lib/twilio';
 import { twilioAuth, twilioAccountSid } from '@/lib/auth/twilio';
+import { RECORDING_MAP } from '@/lib/recording-map';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,8 +35,13 @@ export async function GET(req: NextRequest) {
   const auth = twilioAuth();
 
   try {
-    // ── 1. Try the primary (inbound) call SID ───────────────────
-    let recordingSid = await fetchRecordingSid(callSid);
+    // ── 0. Fast-path: check static recording map ─────────────────
+    let recordingSid: string | null = RECORDING_MAP[callSid] || null;
+
+    // ── 1. Try the primary (inbound) call SID via Twilio API ────
+    if (!recordingSid) {
+      recordingSid = await fetchRecordingSid(callSid);
+    }
 
     // ── 2. Try the agent leg SID (recordings often live here) ───
     if (!recordingSid && agentSid) {

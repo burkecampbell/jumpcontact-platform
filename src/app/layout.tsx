@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import { getPageBackground } from '@/lib/theme';
+import { ClerkProvider } from '@clerk/nextjs';
+import { getPageBackground, getClerkThemeVariables, getClerkPageElements } from '@/lib/theme';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -10,17 +11,24 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-      </head>
-      <body className="antialiased min-h-screen" style={{ background: getPageBackground() }}>
-        <main className="pt-14">
-          {children}
-        </main>
-      </body>
-    </html>
+    <ClerkProvider
+      appearance={{
+        variables: getClerkThemeVariables(),
+        elements: getClerkPageElements(),
+      }}
+    >
+      <html lang="en" className="dark">
+        <head>
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+          <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+        </head>
+        <body className="antialiased min-h-screen" style={{ background: getPageBackground() }}>
+          <main className="pt-14">
+            {children}
+          </main>
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }

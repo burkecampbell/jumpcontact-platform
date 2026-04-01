@@ -72,7 +72,7 @@ function daysInMonth(year: number, month: number): number {
 function buildRepActivity(
   calls: PairedCall[],
   conversions: { byAgent: Record<string, number> },
-  workerStats: Record<string, { wrapUpSec: number; totalActiveSec: number; avgWrapUp: number }>,
+  workerStats: Record<string, { wrapUpSec: number; totalActiveSec: number; avgWrapUp: number; reservationsCreated?: number; reservationsAccepted?: number; reservationsRejected?: number; reservationsTimedOut?: number }>,
   schedule: Awaited<ReturnType<typeof fetchSchedule>>,
   dateObj: Date,
 ): { agents: RepAgent[]; outbound: OutboundAgent[]; avgSpeedSec: number | null } {
@@ -116,6 +116,15 @@ function buildRepActivity(
 
     if (avgSpeed !== null) speedValues.push(avgSpeed);
 
+    const resCreated = ws?.reservationsCreated ?? 0;
+    const resAccepted = ws?.reservationsAccepted ?? 0;
+    const resRejected = ws?.reservationsRejected ?? 0;
+    const resTimedOut = ws?.reservationsTimedOut ?? 0;
+    const pickupRate = resCreated > 0 ? Math.round((resAccepted / resCreated) * 1000) / 10 : undefined;
+    const declineRate = resCreated > 0 ? Math.round((resRejected / resCreated) * 1000) / 10 : undefined;
+    const ghostRate = resCreated > 0 ? Math.round((resTimedOut / resCreated) * 1000) / 10 : undefined;
+    const trueYield = resCreated > 0 ? Math.round((conv / resCreated) * 1000) / 10 : undefined;
+
     agents.push({
       agent,
       calls: data.calls,
@@ -123,8 +132,17 @@ function buildRepActivity(
       speedSec: avgSpeed,
       wrapUpSec: wrapUp,
       hoursScheduled: hrsSched,
+      hoursActive: hrsActive > 0 ? Math.round(hrsActive * 100) / 100 : undefined,
       convsPerHour,
       conversions: conv,
+      reservationsCreated: resCreated || undefined,
+      reservationsAccepted: resAccepted || undefined,
+      reservationsRejected: resRejected || undefined,
+      reservationsTimedOut: resTimedOut || undefined,
+      pickupRate,
+      declineRate,
+      ghostRate,
+      trueYield,
     });
   }
 
@@ -153,7 +171,7 @@ async function buildPeriodData(
   dateStr: string,
   calls: PairedCall[],
   conversions: Awaited<ReturnType<typeof fetchConversions>>,
-  workerStats: Record<string, { wrapUpSec: number; totalActiveSec: number; avgWrapUp: number }>,
+  workerStats: Record<string, { wrapUpSec: number; totalActiveSec: number; avgWrapUp: number; reservationsCreated?: number; reservationsAccepted?: number; reservationsRejected?: number; reservationsTimedOut?: number }>,
   schedule: Awaited<ReturnType<typeof fetchSchedule>>,
   ytica: Awaited<ReturnType<typeof fetchYticaRepActivity>>,
   teamStats: Awaited<ReturnType<typeof fetchYticaTeamStats>>,

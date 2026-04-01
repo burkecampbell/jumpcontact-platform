@@ -129,8 +129,17 @@ export interface RepAgent {
   speedSec: number | null;
   wrapUpSec: number | null;
   hoursScheduled: number;
+  hoursActive?: number;
   convsPerHour?: number;
   conversions: number;
+  reservationsCreated?: number;
+  reservationsAccepted?: number;
+  reservationsRejected?: number;
+  reservationsTimedOut?: number;
+  pickupRate?: number;
+  declineRate?: number;
+  ghostRate?: number;
+  trueYield?: number;
 }
 
 export interface OutboundAgent {

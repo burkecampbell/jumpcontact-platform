@@ -4,9 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import { Activity, Phone, Presentation, Trophy } from 'lucide-react';
-// Avatar placeholder — Clerk UserButton removed for Amplify compatibility.
-// Auth will be added back via AWS Cognito.
-const Avatar = () => <div className="w-7 h-7 rounded-full bg-white/10" />;
+import { UserButton } from '@clerk/nextjs';
 
 const NAV_ITEMS = [
   { href: '/',        label: 'Live Now',  icon: Activity },
@@ -64,7 +62,7 @@ export default function NavBar({ pulledAt }: { pulledAt?: string }) {
               Pulled {timeStr}
             </span>
           )}
-          <Avatar />
+          <UserButton appearance={{ elements: { avatarBox: 'w-7 h-7' } }} />
         </div>
       </div>
     </nav>

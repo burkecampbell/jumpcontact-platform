@@ -6,7 +6,83 @@ import Card from './Card';
 import ErrorBoundary from './ErrorBoundary';
 import { C, GOAL, capitalize, computePace, agentColor, AGENT_SCHEDULE, fmtSpeed, fmtTalkTime } from '@/lib/constants';
 import type { DashboardData, AcctStat, RepAgent } from '@/lib/getDashboard';
-import { Target, BarChart3, Trophy, Zap, Phone, Clock, Timer } from 'lucide-react';
+import { Target, BarChart3, Trophy, Zap, Phone, Clock, Timer, Download, TrendingUp, Award, Star, ShieldCheck, Crosshair } from 'lucide-react';
+
+// ── XLSX Export (branded Jump Contact report) ──────────────────────────────
+
+async function downloadClientReport(
+  accounts: AcctStat[],
+  agents: { agent: string; count: number; dailyAvg: number; convPerHr: number | null; projected: number; bestDay: number; pickupRate?: number; trueYield?: number }[],
+  totalConversions: number,
+  pulledAt: string,
+) {
+  const XLSX = await import('xlsx');
+  const monthLabel = new Date(pulledAt).toLocaleDateString('en-US', {
+    month: 'long', year: 'numeric', timeZone: 'America/Edmonton',
+  });
+
+  const rows: (string | number)[][] = [];
+
+  // Header
+  rows.push(['JUMP CONTACT']);
+  rows.push(['Conversions Report']);
+  rows.push([monthLabel]);
+  rows.push([]);
+  rows.push(['Total Conversions', totalConversions, '', 'Total Clients', accounts.length]);
+  rows.push([]);
+
+  // Agent summary
+  rows.push(['AGENT LEADERBOARD']);
+  rows.push(['#', 'Agent', 'Conversions', 'Avg/Day', 'Conv/Hr', 'Projected', 'Best Day', 'Pickup %', 'True Yield %']);
+  agents.forEach((a, i) => {
+    rows.push([
+      i + 1,
+      capitalize(a.agent),
+      a.count,
+      a.dailyAvg,
+      a.convPerHr !== null ? a.convPerHr : '',
+      a.projected,
+      a.bestDay,
+      a.pickupRate != null ? `${a.pickupRate}%` : '',
+      a.trueYield != null ? `${a.trueYield}%` : '',
+    ]);
+  });
+
+  rows.push([]);
+  rows.push([]);
+
+  // Client breakdown
+  rows.push(['CONVERSIONS PER CLIENT']);
+  rows.push(['#', 'Client', 'Conversions', '% of Total']);
+  accounts.forEach((a, i) => {
+    const pct = totalConversions > 0 ? +((a.count / totalConversions) * 100).toFixed(1) : 0;
+    rows.push([i + 1, a.account, a.count, `${pct}%`]);
+  });
+
+  // Create workbook
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [
+    { wch: 6 },   // #
+    { wch: 34 },  // Name/Client
+    { wch: 14 },  // Conversions
+    { wch: 12 },  // Avg/Day or %
+    { wch: 12 },  // Conv/Hr
+    { wch: 12 },  // Projected
+    { wch: 12 },  // Best Day
+    { wch: 12 },  // Pickup %
+    { wch: 14 },  // True Yield %
+  ];
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } },
+    { s: { r: 2, c: 0 }, e: { r: 2, c: 8 } },
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Conversions');
+  const dateStr = new Date(pulledAt).toLocaleDateString('en-CA', { timeZone: 'America/Edmonton' });
+  XLSX.writeFile(wb, `JC_Conversions-Report_${dateStr}.xlsx`);
+}
 
 // ── Shared Table Cells ─────────────────────────────────────────────────────
 function TH({ children, right }: { children: React.ReactNode; right?: boolean }) {
@@ -254,7 +330,10 @@ export default function RacePage() {
     }
     const mtdHours = mtdHoursMap[a.agent.toLowerCase()] ?? 0;
     const convPerHr = mtdHours > 0 ? +(a.count / mtdHours).toFixed(2) : null;
-    return { ...a, dailyAvg, projected, bestDay, mtdHours, convPerHr };
+    const todayRep = todayAgents.find(r => r.agent.toLowerCase() === a.agent.toLowerCase());
+    const pickupRate = todayRep?.pickupRate;
+    const trueYield = todayRep?.trueYield;
+    return { ...a, dailyAvg, projected, bestDay, mtdHours, convPerHr, pickupRate, trueYield };
   });
 
   // Build daily grid: days of month × agents
@@ -262,34 +341,13 @@ export default function RacePage() {
   const dayNumbers = Array.from({ length: pace.dayOfMonth }, (_, i) => i + 1);
   const agentNames = mtd.byAgent.map(a => a.agent.toLowerCase());
 
-  const topAccounts = (mtd.byAccount || []).slice(0, 12);
+  const topAccounts = mtd.byAccount || [];
 
   // ── Today's Competitive Metrics ──────────────────────────────────────────
   const todayAgents = data.today.repActivity.agents;
-  const todayConvsByAgent: Record<string, number> = {};
-  for (const a of data.today.conversions.byAgent) {
-    todayConvsByAgent[a.agent.toLowerCase()] = a.count;
-  }
-
-  // Combined today stats per agent (only agents who took calls today)
-  const todayStats = todayAgents
-    .filter(a => a.calls > 0)
-    .map(a => {
-      const todayConvs = todayConvsByAgent[a.agent.toLowerCase()] || 0;
-      const convRate = a.calls > 0 ? +((todayConvs / a.calls) * 100).toFixed(1) : 0;
-      return { ...a, todayConvs, convRate };
-    });
-
   // Build lookup for leaderboard (today's call data by agent)
   const todayByAgent: Record<string, RepAgent> = {};
   for (const a of todayAgents) todayByAgent[a.agent.toLowerCase()] = a;
-
-  // Category leaders (sorted best first)
-  const fastest = [...todayStats].filter(a => a.speedSec !== null).sort((a, b) => a.speedSec! - b.speedSec!);
-  const mostCalls = [...todayStats].sort((a, b) => b.calls - a.calls);
-  const mostTalk = [...todayStats].sort((a, b) => b.talkMin - a.talkMin);
-  const bestWrap = [...todayStats].filter(a => a.wrapUpSec !== null).sort((a, b) => a.wrapUpSec! - b.wrapUpSec!);
-  const bestConv = [...todayStats].filter(a => a.todayConvs > 0).sort((a, b) => b.convRate - a.convRate);
 
   return (
     <>
@@ -310,68 +368,106 @@ export default function RacePage() {
         </Card>
         </ErrorBoundary>
 
-        {/* Today's Competition Awards */}
-        {todayStats.length > 0 && (
-        <ErrorBoundary section="Today's Competition">
+        {/* Monthly Race Awards */}
+        {agentStats.length > 0 && (
+        <ErrorBoundary section="Monthly Race">
         <div>
           <div className="flex items-center gap-2 mb-3">
             <Trophy size={16} style={{ color: '#fbbf24' }} />
-            <h2 className="text-sm font-semibold" style={{ color: C.text }}>Today&apos;s Competition</h2>
+            <h2 className="text-sm font-semibold" style={{ color: C.text }}>Monthly Race</h2>
             <span className="text-xs ml-auto" style={{ color: C.sub }}>
-              {new Date(data.pulledAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/Edmonton' })}
+              {new Date(data.pulledAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'America/Edmonton' })}
             </span>
           </div>
           <div className="flex gap-3 overflow-x-auto pb-1">
-            {fastest.length > 0 && (
+            {agentStats.length > 0 && (
               <AwardCard
-                icon={<Zap size={14} style={{ color: '#4ade80' }} />}
-                title="Fastest Pickup"
-                winner={fastest[0].agent}
-                value={fmtSpeed(fastest[0].speedSec!)}
-                runnerUp={fastest[1]?.agent}
-                runnerValue={fastest[1] ? fmtSpeed(fastest[1].speedSec!) : undefined}
+                icon={<Star size={14} style={{ color: '#fbbf24' }} />}
+                title="Most Conversions"
+                winner={agentStats[0].agent}
+                value={String(agentStats[0].count)}
+                runnerUp={agentStats[1]?.agent}
+                runnerValue={agentStats[1] ? String(agentStats[1].count) : undefined}
               />
             )}
-            {mostCalls.length > 0 && (
-              <AwardCard
-                icon={<Phone size={14} style={{ color: C.cyan }} />}
-                title="Most Calls"
-                winner={mostCalls[0].agent}
-                value={String(mostCalls[0].calls)}
-                runnerUp={mostCalls[1]?.agent}
-                runnerValue={mostCalls[1] ? String(mostCalls[1].calls) : undefined}
-              />
-            )}
-            {mostTalk.length > 0 && (
-              <AwardCard
-                icon={<Clock size={14} style={{ color: '#a78bfa' }} />}
-                title="Most Talk Time"
-                winner={mostTalk[0].agent}
-                value={fmtTalkTime(mostTalk[0].talkMin)}
-                runnerUp={mostTalk[1]?.agent}
-                runnerValue={mostTalk[1] ? fmtTalkTime(mostTalk[1].talkMin) : undefined}
-              />
-            )}
-            {bestWrap.length > 0 && (
-              <AwardCard
-                icon={<Timer size={14} style={{ color: '#f472b6' }} />}
-                title="Best Wrap-Up"
-                winner={bestWrap[0].agent}
-                value={fmtSpeed(bestWrap[0].wrapUpSec!)}
-                runnerUp={bestWrap[1]?.agent}
-                runnerValue={bestWrap[1] ? fmtSpeed(bestWrap[1].wrapUpSec!) : undefined}
-              />
-            )}
-            {bestConv.length > 0 && (
-              <AwardCard
-                icon={<Target size={14} style={{ color: C.lime }} />}
-                title="Best Conv Rate"
-                winner={bestConv[0].agent}
-                value={`${bestConv[0].convRate}%`}
-                runnerUp={bestConv[1]?.agent}
-                runnerValue={bestConv[1] ? `${bestConv[1].convRate}%` : undefined}
-              />
-            )}
+            {(() => {
+              const byConvHr = [...agentStats].filter(a => a.convPerHr !== null && a.convPerHr! > 0).sort((a, b) => b.convPerHr! - a.convPerHr!);
+              return byConvHr.length > 0 ? (
+                <AwardCard
+                  icon={<TrendingUp size={14} style={{ color: C.lime }} />}
+                  title="Best Conv/Hr"
+                  winner={byConvHr[0].agent}
+                  value={byConvHr[0].convPerHr!.toFixed(1)}
+                  runnerUp={byConvHr[1]?.agent}
+                  runnerValue={byConvHr[1] ? byConvHr[1].convPerHr!.toFixed(1) : undefined}
+                />
+              ) : null;
+            })()}
+            {(() => {
+              const byAvg = [...agentStats].filter(a => a.dailyAvg > 0).sort((a, b) => b.dailyAvg - a.dailyAvg);
+              return byAvg.length > 0 ? (
+                <AwardCard
+                  icon={<BarChart3 size={14} style={{ color: C.cyan }} />}
+                  title="Best Daily Avg"
+                  winner={byAvg[0].agent}
+                  value={String(byAvg[0].dailyAvg)}
+                  runnerUp={byAvg[1]?.agent}
+                  runnerValue={byAvg[1] ? String(byAvg[1].dailyAvg) : undefined}
+                />
+              ) : null;
+            })()}
+            {(() => {
+              const byBest = [...agentStats].filter(a => a.bestDay > 0).sort((a, b) => b.bestDay - a.bestDay);
+              return byBest.length > 0 ? (
+                <AwardCard
+                  icon={<Award size={14} style={{ color: '#a78bfa' }} />}
+                  title="Best Single Day"
+                  winner={byBest[0].agent}
+                  value={String(byBest[0].bestDay)}
+                  runnerUp={byBest[1]?.agent}
+                  runnerValue={byBest[1] ? String(byBest[1].bestDay) : undefined}
+                />
+              ) : null;
+            })()}
+            {(() => {
+              const byProjected = [...agentStats].filter(a => a.projected > 0).sort((a, b) => b.projected - a.projected);
+              return byProjected.length > 0 ? (
+                <AwardCard
+                  icon={<Target size={14} style={{ color: '#f472b6' }} />}
+                  title="Highest Projected"
+                  winner={byProjected[0].agent}
+                  value={String(byProjected[0].projected)}
+                  runnerUp={byProjected[1]?.agent}
+                  runnerValue={byProjected[1] ? String(byProjected[1].projected) : undefined}
+                />
+              ) : null;
+            })()}
+            {(() => {
+              const byPickup = todayAgents.filter(a => a.pickupRate != null && a.pickupRate! > 0).sort((a, b) => b.pickupRate! - a.pickupRate!);
+              return byPickup.length > 0 ? (
+                <AwardCard
+                  icon={<ShieldCheck size={14} style={{ color: '#4ade80' }} />}
+                  title="Best Pickup Rate"
+                  winner={byPickup[0].agent}
+                  value={`${byPickup[0].pickupRate}%`}
+                  runnerUp={byPickup[1]?.agent}
+                  runnerValue={byPickup[1] ? `${byPickup[1].pickupRate}%` : undefined}
+                />
+              ) : null;
+            })()}
+            {(() => {
+              const byYield = todayAgents.filter(a => a.trueYield != null && a.trueYield! > 0).sort((a, b) => b.trueYield! - a.trueYield!);
+              return byYield.length > 0 ? (
+                <AwardCard
+                  icon={<Crosshair size={14} style={{ color: '#a78bfa' }} />}
+                  title="Best True Yield"
+                  winner={byYield[0].agent}
+                  value={`${byYield[0].trueYield}%`}
+                  runnerUp={byYield[1]?.agent}
+                  runnerValue={byYield[1] ? `${byYield[1].trueYield}%` : undefined}
+                />
+              ) : null;
+            })()}
           </div>
         </div>
         </ErrorBoundary>
@@ -399,8 +495,8 @@ export default function RacePage() {
                   <th className="px-1 py-2" style={{ borderLeft: `1px solid ${C.border}` }} />
                   <TH right>Calls</TH>
                   <TH right>Speed</TH>
-                  <TH right>Talk</TH>
-                  <TH right>Wrap</TH>
+                  <TH right>Pickup</TH>
+                  <TH right>Yield</TH>
                 </tr>
               </thead>
               <tbody>
@@ -433,22 +529,17 @@ export default function RacePage() {
                     <td className="px-3 py-2.5 text-right">
                       <SpeedBadge sec={today?.speedSec ?? null} />
                     </td>
-                    <TD mono right color={C.sub}>
-                      {fmtTalkTime(today?.talkMin ?? 0)}
+                    <TD mono right color={today?.pickupRate != null && today.pickupRate >= 80 ? '#4ade80' : today?.pickupRate != null && today.pickupRate >= 60 ? '#fbbf24' : C.sub}>
+                      {today?.pickupRate != null ? `${today.pickupRate}%` : '—'}
                     </TD>
-                    <td className="px-3 py-2.5 text-right">
-                      {today?.wrapUpSec !== null && today?.wrapUpSec !== undefined
-                        ? <span className="font-mono text-xs" style={{ color: today.wrapUpSec < 30 ? '#4ade80' : today.wrapUpSec < 60 ? '#fbbf24' : '#f87171' }}>
-                            {fmtSpeed(today.wrapUpSec)}
-                          </span>
-                        : <span className="text-xs" style={{ color: C.sub }}>—</span>
-                      }
-                    </td>
+                    <TD mono right color={today?.trueYield != null && today.trueYield > 0 ? C.lime : C.sub}>
+                      {today?.trueYield != null ? `${today.trueYield}%` : '—'}
+                    </TD>
                   </tr>
                   );
                 })}
                 {mtd.byAgent.length === 0 && (
-                  <tr><td colSpan={11} className="text-center text-sm py-5" style={{ color: C.sub }}>No conversion data yet</td></tr>
+                  <tr><td colSpan={12} className="text-center text-sm py-5" style={{ color: C.sub }}>No conversion data yet</td></tr>
                 )}
               </tbody>
             </table>
@@ -538,21 +629,34 @@ export default function RacePage() {
         )}
         </ErrorBoundary>
 
-        {/* Account Leaderboard with MTD % */}
-        <ErrorBoundary section="Top Accounts">
+        {/* Conversions per Client */}
+        <ErrorBoundary section="Conversions per Client">
         <Card padding={false}>
           <div className="flex items-center gap-2 px-4 pt-4 pb-2">
             <Target size={16} style={{ color: C.cyan }} />
-            <h2 className="text-sm font-semibold" style={{ color: C.text }}>Top Accounts</h2>
-            <span className="text-xs ml-auto" style={{ color: C.sub }}>MTD conversions</span>
+            <h2 className="text-sm font-semibold" style={{ color: C.text }}>Conversions per Client</h2>
+            <span className="text-xs ml-auto mr-3" style={{ color: C.sub }}>MTD — {topAccounts.length} clients</span>
+            <button
+              onClick={() => downloadClientReport(topAccounts, agentStats, mtd.total, data.pulledAt)}
+              disabled={!topAccounts.length}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+              style={{
+                background: topAccounts.length ? C.lime + '18' : 'transparent',
+                color: topAccounts.length ? C.lime : C.sub,
+                border: `1px solid ${topAccounts.length ? C.lime + '44' : C.border}`,
+              }}
+            >
+              <Download size={13} />
+              Export Report
+            </button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                   <TH>#</TH>
-                  <TH>Account</TH>
-                  <TH right>Count</TH>
+                  <TH>Client</TH>
+                  <TH right>Conversions</TH>
                   <TH right>% of Total</TH>
                   <TH>Bar</TH>
                 </tr>
@@ -567,7 +671,7 @@ export default function RacePage() {
                         <span className="font-bold">{i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}</span>
                       </TD>
                       <TD>
-                        <span className="font-medium truncate block max-w-[220px]">{a.account}</span>
+                        <span className="font-medium truncate block max-w-[280px]">{a.account}</span>
                       </TD>
                       <TD mono right>{a.count}</TD>
                       <TD mono right color={C.sub}>{pctOfTotal}%</TD>
@@ -586,7 +690,7 @@ export default function RacePage() {
             </table>
           </div>
           {topAccounts.length === 0 && (
-            <p className="text-sm py-4 text-center" style={{ color: C.sub }}>No account data yet</p>
+            <p className="text-sm py-4 text-center" style={{ color: C.sub }}>No client data yet</p>
           )}
         </Card>
         </ErrorBoundary>

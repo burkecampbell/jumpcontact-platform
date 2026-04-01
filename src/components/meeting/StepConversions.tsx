@@ -79,6 +79,9 @@ export default function StepConversions({ period, label }: { period: PeriodData;
                 <TH right>Calls</TH>
                 <TH right>Rate</TH>
                 <TH right>Conv/Hr</TH>
+                <TH right>Pickup</TH>
+                <TH right>Decline</TH>
+                <TH right>Ghost</TH>
               </tr>
             </thead>
             <tbody>
@@ -86,7 +89,10 @@ export default function StepConversions({ period, label }: { period: PeriodData;
                 const rep = repAgents.find(r => r.agent.toLowerCase() === a.agent.toLowerCase());
                 const calls = rep?.calls ?? 0;
                 const rate = calls > 0 ? ((a.count / calls) * 100).toFixed(1) : '—';
-                const convPerHr = rep?.convsPerHour != null ? rep.convsPerHour.toFixed(1) : (rep?.hoursScheduled && rep.hoursScheduled > 0 ? (a.count / rep.hoursScheduled).toFixed(1) : '—');
+                const convPerHr = rep?.convsPerHour != null ? rep.convsPerHour.toFixed(1) : '—';
+                const pickup = rep?.pickupRate;
+                const decline = rep?.declineRate;
+                const ghost = rep?.ghostRate;
                 return (
                   <tr key={a.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
                     <TD color={i < 3 ? C.cyan : C.sub}><span className="font-bold">{i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}</span></TD>
@@ -104,11 +110,20 @@ export default function StepConversions({ period, label }: { period: PeriodData;
                     <TD mono right color={convPerHr !== '—' && parseFloat(convPerHr) >= 1 ? C.lime : C.sub}>
                       {convPerHr}
                     </TD>
+                    <TD mono right color={pickup != null && pickup >= 80 ? '#4ade80' : pickup != null && pickup >= 60 ? '#fbbf24' : C.sub}>
+                      {pickup != null ? `${pickup}%` : '—'}
+                    </TD>
+                    <TD mono right color={decline != null && decline > 10 ? '#f87171' : C.sub}>
+                      {decline != null ? `${decline}%` : '—'}
+                    </TD>
+                    <TD mono right color={ghost != null && ghost > 10 ? '#f87171' : C.sub}>
+                      {ghost != null ? `${ghost}%` : '—'}
+                    </TD>
                   </tr>
                 );
               })}
               {convAgents.length === 0 && (
-                <tr><td colSpan={6} className="text-center text-sm py-5" style={{ color: C.sub }}>No conversions yet</td></tr>
+                <tr><td colSpan={9} className="text-center text-sm py-5" style={{ color: C.sub }}>No conversions yet</td></tr>
               )}
             </tbody>
           </table>

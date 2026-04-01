@@ -7,7 +7,7 @@ import { C, capitalize, fmtTalkTime, ACTIVE_AGENTS, agentColor } from '@/lib/con
 import { formatPhone, formatDuration, formatTime } from '@/lib/formatters';
 import type { RawCall } from '@/lib/getDashboard';
 import type { CallsResponse, AgentCallSummary } from '@/lib/api-types';
-import { ArrowDown, ArrowUp, Filter, Download, Volume2, Square, CheckSquare } from 'lucide-react';
+import { ArrowDown, ArrowUp, Filter, Download, Volume2, Square, CheckSquare, Share2 } from 'lucide-react';
 import ErrorBoundary from './ErrorBoundary';
 import InlinePlayer from './InlinePlayer';
 
@@ -40,6 +40,47 @@ function buildPlayerUrl(call: RawCall): string {
     time: call.time,
   });
   return `${window.location.origin}/play?${p}`;
+}
+
+async function shareRecording(call: RawCall) {
+  const url = buildPlayerUrl(call);
+  if (!url) return;
+  const agentName = capitalize(call.agent);
+  const clientName = call.account || 'Unknown';
+  const phone = formatPhone(call.phone);
+  const dur = fmtDur(call.duration);
+  const dir = call.direction === 'inbound' ? '📞 Inbound' : '📲 Outbound';
+  const time = new Date(call.time).toLocaleString('en-US', {
+    timeZone: 'America/Edmonton',
+    weekday: 'short', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  });
+
+  const title = `Jump Contact — ${clientName} Call Recording`;
+  const text = [
+    `${dir} Call Recording`,
+    `━━━━━━━━━━━━━━━━━━`,
+    `Agent: ${agentName}`,
+    `Client: ${clientName}`,
+    `Phone: ${phone}`,
+    `Duration: ${dur}`,
+    `Time: ${time}`,
+    ``,
+    `🎧 Listen to the full recording:`,
+  ].join('\n');
+
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, text, url });
+      return;
+    } catch {
+      // User cancelled or share failed — fall through to clipboard
+    }
+  }
+
+  const full = `${title}\n\n${text}\n${url}`;
+  await navigator.clipboard.writeText(full);
+  alert('Recording link copied to clipboard!');
 }
 
 async function downloadReport(calls: RawCall[], filename: string, date: string) {
@@ -501,6 +542,13 @@ export default function CallsPage() {
                           {hasRec ? (
                             <>
                               <InlinePlayer callSid={call.callSid!} recordingUrl={call.recordingUrl!} />
+                              <button
+                                onClick={() => shareRecording(call)}
+                                className="p-1 rounded-md transition-colors hover:bg-white/5 border-none bg-transparent cursor-pointer"
+                                title="Share recording"
+                              >
+                                <Share2 size={13} style={{ color: C.sub }} />
+                              </button>
                               <button
                                 onClick={() => downloadRecording(
                                   call.recordingUrl! + (call.recordingUrl!.includes('?') ? '&' : '?') + 'download=1',

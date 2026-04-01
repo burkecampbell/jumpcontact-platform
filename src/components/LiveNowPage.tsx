@@ -6,9 +6,56 @@ import Card from './Card';
 import { C, capitalize, fmtSpeed, fmtTalkTime, speedGrade, agentColor } from '@/lib/constants';
 import { formatPhone, formatDuration, formatTime } from '@/lib/formatters';
 import type { DashboardData, RawCall, RepAgent } from '@/lib/getDashboard';
-import { Phone, PhoneMissed, TrendingUp, Zap, Users, ArrowDown, ArrowUp, Percent, Timer, Clock, ChevronUp, ChevronDown, Download } from 'lucide-react';
+import { Phone, PhoneMissed, TrendingUp, Zap, Users, ArrowDown, ArrowUp, Percent, Timer, Clock, ChevronUp, ChevronDown, Download, Share2 } from 'lucide-react';
 import ErrorBoundary from './ErrorBoundary';
 import InlinePlayer from './InlinePlayer';
+
+function buildPlayerUrl(call: RawCall): string {
+  if (!call.recordingUrl || !call.callSid) return '';
+  const p = new URLSearchParams({
+    sid: call.callSid,
+    ...(call.agentLegSid ? { agent_sid: call.agentLegSid } : {}),
+    agent: capitalize(call.agent),
+    client: call.account || '',
+    phone: formatPhone(call.phone),
+    dur: formatDuration(call.duration),
+    dir: call.direction,
+    time: call.time,
+  });
+  return `${window.location.origin}/play?${p}`;
+}
+
+async function shareRecording(call: RawCall) {
+  const url = buildPlayerUrl(call);
+  if (!url) return;
+  const agentName = capitalize(call.agent);
+  const clientName = call.account || 'Unknown';
+  const phone = formatPhone(call.phone);
+  const dur = formatDuration(call.duration);
+  const dir = call.direction === 'inbound' ? '📞 Inbound' : '📲 Outbound';
+  const time = new Date(call.time).toLocaleString('en-US', {
+    timeZone: 'America/Edmonton',
+    weekday: 'short', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  });
+  const title = `Jump Contact — ${clientName} Call Recording`;
+  const text = [
+    `${dir} Call Recording`,
+    `━━━━━━━━━━━━━━━━━━`,
+    `Agent: ${agentName}`,
+    `Client: ${clientName}`,
+    `Phone: ${phone}`,
+    `Duration: ${dur}`,
+    `Time: ${time}`,
+    ``,
+    `🎧 Listen to the full recording:`,
+  ].join('\n');
+  if (navigator.share) {
+    try { await navigator.share({ title, text, url }); return; } catch { /* cancelled */ }
+  }
+  await navigator.clipboard.writeText(`${title}\n\n${text}\n${url}`);
+  alert('Recording link copied to clipboard!');
+}
 
 interface KPIProps {
   label: string;
@@ -347,6 +394,13 @@ export default function LiveNowPage() {
                       {call.recordingUrl ? (
                         <div className="flex items-center gap-1">
                           <InlinePlayer callSid={call.callSid!} recordingUrl={call.recordingUrl} />
+                          <button
+                            onClick={() => shareRecording(call)}
+                            className="p-1 rounded-md transition-colors hover:bg-white/5"
+                            title="Share recording"
+                          >
+                            <Share2 size={13} style={{ color: C.sub }} />
+                          </button>
                           <a
                             href={`${call.recordingUrl}${call.recordingUrl.includes('?') ? '&' : '?'}download=1`}
                             download

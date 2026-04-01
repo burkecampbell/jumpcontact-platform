@@ -52,16 +52,20 @@ function PlayerInner() {
 
     const onCanPlay = () => {
       setState('ready');
-      setDuration(audio.duration);
+      if (isFinite(audio.duration)) setDuration(audio.duration);
     };
     const onPlay = () => setState('playing');
     const onPause = () => setState('paused');
     const onTimeUpdate = () => {
       setCurrentTime(audio.currentTime);
-      setProgress(audio.duration ? (audio.currentTime / audio.duration) * 100 : 0);
+      const d = isFinite(audio.duration) ? audio.duration : 0;
+      setProgress(d ? (audio.currentTime / d) * 100 : 0);
     };
     const onEnded = () => { setState('ready'); setProgress(0); setCurrentTime(0); };
     const onError = () => setState('error');
+    const onDurationChange = () => {
+      if (isFinite(audio.duration)) setDuration(audio.duration);
+    };
 
     audio.addEventListener('canplay', onCanPlay);
     audio.addEventListener('play', onPlay);
@@ -69,6 +73,7 @@ function PlayerInner() {
     audio.addEventListener('timeupdate', onTimeUpdate);
     audio.addEventListener('ended', onEnded);
     audio.addEventListener('error', onError);
+    audio.addEventListener('durationchange', onDurationChange);
 
     return () => {
       audio.removeEventListener('canplay', onCanPlay);
@@ -77,6 +82,7 @@ function PlayerInner() {
       audio.removeEventListener('timeupdate', onTimeUpdate);
       audio.removeEventListener('ended', onEnded);
       audio.removeEventListener('error', onError);
+      audio.removeEventListener('durationchange', onDurationChange);
     };
   }, []);
 
@@ -96,6 +102,7 @@ function PlayerInner() {
   };
 
   const fmtTime = (s: number) => {
+    if (!isFinite(s) || isNaN(s) || s < 0) return '0:00';
     const m = Math.floor(s / 60);
     const sec = Math.floor(s % 60);
     return `${m}:${String(sec).padStart(2, '0')}`;
@@ -333,7 +340,7 @@ function PlayerInner() {
                   marginBottom: 20,
                 }}>
                   <span>{fmtTime(currentTime)}</span>
-                  <span>{duration ? fmtTime(duration) : '--:--'}</span>
+                  <span>{duration ? fmtTime(duration) : (dur || '--:--')}</span>
                 </div>
 
                 {/* Play / Pause / Download buttons */}
@@ -368,6 +375,57 @@ function PlayerInner() {
                         <path d="M8 5v14l11-7z" />
                       </svg>
                     )}
+                  </button>
+
+                  {/* Share */}
+                  <button
+                    onClick={async () => {
+                      const pageUrl = window.location.href;
+                      const title = `Jump Contact — ${client || 'Call'} Recording`;
+                      const shareText = [
+                        `${dir === 'inbound' ? '📞 Inbound' : '📲 Outbound'} Call Recording`,
+                        `━━━━━━━━━━━━━━━━━━`,
+                        agent ? `Agent: ${agent}` : '',
+                        client ? `Client: ${client}` : '',
+                        phone ? `Phone: ${phone}` : '',
+                        dur ? `Duration: ${dur}` : '',
+                        time ? `Time: ${fmtDisplayTime(time)}` : '',
+                        '',
+                        '🎧 Listen to the full recording:',
+                      ].filter(Boolean).join('\n');
+
+                      if (navigator.share) {
+                        try {
+                          await navigator.share({ title, text: shareText, url: pageUrl });
+                          return;
+                        } catch {}
+                      }
+                      await navigator.clipboard.writeText(`${title}\n${shareText}\n${pageUrl}`);
+                      alert('Recording link copied to clipboard!');
+                    }}
+                    style={{
+                      width: 42,
+                      height: 42,
+                      borderRadius: '50%',
+                      border: `1px solid ${C.border}`,
+                      background: 'transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      transition: 'border-color 0.15s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = C.cyan; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; }}
+                    title="Share recording"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.sub} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="18" cy="5" r="3" />
+                      <circle cx="6" cy="12" r="3" />
+                      <circle cx="18" cy="19" r="3" />
+                      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                    </svg>
                   </button>
 
                   {/* Download */}
