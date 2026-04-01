@@ -35,8 +35,32 @@ export async function GET(req: NextRequest) {
   const auth = twilioAuth();
 
   try {
-    // ── 0. Fast-path: check static recording map ─────────────────
+    // ── 0a. Fast-path: check static recording map (direct match) ──
     let recordingSid: string | null = RECORDING_MAP[callSid] || null;
+
+    // ── 0b. Static map: resolve parent → child SIDs ─────────────
+    //   The static map is keyed by child-leg SID, but the calls API
+    //   returns parent SIDs.  Fetch child calls and check each one.
+    if (!recordingSid) {
+      const childrenUrl =
+        `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json` +
+        `?ParentCallSid=${callSid}&PageSize=5`;
+      try {
+        const childRes = await fetch(childrenUrl, { headers: { Authorization: auth } });
+        if (childRes.ok) {
+          const childJson = await childRes.json();
+          const childCalls: { sid: string }[] = childJson.calls || [];
+          for (const child of childCalls) {
+            if (RECORDING_MAP[child.sid]) {
+              recordingSid = RECORDING_MAP[child.sid];
+              break;
+            }
+          }
+        }
+      } catch {
+        // Swallow – fall through to Twilio API tiers below
+      }
+    }
 
     // ── 1. Try the primary (inbound) call SID via Twilio API ────
     if (!recordingSid) {
