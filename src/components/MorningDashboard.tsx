@@ -8,9 +8,30 @@ import type { DashboardData, RepAgent, AgentStat, AcctStat, MonthChampions } fro
 
 type LayoutMode = 'auto' | 'tv' | 'mobile';
 
-const SCALE: Record<LayoutMode, number> = { mobile: 1, auto: 1.3, tv: 3.5 };
 const MAX_W: Record<LayoutMode, number> = { mobile: 640, auto: 1000, tv: 9999 };
-const PAD: Record<LayoutMode, number> = { mobile: 28, auto: 48, tv: 160 };
+const PAD: Record<LayoutMode, number> = { mobile: 28, auto: 48, tv: 120 };
+
+// ── Per-element sizing per mode ─────────────────────────────────────
+// Each element type has its own ideal size on each screen.
+// This IS pretext: independent spring targets per element.
+const SIZES: Record<string, Record<LayoutMode, number>> = {
+  hero:       { mobile: 48,  auto: 56,  tv: 120 },   // big KPI numbers
+  heading:    { mobile: 28,  auto: 32,  tv: 64 },    // "Thursday Morning Meeting"
+  stepTitle:  { mobile: 22,  auto: 24,  tv: 48 },    // "MTD Race", "Speed"
+  agentName:  { mobile: 15,  auto: 16,  tv: 36 },    // "Wendy", "Omar"
+  agentValue: { mobile: 20,  auto: 22,  tv: 48 },    // "56", "6.8s"
+  label:      { mobile: 10,  auto: 11,  tv: 20 },    // "MONTH TO DATE"
+  tab:        { mobile: 9,   auto: 10,  tv: 18 },    // nav tab labels
+  body:       { mobile: 13,  auto: 14,  tv: 26 },    // table text, accounts
+  pill:       { mobile: 11,  auto: 11,  tv: 20 },    // grade badges, pills
+  date:       { mobile: 12,  auto: 12,  tv: 22 },    // "April 2, 2026"
+  badge:      { mobile: 28,  auto: 30,  tv: 52 },    // rank circles
+  bar:        { mobile: 6,   auto: 7,   tv: 14 },    // progress bars
+  dot:        { mobile: 6,   auto: 8,   tv: 16 },    // nav dots
+  button:     { mobile: 13,  auto: 14,  tv: 24 },    // Back/Next
+  gap:        { mobile: 12,  auto: 14,  tv: 24 },    // spacing
+  sub:        { mobile: 10,  auto: 10,  tv: 16 },    // "Jump Contact" brand
+};
 
 const T = {
   bg: '#fafaf9', surface: '#ffffff', subtle: '#f5f5f4', border: '#e7e5e4',
@@ -18,40 +39,42 @@ const T = {
   positive: '#15803d', caution: '#b45309', negative: '#b91c1c', gold: '#ca8a04',
 };
 
-// ── Scale helper ────────────────────────────────────────────────────
-let _s = 1;
-function S(px: number) { return Math.round(px * _s); }
+// ── Size helper — reads current mode, returns per-element size ──────
+let _m: LayoutMode = 'auto';
+function Z(key: string) { return SIZES[key]?.[_m] ?? SIZES[key]?.auto ?? 14; }
+// Generic spacing scale (for padding, gaps, margins)
+function G(base: number) { return Math.round(base * (Z('gap') / 12)); }
 
 function fmtMin(m: number) { return m >= 60 ? `${Math.floor(m / 60)}h ${Math.round(m % 60)}m` : `${Math.round(m)}m`; }
 function dayName(d: string) { return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' }); }
 
 // ── Primitives ──────────────────────────────────────────────────────
 
-function Num({ children, size = 48 }: { children: React.ReactNode; size?: number }) {
-  return <span style={{ fontSize: S(size), fontWeight: 200, color: T.ink, lineHeight: 1, fontFamily: "'JetBrains Mono','Consolas',monospace", fontVariantNumeric: 'tabular-nums', letterSpacing: -1 }}>{children}</span>;
+function Num({ children, el = 'hero' }: { children: React.ReactNode; el?: string }) {
+  return <span style={{ fontSize: Z(el), fontWeight: 200, color: T.ink, lineHeight: 1, fontFamily: "'JetBrains Mono','Consolas',monospace", fontVariantNumeric: 'tabular-nums', letterSpacing: -1 }}>{children}</span>;
 }
 function Label({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: S(11), fontWeight: 600, textTransform: 'uppercase', letterSpacing: 2, color: T.inkFaint }}>{children}</div>;
+  return <div style={{ fontSize: Z('label'), fontWeight: 600, textTransform: 'uppercase', letterSpacing: 2, color: T.inkFaint }}>{children}</div>;
 }
 function Pill({ children, color = T.inkMuted }: { children: React.ReactNode; color?: string }) {
-  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: S(11), fontWeight: 600, color, background: color + '0d', border: `1px solid ${color}22`, padding: `${S(4)}px ${S(10)}px`, borderRadius: 20 }}>{children}</span>;
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: Z('pill'), fontWeight: 600, color, background: color + '0d', border: `1px solid ${color}22`, padding: `${G(4)}px ${G(10)}px`, borderRadius: 20 }}>{children}</span>;
 }
 
 function AgentBar({ rank, name, value, max, suffix = '' }: { rank: number; name: string; value: number | string; max: number; suffix?: string }) {
   const numVal = typeof value === 'number' ? value : parseFloat(String(value)) || 0;
   const pct = max > 0 ? Math.max((numVal / max) * 100, 3) : 3;
   const top3 = rank < 3;
-  const b = S(30);
+  const b = Z('badge');
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: `${b}px ${S(90)}px 1fr auto`, alignItems: 'center', gap: S(12), padding: `${S(12)}px 0`, borderBottom: `1px solid ${T.border}` }}>
-      <div style={{ width: b, height: b, borderRadius: b / 2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: S(13), fontWeight: 700, background: top3 ? T.ink : 'transparent', color: top3 ? '#fff' : T.inkFaint, border: top3 ? 'none' : `1px solid ${T.border}` }}>{rank + 1}</div>
-      <div style={{ fontWeight: 600, fontSize: S(16), color: T.ink }}>{capitalize(name)}</div>
-      <div style={{ position: 'relative', height: S(7), background: T.subtle, borderRadius: 4, overflow: 'hidden' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: `${b}px ${G(90)}px 1fr auto`, alignItems: 'center', gap: G(12), padding: `${G(12)}px 0`, borderBottom: `1px solid ${T.border}` }}>
+      <div style={{ width: b, height: b, borderRadius: b / 2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: Z('body') * 0.85, fontWeight: 700, background: top3 ? T.ink : 'transparent', color: top3 ? '#fff' : T.inkFaint, border: top3 ? 'none' : `1px solid ${T.border}` }}>{rank + 1}</div>
+      <div style={{ fontWeight: 600, fontSize: Z('agentName'), color: T.ink }}>{capitalize(name)}</div>
+      <div style={{ position: 'relative', height: Z('bar'), background: T.subtle, borderRadius: 4, overflow: 'hidden' }}>
         <div style={{ width: `${pct}%`, height: '100%', borderRadius: 4, background: agentColor(name), opacity: 0.8 }} />
       </div>
-      <div style={{ textAlign: 'right', minWidth: S(60) }}>
-        <span style={{ fontFamily: "'JetBrains Mono','Consolas',monospace", fontSize: S(22), fontWeight: 600, color: T.ink }}>{value}</span>
-        {suffix && <span style={{ fontSize: S(12), color: T.inkFaint, marginLeft: 2 }}>{suffix}</span>}
+      <div style={{ textAlign: 'right', minWidth: G(60) }}>
+        <span style={{ fontFamily: "'JetBrains Mono','Consolas',monospace", fontSize: Z('agentValue'), fontWeight: 600, color: T.ink }}>{value}</span>
+        {suffix && <span style={{ fontSize: Z('label'), color: T.inkFaint, marginLeft: 2 }}>{suffix}</span>}
       </div>
     </div>
   );
@@ -64,7 +87,7 @@ function StepCalls({ data }: { data: DashboardData }) {
   const total = agents.reduce((s, a) => s + a.calls, 0);
   return (
     <div>
-      <div style={{ marginBottom: S(24) }}><Label>Total calls answered</Label><div style={{ marginTop: S(8) }}><Num size={56}>{total}</Num></div></div>
+      <div style={{ marginBottom: G(24) }}><Label>Total calls answered</Label><div style={{ marginTop: G(8) }}><Num>{total}</Num></div></div>
       {agents.map((a, i) => <AgentBar key={a.agent} rank={i} name={a.agent} value={a.calls} max={agents[0]?.calls || 1} />)}
     </div>
   );
@@ -74,7 +97,7 @@ function StepTalk({ data }: { data: DashboardData }) {
   const agents = data.yesterday.repActivity.agents.filter(a => !EXCLUDED_AGENTS.includes(a.agent)).sort((a, b) => b.talkMin - a.talkMin);
   return (
     <div>
-      <div style={{ marginBottom: S(24) }}><Label>Total team talk time</Label><div style={{ marginTop: S(8) }}><Num size={56}>{fmtMin(agents.reduce((s, a) => s + a.talkMin, 0))}</Num></div></div>
+      <div style={{ marginBottom: G(24) }}><Label>Total team talk time</Label><div style={{ marginTop: G(8) }}><Num>{fmtMin(agents.reduce((s, a) => s + a.talkMin, 0))}</Num></div></div>
       {agents.map((a, i) => <AgentBar key={a.agent} rank={i} name={a.agent} value={fmtMin(a.talkMin)} max={agents[0]?.talkMin || 1} />)}
     </div>
   );
@@ -85,13 +108,13 @@ function StepSpeed({ data }: { data: DashboardData }) {
     .filter(a => !EXCLUDED_AGENTS.includes(a.agent) && a.speedSec != null && a.speedSec > 0)
     .sort((a, b) => a.speedSec! - b.speedSec!);
   const hitting = agents.filter(a => a.speedSec! < 10).length;
-  const b = S(30);
+  const b = Z('badge');
   return (
     <div>
-      <div style={{ marginBottom: S(24) }}>
+      <div style={{ marginBottom: G(24) }}>
         <Label>Speed to answer</Label>
-        <div style={{ marginTop: S(8), display: 'flex', alignItems: 'baseline', gap: S(16) }}>
-          <Num size={40}>&lt;10s target</Num>
+        <div style={{ marginTop: G(8), display: 'flex', alignItems: 'baseline', gap: G(16) }}>
+          <Num>&lt;10s target</Num>
           <Pill color={T.positive}>{hitting}/{agents.length} hitting</Pill>
         </div>
       </div>
@@ -100,11 +123,11 @@ function StepSpeed({ data }: { data: DashboardData }) {
         const c = s < 10 ? T.positive : s < 14 ? T.caution : T.negative;
         const { letter } = speedGrade(s);
         return (
-          <div key={a.agent} style={{ display: 'grid', gridTemplateColumns: `${b}px ${S(90)}px 1fr auto`, alignItems: 'center', gap: S(12), padding: `${S(12)}px 0`, borderBottom: `1px solid ${T.border}` }}>
-            <div style={{ width: b, height: b, borderRadius: b / 2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: S(13), fontWeight: 700, background: i < 3 ? T.ink : 'transparent', color: i < 3 ? '#fff' : T.inkFaint, border: i < 3 ? 'none' : `1px solid ${T.border}` }}>{i + 1}</div>
-            <div style={{ fontWeight: 600, fontSize: S(16), color: T.ink }}>{capitalize(a.agent)}</div>
+          <div key={a.agent} style={{ display: 'grid', gridTemplateColumns: `${b}px ${G(90)}px 1fr auto`, alignItems: 'center', gap: G(12), padding: `${G(12)}px 0`, borderBottom: `1px solid ${T.border}` }}>
+            <div style={{ width: b, height: b, borderRadius: b / 2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: Z('body') * 0.85, fontWeight: 700, background: i < 3 ? T.ink : 'transparent', color: i < 3 ? '#fff' : T.inkFaint, border: i < 3 ? 'none' : `1px solid ${T.border}` }}>{i + 1}</div>
+            <div style={{ fontWeight: 600, fontSize: Z('agentName'), color: T.ink }}>{capitalize(a.agent)}</div>
             <div><Pill color={c}>{letter}</Pill></div>
-            <div style={{ fontFamily: "'JetBrains Mono','Consolas',monospace", fontSize: S(22), fontWeight: 600, color: c, textAlign: 'right' }}>{s.toFixed(1)}s</div>
+            <div style={{ fontFamily: "'JetBrains Mono','Consolas',monospace", fontSize: Z('agentValue'), fontWeight: 600, color: c, textAlign: 'right' }}>{s.toFixed(1)}s</div>
           </div>
         );
       })}
@@ -123,14 +146,14 @@ function StepConversions({ data }: { data: DashboardData }) {
   const trend = data.trend7d.conversions;
   const prior = trend.length >= 2 ? trend[trend.length - 1] : null;
   const pct = prior ? Math.round(((total - prior) / Math.max(prior, 1)) * 100) : null;
-  const b = S(28);
+  const b = Z('badge');
 
   return (
     <div>
-      <div style={{ marginBottom: S(24) }}>
+      <div style={{ marginBottom: G(24) }}>
         <Label>Conversions &mdash; {dayName(data.yesterdayDate || '')}</Label>
-        <div style={{ marginTop: S(8), display: 'flex', alignItems: 'baseline', gap: S(16) }}>
-          <Num size={56}>{total}</Num>
+        <div style={{ marginTop: G(8), display: 'flex', alignItems: 'baseline', gap: G(16) }}>
+          <Num>{total}</Num>
           {pct !== null && <Pill color={pct >= 0 ? T.positive : T.negative}>{pct >= 0 ? '\u25B2' : '\u25BC'} {Math.abs(pct)}%</Pill>}
         </div>
       </div>
@@ -138,7 +161,7 @@ function StepConversions({ data }: { data: DashboardData }) {
         <thead>
           <tr style={{ borderBottom: `2px solid ${T.border}` }}>
             {['#', 'Agent', 'Conv', 'Calls', 'Rate', 'Conv/Hr'].map(h => (
-              <th key={h} style={{ padding: `${S(8)}px ${S(10)}px`, textAlign: h === '#' || h === 'Agent' ? 'left' : 'right', color: T.inkFaint, fontSize: S(10), textTransform: 'uppercase', letterSpacing: 1.5 }}>{h}</th>
+              <th key={h} style={{ padding: `${G(8)}px ${G(10)}px`, textAlign: h === '#' || h === 'Agent' ? 'left' : 'right', color: T.inkFaint, fontSize: Z('label'), textTransform: 'uppercase', letterSpacing: 1.5 }}>{h}</th>
             ))}
           </tr>
         </thead>
@@ -147,26 +170,26 @@ function StepConversions({ data }: { data: DashboardData }) {
             const rate = a.calls > 0 ? Math.round((a.convs / a.calls) * 100) : 0;
             return (
               <tr key={a.agent} style={{ borderBottom: `1px solid ${T.border}`, background: i % 2 ? T.subtle : 'transparent' }}>
-                <td style={{ padding: S(8) }}>
-                  <div style={{ width: b, height: b, borderRadius: b / 2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: S(12), fontWeight: 700, background: i < 3 ? T.ink : 'transparent', color: i < 3 ? '#fff' : T.inkFaint, border: i < 3 ? 'none' : `1px solid ${T.border}` }}>{i + 1}</div>
+                <td style={{ padding: G(8) }}>
+                  <div style={{ width: b, height: b, borderRadius: b / 2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: Z('body') * 0.85, fontWeight: 700, background: i < 3 ? T.ink : 'transparent', color: i < 3 ? '#fff' : T.inkFaint, border: i < 3 ? 'none' : `1px solid ${T.border}` }}>{i + 1}</div>
                 </td>
-                <td style={{ padding: S(8), fontWeight: 700, fontSize: S(14), color: agentColor(a.agent) }}>{capitalize(a.agent)}</td>
-                <td style={{ padding: S(8), textAlign: 'right', fontFamily: "'JetBrains Mono',monospace", fontSize: S(20), fontWeight: 700 }}>{a.convs}</td>
-                <td style={{ padding: S(8), textAlign: 'right', fontFamily: "'JetBrains Mono',monospace", fontSize: S(14), color: T.inkMuted }}>{a.calls}</td>
-                <td style={{ padding: S(8), textAlign: 'right' }}><Pill color={rate >= 15 ? T.positive : rate >= 8 ? T.inkMuted : T.caution}>{rate}%</Pill></td>
-                <td style={{ padding: S(8), textAlign: 'right', fontFamily: "'JetBrains Mono',monospace", fontSize: S(14), color: T.inkSoft }}>{a.convsPerHour?.toFixed(2) || '\u2014'}</td>
+                <td style={{ padding: G(8), fontWeight: 700, fontSize: Z('agentName'), color: agentColor(a.agent) }}>{capitalize(a.agent)}</td>
+                <td style={{ padding: G(8), textAlign: 'right', fontFamily: "'JetBrains Mono',monospace", fontSize: Z('agentValue'), fontWeight: 700 }}>{a.convs}</td>
+                <td style={{ padding: G(8), textAlign: 'right', fontFamily: "'JetBrains Mono',monospace", fontSize: Z('body'), color: T.inkMuted }}>{a.calls}</td>
+                <td style={{ padding: G(8), textAlign: 'right' }}><Pill color={rate >= 15 ? T.positive : rate >= 8 ? T.inkMuted : T.caution}>{rate}%</Pill></td>
+                <td style={{ padding: G(8), textAlign: 'right', fontFamily: "'JetBrains Mono',monospace", fontSize: Z('body'), color: T.inkSoft }}>{a.convsPerHour?.toFixed(2) || '\u2014'}</td>
               </tr>
             );
           })}
         </tbody>
       </table>
-      <div style={{ height: 1, background: T.border, margin: `${S(20)}px 0` }} />
-      <div style={{ display: 'flex', gap: S(40) }}>
+      <div style={{ height: 1, background: T.border, margin: `${G(20)}px 0` }} />
+      <div style={{ display: 'flex', gap: G(40) }}>
         <div style={{ flex: 1 }}>
           <Label>Top accounts</Label>
-          <div style={{ marginTop: S(8) }}>
+          <div style={{ marginTop: G(8) }}>
             {data.yesterday.conversions.byAccount.slice(0, 6).map(a => (
-              <div key={a.account} style={{ display: 'flex', justifyContent: 'space-between', padding: `${S(5)}px 0`, borderBottom: `1px solid ${T.border}`, fontSize: S(13) }}>
+              <div key={a.account} style={{ display: 'flex', justifyContent: 'space-between', padding: `${G(5)}px 0`, borderBottom: `1px solid ${T.border}`, fontSize: Z('body') }}>
                 <span style={{ color: T.inkSoft }}>{a.account}</span>
                 <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 600 }}>{a.count}</span>
               </div>
@@ -174,12 +197,12 @@ function StepConversions({ data }: { data: DashboardData }) {
           </div>
         </div>
         <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: S(8), marginBottom: S(8) }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: G(8), marginBottom: G(8) }}>
             <Label>Missed calls</Label>
-            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: S(20), fontWeight: 600, color: T.negative }}>{data.yesterday.missedCalls.total}</span>
+            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: Z('agentValue'), fontWeight: 600, color: T.negative }}>{data.yesterday.missedCalls.total}</span>
           </div>
           {data.yesterday.missedCalls.byAccount.slice(0, 5).map(a => (
-            <div key={a.account} style={{ display: 'flex', justifyContent: 'space-between', padding: `${S(4)}px 0`, fontSize: S(12), color: T.inkMuted }}>
+            <div key={a.account} style={{ display: 'flex', justifyContent: 'space-between', padding: `${G(4)}px 0`, fontSize: Z('body') * 0.9, color: T.inkMuted }}>
               <span>{a.account}</span>
               <span style={{ fontWeight: 600, color: T.negative }}>{a.count}</span>
             </div>
@@ -195,21 +218,21 @@ function StepMTD({ data }: { data: DashboardData }) {
   const pace = mtd.dayOfMonth > 0 ? Math.round(mtd.total / mtd.dayOfMonth) : 0;
   return (
     <div>
-      <div style={{ marginBottom: S(24) }}>
+      <div style={{ marginBottom: G(24) }}>
         <Label>Month to date &mdash; day {mtd.dayOfMonth}</Label>
-        <div style={{ marginTop: S(8), display: 'flex', alignItems: 'baseline', gap: S(16) }}>
-          <Num size={56}>{mtd.total}</Num>
-          <span style={{ fontSize: S(14), color: T.inkMuted }}>{pace}/day pace</span>
+        <div style={{ marginTop: G(8), display: 'flex', alignItems: 'baseline', gap: G(16) }}>
+          <Num>{mtd.total}</Num>
+          <span style={{ fontSize: Z('body'), color: T.inkMuted }}>{pace}/day pace</span>
         </div>
       </div>
       {mtd.byAgent.filter(a => !EXCLUDED_AGENTS.includes(a.agent)).sort((a, b) => b.count - a.count).map((a, i) => (
         <AgentBar key={a.agent} rank={i} name={a.agent} value={a.count} max={mtd.byAgent[0]?.count || 1} />
       ))}
-      <div style={{ height: 1, background: T.border, margin: `${S(20)}px 0` }} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: S(16), textAlign: 'center' }}>
-        <div><div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: S(24), fontWeight: 600 }}>{mtd.goalPace}</div><Label>Projected</Label></div>
-        <div><div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: S(24), fontWeight: 600 }}>{mtd.goal}</div><Label>Goal</Label></div>
-        <div><div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: S(24), fontWeight: 600, color: mtd.onTrack ? T.positive : T.negative }}>{mtd.requiredDailyRate}</div><Label>Needed/Day</Label></div>
+      <div style={{ height: 1, background: T.border, margin: `${G(20)}px 0` }} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: G(16), textAlign: 'center' }}>
+        <div><div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: Z('agentValue'), fontWeight: 600 }}>{mtd.goalPace}</div><Label>Projected</Label></div>
+        <div><div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: Z('agentValue'), fontWeight: 600 }}>{mtd.goal}</div><Label>Goal</Label></div>
+        <div><div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: Z('agentValue'), fontWeight: 600, color: mtd.onTrack ? T.positive : T.negative }}>{mtd.requiredDailyRate}</div><Label>Needed/Day</Label></div>
       </div>
     </div>
   );
@@ -225,22 +248,22 @@ function StepChampions({ champions }: { champions: MonthChampions }) {
   ];
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: S(12), marginBottom: S(24) }}>
-        <span style={{ fontSize: S(32) }}>{'\uD83C\uDFC6'}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: G(12), marginBottom: G(24) }}>
+        <span style={{ fontSize: Z('hero') * 0.6 }}>{'\uD83C\uDFC6'}</span>
         <div>
-          <Num size={28}>{champions.month}</Num>
+          <Num el="stepTitle">{champions.month}</Num>
           <Label>Champions</Label>
         </div>
       </div>
       {items.map(c => (
-        <div key={c.title} style={{ display: 'grid', gridTemplateColumns: `${S(40)}px 1fr auto`, alignItems: 'center', gap: S(12), padding: `${S(14)}px 0`, borderBottom: `1px solid ${T.border}` }}>
-          <div style={{ fontSize: S(22), textAlign: 'center' }}>{c.icon}</div>
+        <div key={c.title} style={{ display: 'grid', gridTemplateColumns: `${G(40)}px 1fr auto`, alignItems: 'center', gap: G(12), padding: `${G(14)}px 0`, borderBottom: `1px solid ${T.border}` }}>
+          <div style={{ fontSize: Z('agentValue'), textAlign: 'center' }}>{c.icon}</div>
           <div>
-            <div style={{ fontSize: S(10), color: T.inkFaint, textTransform: 'uppercase', letterSpacing: 1 }}>{c.title}</div>
-            <div style={{ fontSize: S(18), fontWeight: 700, color: agentColor(c.agent) }}>{capitalize(c.agent)}</div>
-            {c.runnerUp && <div style={{ fontSize: S(12), color: T.inkMuted }}>Runner-up: {capitalize(c.runnerUp)} ({c.runnerUpValue}{c.sfx})</div>}
+            <div style={{ fontSize: Z('label'), color: T.inkFaint, textTransform: 'uppercase', letterSpacing: 1 }}>{c.title}</div>
+            <div style={{ fontSize: Z('agentName'), fontWeight: 700, color: agentColor(c.agent) }}>{capitalize(c.agent)}</div>
+            {c.runnerUp && <div style={{ fontSize: Z('body') * 0.85, color: T.inkMuted }}>Runner-up: {capitalize(c.runnerUp)} ({c.runnerUpValue}{c.sfx})</div>}
           </div>
-          <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: S(26), fontWeight: 700, color: c.accent }}>
+          <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: Z('agentValue'), fontWeight: 700, color: c.accent }}>
             {typeof c.value === 'number' && c.sfx === 'm' ? fmtMin(c.value) : c.value}{c.sfx !== 'm' ? c.sfx : ''}
           </div>
         </div>
@@ -275,11 +298,11 @@ function StepSlack({ data }: { data: DashboardData }) {
   const copy = () => { navigator.clipboard.writeText(post); setCopied(true); setTimeout(() => setCopied(false), 2000); };
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: S(12) }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: G(12) }}>
         <Label>Auto-generated from live data</Label>
-        <button onClick={copy} style={{ padding: `${S(8)}px ${S(16)}px`, borderRadius: 8, border: `1px solid ${T.border}`, background: copied ? T.ink : T.surface, color: copied ? '#fff' : T.ink, fontSize: S(12), fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>{copied ? '\u2713 Copied' : 'Copy to clipboard'}</button>
+        <button onClick={copy} style={{ padding: `${G(8)}px ${G(16)}px`, borderRadius: 8, border: `1px solid ${T.border}`, background: copied ? T.ink : T.surface, color: copied ? '#fff' : T.ink, fontSize: G(12), fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>{copied ? '\u2713 Copied' : 'Copy to clipboard'}</button>
       </div>
-      <div style={{ background: '#fff', border: `1px solid ${T.border}`, borderRadius: 8, padding: S(20), fontSize: S(13), lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: '60vh', overflowY: 'auto', borderLeft: `4px solid ${T.ink}` }}>{post}</div>
+      <div style={{ background: '#fff', border: `1px solid ${T.border}`, borderRadius: 8, padding: G(20), fontSize: G(13), lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: '60vh', overflowY: 'auto', borderLeft: `4px solid ${T.ink}` }}>{post}</div>
     </div>
   );
 }
@@ -299,10 +322,9 @@ export default function MorningDashboard() {
   const searchParams = useSearchParams();
   const mode = (searchParams.get('mode') as LayoutMode) || 'auto';
 
-  const scale = useSpringValue(SCALE[mode], 180, 22);
   const maxW = useSpringValue(MAX_W[mode], 120, 18);
   const pad = useSpringValue(PAD[mode], 150, 20);
-  _s = scale;
+  _m = mode;
 
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -367,36 +389,36 @@ export default function MorningDashboard() {
       <div style={{ maxWidth: maxW >= 9000 ? '100%' : `${Math.round(maxW)}px`, margin: '0 auto' }}>
 
         {/* Mode switcher */}
-        <div style={{ position: 'fixed', top: S(12), right: S(16), display: 'flex', gap: S(4), zIndex: 60 }}>
+        <div style={{ position: 'fixed', top: G(12), right: G(16), display: 'flex', gap: G(4), zIndex: 60 }}>
           {(['mobile', 'auto', 'tv'] as LayoutMode[]).map(m => (
             <a key={m} href={`/morning${m === 'auto' ? '' : `?mode=${m}`}`}
-              style={{ padding: `${S(5)}px ${S(12)}px`, borderRadius: 6, fontSize: S(10), fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, textDecoration: 'none', background: mode === m ? T.ink : T.subtle, color: mode === m ? '#fff' : T.inkFaint, border: `1px solid ${mode === m ? T.ink : T.border}` }}>
+              style={{ padding: `${G(5)}px ${G(12)}px`, borderRadius: 6, fontSize: G(10), fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, textDecoration: 'none', background: mode === m ? T.ink : T.subtle, color: mode === m ? '#fff' : T.inkFaint, border: `1px solid ${mode === m ? T.ink : T.border}` }}>
               {m === 'tv' ? '16:9' : m === 'mobile' ? 'Mobile' : 'Auto'}
             </a>
           ))}
         </div>
 
         {/* Header */}
-        <header style={{ padding: `${S(28)}px ${p}px ${S(20)}px`, borderBottom: `1px solid ${T.border}` }}>
+        <header style={{ padding: `${G(28)}px ${p}px ${G(20)}px`, borderBottom: `1px solid ${T.border}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
             <div>
-              <div style={{ fontSize: S(10), fontWeight: 600, textTransform: 'uppercase', letterSpacing: 3, color: T.inkFaint }}>Jump Contact</div>
-              <h1 style={{ fontSize: S(32), fontWeight: 800, margin: `${S(4)}px 0 0`, letterSpacing: -0.8, color: T.ink, lineHeight: 1.15 }}>{todayFull}<br />Morning Meeting</h1>
+              <div style={{ fontSize: Z('sub'), fontWeight: 600, textTransform: 'uppercase', letterSpacing: 3, color: T.inkFaint }}>Jump Contact</div>
+              <h1 style={{ fontSize: Z('heading'), fontWeight: 800, margin: `${G(4)}px 0 0`, letterSpacing: -0.8, color: T.ink, lineHeight: 1.15 }}>{todayFull}<br />Morning Meeting</h1>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: S(12), color: T.inkMuted }}>{todayDate}</div>
-              <div style={{ fontSize: S(11), color: T.inkFaint }}>Reviewing {dayName(data.yesterdayDate || '')}</div>
-              {pulledAt && <div style={{ fontSize: S(10), color: T.inkFaint, marginTop: S(4) }}>Pulled {pulledAt}</div>}
+              <div style={{ fontSize: Z('date'), color: T.inkMuted }}>{todayDate}</div>
+              <div style={{ fontSize: Z('date') * 0.9, color: T.inkFaint }}>Reviewing {dayName(data.yesterdayDate || '')}</div>
+              {pulledAt && <div style={{ fontSize: Z('sub'), color: T.inkFaint, marginTop: G(4) }}>Pulled {pulledAt}</div>}
             </div>
           </div>
         </header>
 
         {/* Tabs */}
-        <nav style={{ padding: `${S(10)}px ${p}px`, borderBottom: `1px solid ${T.border}`, overflowX: 'auto', display: 'flex', gap: 0 }}>
+        <nav style={{ padding: `${G(10)}px ${p}px`, borderBottom: `1px solid ${T.border}`, overflowX: 'auto', display: 'flex', gap: 0 }}>
           {steps.map((s, i) => (
-            <button key={s.key} onClick={() => setStep(i)} style={{ flex: 1, padding: `${S(10)}px ${S(4)}px`, border: 'none', cursor: 'pointer', background: 'transparent', borderBottom: step === i ? `3px solid ${T.ink}` : '3px solid transparent' }}>
-              <div style={{ fontSize: S(9), fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: step === i ? T.ink : T.inkFaint, whiteSpace: 'nowrap' }}>
-                <span style={{ fontFamily: "'JetBrains Mono',monospace", marginRight: S(3) }}>{s.num}</span>{s.label}
+            <button key={s.key} onClick={() => setStep(i)} style={{ flex: 1, padding: `${G(10)}px ${G(4)}px`, border: 'none', cursor: 'pointer', background: 'transparent', borderBottom: step === i ? `3px solid ${T.ink}` : '3px solid transparent' }}>
+              <div style={{ fontSize: Z('tab'), fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: step === i ? T.ink : T.inkFaint, whiteSpace: 'nowrap' }}>
+                <span style={{ fontFamily: "'JetBrains Mono',monospace", marginRight: G(3) }}>{s.num}</span>{s.label}
               </div>
             </button>
           ))}
@@ -404,31 +426,31 @@ export default function MorningDashboard() {
 
         {/* Progress */}
         <div style={{ display: 'flex', gap: 2, padding: `0 ${p}px` }}>
-          {steps.map((_, i) => <div key={i} style={{ flex: 1, height: S(3), background: i <= step ? T.ink : T.border }} />)}
+          {steps.map((_, i) => <div key={i} style={{ flex: 1, height: G(3), background: i <= step ? T.ink : T.border }} />)}
         </div>
 
         {/* Content */}
-        <main style={{ padding: `${S(24)}px ${p}px ${S(16)}px` }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: S(10), marginBottom: S(20) }}>
-            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: S(10), fontWeight: 700, color: T.inkFaint, background: T.subtle, padding: `${S(4)}px ${S(8)}px`, borderRadius: 4, border: `1px solid ${T.border}` }}>{steps[step].num}</span>
-            <h2 style={{ fontSize: S(24), fontWeight: 700, margin: 0, letterSpacing: -0.3 }}>{steps[step].label}</h2>
+        <main style={{ padding: `${G(24)}px ${p}px ${G(16)}px` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: G(10), marginBottom: G(20) }}>
+            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: Z('label'), fontWeight: 700, color: T.inkFaint, background: T.subtle, padding: `${G(4)}px ${G(8)}px`, borderRadius: 4, border: `1px solid ${T.border}` }}>{steps[step].num}</span>
+            <h2 style={{ fontSize: Z('stepTitle'), fontWeight: 700, margin: 0, letterSpacing: -0.3 }}>{steps[step].label}</h2>
           </div>
           {renderStep()}
         </main>
 
         {/* Footer */}
-        <footer style={{ padding: `${S(16)}px ${p}px ${S(24)}px`, borderTop: `1px solid ${T.border}` }}>
+        <footer style={{ padding: `${G(16)}px ${p}px ${G(24)}px`, borderTop: `1px solid ${T.border}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <button onClick={() => step > 0 && setStep(step - 1)} style={{ padding: `${S(10)}px ${S(20)}px`, borderRadius: 8, fontSize: S(14), fontWeight: 600, border: `1px solid ${T.border}`, background: T.surface, color: step === 0 ? T.inkFaint : T.ink, cursor: step === 0 ? 'default' : 'pointer', fontFamily: 'inherit' }}>&larr; Back</button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: S(12) }}>
-              <div style={{ display: 'flex', gap: S(6) }}>
-                {steps.map((_, i) => <div key={i} onClick={() => setStep(i)} style={{ width: S(8), height: S(8), borderRadius: '50%', cursor: 'pointer', background: i === step ? T.ink : T.border }} />)}
+            <button onClick={() => step > 0 && setStep(step - 1)} style={{ padding: `${G(10)}px ${G(20)}px`, borderRadius: 8, fontSize: Z('button'), fontWeight: 600, border: `1px solid ${T.border}`, background: T.surface, color: step === 0 ? T.inkFaint : T.ink, cursor: step === 0 ? 'default' : 'pointer', fontFamily: 'inherit' }}>&larr; Back</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: G(12) }}>
+              <div style={{ display: 'flex', gap: G(6) }}>
+                {steps.map((_, i) => <div key={i} onClick={() => setStep(i)} style={{ width: Z('dot'), height: Z('dot'), borderRadius: '50%', cursor: 'pointer', background: i === step ? T.ink : T.border }} />)}
               </div>
-              <button onClick={() => setAutoPlay(a => !a)} title={autoPlay ? 'Pause (P)' : 'Auto-play (P)'} style={{ padding: `${S(4)}px ${S(10)}px`, borderRadius: 6, fontSize: S(10), fontWeight: 700, border: `1px solid ${autoPlay ? T.ink : T.border}`, background: autoPlay ? T.ink + '15' : 'transparent', color: autoPlay ? T.ink : T.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>
+              <button onClick={() => setAutoPlay(a => !a)} title={autoPlay ? 'Pause (P)' : 'Auto-play (P)'} style={{ padding: `${G(4)}px ${G(10)}px`, borderRadius: 6, fontSize: Z('sub'), fontWeight: 700, border: `1px solid ${autoPlay ? T.ink : T.border}`, background: autoPlay ? T.ink + '15' : 'transparent', color: autoPlay ? T.ink : T.inkFaint, cursor: 'pointer', fontFamily: 'inherit' }}>
                 {autoPlay ? '\u25AE\u25AE' : '\u25B6'}
               </button>
             </div>
-            <button onClick={() => step < total - 1 && setStep(step + 1)} style={{ padding: `${S(10)}px ${S(20)}px`, borderRadius: 8, fontSize: S(14), fontWeight: 600, border: 'none', background: step === total - 1 ? T.subtle : T.ink, color: step === total - 1 ? T.inkFaint : '#fff', cursor: step === total - 1 ? 'default' : 'pointer', fontFamily: 'inherit' }}>Next &rarr;</button>
+            <button onClick={() => step < total - 1 && setStep(step + 1)} style={{ padding: `${G(10)}px ${G(20)}px`, borderRadius: 8, fontSize: Z('button'), fontWeight: 600, border: 'none', background: step === total - 1 ? T.subtle : T.ink, color: step === total - 1 ? T.inkFaint : '#fff', cursor: step === total - 1 ? 'default' : 'pointer', fontFamily: 'inherit' }}>Next &rarr;</button>
           </div>
         </footer>
       </div>
