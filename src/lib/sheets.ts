@@ -341,7 +341,12 @@ function parseFlexDate(s: string): Date | null {
 // ── Ytica Daily Data ──────────────────────────────────────────────────
 
 const JUMP_AGENTS = new Set([
-  'omar', 'burke', 'ian', 'danny', 'chris', 'wendy', 'sara', 'george', 'william', 'sue',
+  // JC agents
+  'omar', 'burke', 'ian', 'danny', 'chris', 'george', 'william',
+  // MSC agents
+  'anthony', 'richard', 'francis', 'natalie', 'rebecca', 'sofia', 'desi', 'sue',
+  // Blended
+  'wendy', 'sara',
 ]);
 
 export interface YticaAgent {
