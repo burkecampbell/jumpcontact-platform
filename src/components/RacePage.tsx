@@ -193,7 +193,8 @@ function RacePageInner() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sortKey, setSortKey] = useState<RaceSortKey>('mtd');
+  // MSC has no conversion data — default sort by Calls instead of MTD
+  const [sortKey, setSortKey] = useState<RaceSortKey>(brand === 'msc' ? 'calls' : 'mtd');
   const [sortAsc, setSortAsc] = useState(false);
 
   const fetchData = useCallback(async () => {
