@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Suspense, useMemo } from 'react';
 import NavBar from '../NavBar';
 import ErrorBoundary from '../ErrorBoundary';
 import { C, isMonday } from '@/lib/constants';
@@ -12,12 +12,17 @@ import StepSpeed from './StepSpeed';
 import StepConversions from './StepConversions';
 import StepMTD from './StepMTD';
 import StepSlack from './StepSlack';
+import { useBrand } from '@/hooks/useBrand';
 
-const STEP_LABELS = ['Calls', 'Talk Time', 'Speed', 'Conversions', 'MTD Race', 'Slack Post'];
-const TOTAL = 6;
+const JC_STEP_LABELS = ['Calls', 'Talk Time', 'Speed', 'Conversions', 'MTD Race', 'Slack Post'];
+const MIXED_STEP_LABELS = ['Calls', 'Talk Time', 'Speed', 'Slack Post']; // No conversions in Mixed
 
 /** Main Meeting presentation shell — data fetch, step/tab state, keyboard nav */
-export default function MeetingPage() {
+function MeetingPageInner() {
+  const { brand, isMixed } = useBrand();
+  const stepLabels = isMixed ? MIXED_STEP_LABELS : JC_STEP_LABELS;
+  const total = stepLabels.length;
+
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +31,7 @@ export default function MeetingPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch('/api/data');
+      const res = await fetch(`/api/data?brand=${brand}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setData(json);
@@ -36,40 +41,44 @@ export default function MeetingPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [brand]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { setLoading(true); fetchData(); }, [fetchData]);
 
-  const goTo = useCallback((n: number) => { setStep(Math.max(0, Math.min(TOTAL - 1, n))); }, []);
+  const goTo = useCallback((n: number) => { setStep(Math.max(0, Math.min(total - 1, n))); }, [total]);
 
-  // Keyboard navigation
+  // Keyboard nav
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goTo(step + 1);
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') goTo(step - 1);
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); goTo(step + 1); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); goTo(step - 1); }
+    }
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
   }, [step, goTo]);
 
-  if (loading) {
+  // Auto-advance every 12s
+  useEffect(() => {
+    const t = setInterval(() => setStep(s => (s + 1) % total), 12_000);
+    return () => clearInterval(t);
+  }, [total]);
+
+  if (loading || !data) {
     return (
       <>
         <NavBar />
-        <div className="max-w-[640px] mx-auto px-5 py-6">
-          <div className="skeleton h-12 rounded-xl mb-4" />
-          <div className="skeleton h-32 rounded-2xl mb-4" />
-          <div className="skeleton h-64 rounded-2xl" />
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          <div className="skeleton h-96 rounded-2xl" />
         </div>
       </>
     );
   }
 
-  if (error || !data) {
+  if (error) {
     return (
       <>
         <NavBar />
-        <div className="max-w-[640px] mx-auto px-5 py-20 text-center">
+        <div className="max-w-4xl mx-auto px-4 py-20 text-center">
           <p style={{ color: '#f87171' }}>Failed to load: {error}</p>
           <button onClick={fetchData} className="mt-4 px-4 py-2 rounded-lg text-sm" style={{ background: C.cyan, color: '#000' }}>Retry</button>
         </div>
@@ -77,104 +86,135 @@ export default function MeetingPage() {
     );
   }
 
+  // Monday mode: show Friday + Weekend tabs
   const monday = isMonday();
+
+  // Resolve which period to display
   let period: PeriodData;
-  let label: string;
+  let periodLabel: string;
 
   if (activeDay === 'today') {
     period = data.today;
-    label = 'Today';
-  } else if (activeDay === 'friday' && monday && data.weekend) {
-    period = data.weekend.friday;
-    label = 'Friday';
-  } else if (activeDay === 'weekend' && monday && data.weekend) {
-    period = aggregateDays([data.weekend.saturday, data.weekend.sunday]);
-    label = 'Weekend';
+    periodLabel = 'TODAY';
+  } else if (activeDay === 'yesterday') {
+    period = data.yesterday;
+    periodLabel = 'YESTERDAY';
   } else {
     period = data.yesterday;
-    label = 'Yesterday';
+    periodLabel = activeDay.toUpperCase();
   }
 
+  // Map step index to the right component (Mixed skips conversions/MTD)
+  const currentLabel = stepLabels[step];
+
   function renderStep() {
-    switch (step) {
-      case 0: return <StepCalls period={period} label={label} />;
-      case 1: return <StepTalkTime period={period} label={label} />;
-      case 2: return <StepSpeed period={period} label={label} />;
-      case 3: return <StepConversions period={period} label={label} />;
-      case 4: return <StepMTD data={data!} />;
-      case 5: return <StepSlack data={data!} />;
-      default: return null;
+    switch (currentLabel) {
+      case 'Calls':
+        return <StepCalls period={period} label={periodLabel} />;
+      case 'Talk Time':
+        return <StepTalkTime period={period} label={periodLabel} />;
+      case 'Speed':
+        return <StepSpeed period={period} label={periodLabel} />;
+      case 'Conversions':
+        return <StepConversions period={period} label={periodLabel} />;
+      case 'MTD Race':
+        return <StepMTD data={data!} />;
+      case 'Slack Post':
+        return <StepSlack data={data!} />;
+      default:
+        return null;
     }
   }
 
   return (
     <>
       <NavBar pulledAt={data.pulledAt} />
-      <div className="max-w-[640px] mx-auto px-5 pb-24">
-        {/* Day selector */}
-        <div className="flex gap-1.5 pt-4 mb-3">
-          {(monday
-            ? [{ key: 'today', label: 'Today' }, { key: 'friday', label: 'Friday' }, { key: 'weekend', label: 'Weekend' }]
-            : [{ key: 'today', label: 'Today' }, { key: 'yesterday', label: 'Yesterday' }]
-          ).map(d => (
-            <button key={d.key} onClick={() => setActiveDay(d.key as typeof activeDay)} className="px-3 py-1.5 rounded-md border-none text-xs cursor-pointer"
+      <div className="max-w-4xl mx-auto px-4 py-6">
+        {/* Day Tabs */}
+        <div className="flex items-center justify-center gap-2 mb-4">
+          {['today', 'yesterday', ...(monday ? ['friday', 'weekend'] : [])].map(day => (
+            <button
+              key={day}
+              onClick={() => setActiveDay(day as typeof activeDay)}
+              className="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors border-none cursor-pointer"
               style={{
-                background: activeDay === d.key ? C.lime : 'rgba(255,255,255,0.06)',
-                color: activeDay === d.key ? '#0A0E1A' : C.sub,
-                fontWeight: 600,
-              }}>
-              {d.label}
+                background: activeDay === day ? C.cyan + '22' : 'transparent',
+                color: activeDay === day ? C.cyan : C.sub,
+                border: activeDay === day ? `1px solid ${C.cyan}44` : '1px solid transparent',
+              }}
+            >
+              {day.charAt(0).toUpperCase() + day.slice(1)}
             </button>
           ))}
         </div>
 
-        {/* Step tab bar */}
-        <div className="flex gap-1 overflow-x-auto pb-1 mb-4">
-          {STEP_LABELS.map((lbl, i) => (
-            <button key={i} onClick={() => goTo(i)} className="shrink-0 px-3 py-1.5 rounded-lg border-none text-[13px] cursor-pointer transition-all whitespace-nowrap"
+        {/* Step Tabs */}
+        <div className="flex items-center justify-center gap-1 mb-6">
+          {stepLabels.map((label, i) => (
+            <button
+              key={label}
+              onClick={() => goTo(i)}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border-none cursor-pointer"
               style={{
-                background: step === i ? C.cyan : 'rgba(255,255,255,0.05)',
-                color: step === i ? '#0A0E1A' : C.sub,
-                fontWeight: step === i ? 700 : 500,
-              }}>
-              {i + 1}. {lbl}
+                background: step === i ? C.cyan + '22' : 'transparent',
+                color: step === i ? C.text : C.sub,
+                border: step === i ? `1px solid ${C.cyan}44` : '1px solid transparent',
+              }}
+            >
+              {i + 1}. {label}
             </button>
           ))}
         </div>
 
-        {/* Step content */}
-        <ErrorBoundary section={`Meeting Step: ${STEP_LABELS[step]}`}>
-          <div key={`${step}-${activeDay}`}>{renderStep()}</div>
+        {/* Step Content */}
+        <ErrorBoundary section={currentLabel}>
+          {renderStep()}
         </ErrorBoundary>
-      </div>
 
-      {/* Bottom nav */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t" style={{ background: 'rgba(10,14,26,0.82)', backdropFilter: 'blur(20px)', borderColor: C.border }}>
-        <div className="max-w-[640px] mx-auto flex items-center justify-between px-5 py-3">
-          <button onClick={() => goTo(step - 1)} disabled={step === 0}
-            className="px-5 py-2 rounded-lg border text-sm font-semibold cursor-pointer"
-            style={{ background: C.card, borderColor: C.border, color: step === 0 ? C.sub : C.text, opacity: step === 0 ? 0.4 : 1 }}>
-            ← Back
+        {/* Navigation */}
+        <div className="flex items-center justify-between mt-6">
+          <button
+            onClick={() => goTo(step - 1)}
+            disabled={step === 0}
+            className="px-4 py-2 rounded-lg text-sm font-medium transition-colors border-none cursor-pointer"
+            style={{
+              background: step > 0 ? 'rgba(139,146,168,0.12)' : 'transparent',
+              color: step > 0 ? C.text : C.sub,
+            }}
+          >
+            &larr; Back
           </button>
-          <div className="flex gap-1.5 items-center">
-            {Array.from({ length: TOTAL }).map((_, i) => (
-              <button key={i} onClick={() => goTo(i)} className="border-none cursor-pointer p-0 transition-all duration-200"
-                style={{ width: i === step ? '20px' : '7px', height: '7px', borderRadius: '4px', background: i === step ? C.cyan : C.border }} />
+          <div className="flex gap-1.5">
+            {stepLabels.map((_, i) => (
+              <span
+                key={i}
+                className="w-2 h-2 rounded-full transition-colors cursor-pointer"
+                style={{ background: step === i ? C.cyan : 'rgba(139,146,168,0.2)' }}
+                onClick={() => goTo(i)}
+              />
             ))}
           </div>
-          {step < TOTAL - 1 ? (
-            <button onClick={() => goTo(step + 1)} className="px-5 py-2 rounded-lg border-none text-sm font-semibold cursor-pointer"
-              style={{ background: C.cyan, color: '#0A0E1A' }}>
-              Next →
-            </button>
-          ) : (
-            <button onClick={() => goTo(0)} className="px-5 py-2 rounded-lg border-none text-sm font-bold cursor-pointer"
-              style={{ background: C.lime, color: '#0A0E1A' }}>
-              ↩ Restart
-            </button>
-          )}
+          <button
+            onClick={() => goTo(step + 1)}
+            disabled={step === total - 1}
+            className="px-4 py-2 rounded-lg text-sm font-bold transition-colors border-none cursor-pointer"
+            style={{
+              background: step < total - 1 ? C.cyan : 'transparent',
+              color: step < total - 1 ? '#0A0E1A' : C.sub,
+            }}
+          >
+            Next &rarr;
+          </button>
         </div>
       </div>
     </>
+  );
+}
+
+export default function MeetingPage() {
+  return (
+    <Suspense fallback={<><NavBar /><div className="max-w-4xl mx-auto px-4 py-8"><div className="skeleton h-96 rounded-2xl" /></div></>}>
+      <MeetingPageInner />
+    </Suspense>
   );
 }

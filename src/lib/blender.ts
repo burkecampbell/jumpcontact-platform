@@ -1,9 +1,77 @@
 import type { PeriodData, RepAgent } from './types';
 import type { YticaAgent, YticaRepActivity } from './sheets';
+import { type Brand, MSC_ONLY_AGENTS, BLENDED_AGENTS } from './brand';
 
-const MSC_ONLY_AGENTS = new Set([
-  'sue', 'francis', 'natalie', 'desi', 'rebecca', 'sofia', 'richard', 'anthony',
-]);
+// ── Brand Filtering ─────────────────────────────────────────────────────────
+
+/** Filter period data by brand. The main entry point. */
+export function filterByBrand(period: PeriodData, brand: Brand): PeriodData {
+  switch (brand) {
+    case 'jc':
+      return filterOutMSCAgents(period);
+    case 'msc':
+      return filterToMSCAgents(period);
+    case 'mixed':
+      return stripConversions(period); // keep ALL agents, remove conversion data
+  }
+}
+
+/** JC view: remove MSC-only agents */
+export function filterOutMSCAgents(period: PeriodData): PeriodData {
+  return {
+    ...period,
+    repActivity: {
+      ...period.repActivity,
+      agents: period.repActivity.agents.filter(a => !MSC_ONLY_AGENTS.has(a.agent.toLowerCase())),
+      outbound: period.repActivity.outbound.filter(a => !MSC_ONLY_AGENTS.has(a.agent.toLowerCase())),
+    },
+  };
+}
+
+/** MSC view: keep only MSC-only + blended agents */
+export function filterToMSCAgents(period: PeriodData): PeriodData {
+  return {
+    ...period,
+    repActivity: {
+      ...period.repActivity,
+      agents: period.repActivity.agents.filter(a => {
+        const lower = a.agent.toLowerCase();
+        return MSC_ONLY_AGENTS.has(lower) || BLENDED_AGENTS.has(lower);
+      }),
+      outbound: period.repActivity.outbound.filter(a => {
+        const lower = a.agent.toLowerCase();
+        return MSC_ONLY_AGENTS.has(lower) || BLENDED_AGENTS.has(lower);
+      }),
+    },
+  };
+}
+
+/** Mixed view: keep ALL agents but zero out conversion metrics.
+ *  JC conversions = Google Sheets, MSC conversions = GHL — they don't mix.
+ *  This view answers: "How is our total phone operation performing?" */
+export function stripConversions(period: PeriodData): PeriodData {
+  return {
+    ...period,
+    conversions: {
+      total: 0,
+      byAgent: [],
+      byAccount: [],
+      hourly: new Array(24).fill(0),
+    },
+    conversionRate: null,
+    repActivity: {
+      ...period.repActivity,
+      agents: period.repActivity.agents.map(a => ({
+        ...a,
+        conversions: 0,
+        convsPerHour: undefined,
+        trueYield: undefined,
+      })),
+    },
+  };
+}
+
+// ── Ytica Blending ──────────────────────────────────────────────────────────
 
 export function blendYticaIntoPerioData(period: PeriodData, ytica: YticaRepActivity | null): PeriodData {
   if (!ytica || ytica.agents.length === 0) return period;
@@ -48,16 +116,5 @@ export function blendYticaIntoPerioData(period: PeriodData, ytica: YticaRepActiv
       avgSpeedSec,
     },
     teamStats: period.teamStats,
-  };
-}
-
-export function filterOutMSCAgents(period: PeriodData): PeriodData {
-  return {
-    ...period,
-    repActivity: {
-      ...period.repActivity,
-      agents: period.repActivity.agents.filter(a => !MSC_ONLY_AGENTS.has(a.agent.toLowerCase())),
-      outbound: period.repActivity.outbound.filter(a => !MSC_ONLY_AGENTS.has(a.agent.toLowerCase())),
-    },
   };
 }

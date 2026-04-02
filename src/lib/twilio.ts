@@ -88,6 +88,7 @@ export function pairCallLegs(legs: CallLeg[]): PairedCall[] {
     }
   }
 
+  // Index inbound legs by trunk number (for time-window matching)
   const inboundByTrunk = new Map<string, CallLeg[]>();
   for (const leg of inboundLegs) {
     const trunk = normalizePhone(leg.to);
@@ -96,6 +97,18 @@ export function pairCallLegs(legs: CallLeg[]): PairedCall[] {
       arr.push(leg);
       inboundByTrunk.set(trunk, arr);
     }
+  }
+
+  // Index ALL legs by SID (for parent-call lookup)
+  const legBySid = new Map<string, CallLeg>();
+  for (const leg of legs) {
+    legBySid.set(leg.sid, leg);
+  }
+
+  // Index inbound legs by SID (for direct parent lookup)
+  const inboundBySid = new Map<string, CallLeg>();
+  for (const leg of inboundLegs) {
+    inboundBySid.set(leg.sid, leg);
   }
 
   const pairedInboundSids = new Set<string>();
@@ -108,6 +121,7 @@ export function pairCallLegs(legs: CallLeg[]): PairedCall[] {
 
     if (!trunk || !agentTime) continue;
 
+    // ── Strategy 1: Time-window match on trunk number ──────────────
     const candidates = inboundByTrunk.get(trunk) || [];
     let bestMatch: CallLeg | undefined;
     let bestDelta = PAIR_WINDOW_MS + 1;
@@ -143,23 +157,78 @@ export function pairCallLegs(legs: CallLeg[]): PairedCall[] {
         status: agentLeg.status,
         agentLegSid: agentLeg.sid,
       });
-    } else {
-      if (!isJCPhone(agentLeg.from)) continue;
+      continue;
+    }
+
+    // ── Strategy 2: Parent-call SID lookup ─────────────────────────
+    //   The agent leg's parentCallSid often points to the inbound leg
+    //   or to an intermediate conference leg whose parent is inbound.
+    let parentInbound: CallLeg | undefined;
+    let callerPhone = '';
+
+    if (agentLeg.parentCallSid) {
+      // Direct parent is an inbound leg?
+      parentInbound = inboundBySid.get(agentLeg.parentCallSid);
+
+      if (!parentInbound) {
+        // Parent might be a conference/queue leg — check ITS parent
+        const intermediateLeg = legBySid.get(agentLeg.parentCallSid);
+        if (intermediateLeg?.parentCallSid) {
+          parentInbound = inboundBySid.get(intermediateLeg.parentCallSid);
+        }
+        // Also check if the intermediate leg itself has the caller phone
+        if (!parentInbound && intermediateLeg && intermediateLeg.from?.startsWith('+')) {
+          callerPhone = intermediateLeg.from;
+        }
+      }
+    }
+
+    if (parentInbound && !pairedInboundSids.has(parentInbound.sid)) {
+      pairedInboundSids.add(parentInbound.sid);
+      if (!isJCPhone(parentInbound.to)) continue;
+
+      const inboundMs = new Date(parentInbound.startTime).getTime();
+      const ringTime = agentTime > inboundMs ? Math.round((agentTime - inboundMs) / 1000) : 0;
+
       paired.push({
-        id: agentLeg.sid,
-        time: agentLeg.startTime,
+        id: parentInbound.sid,
+        time: parentInbound.startTime,
         agent: normalizeAgent(agentName),
-        from: '',
-        to: agentLeg.from,
-        client: resolveClient(agentLeg.from),
+        from: parentInbound.from,
+        to: parentInbound.to,
+        client: resolveClient(parentInbound.to),
         direction: 'inbound',
         duration: agentLeg.duration,
-        totalDuration: agentLeg.duration,
-        ringTime: 0,
+        totalDuration: parentInbound.duration,
+        ringTime,
         status: agentLeg.status,
         agentLegSid: agentLeg.sid,
       });
+      continue;
     }
+
+    // ── Strategy 3: Fallback — use whatever phone we found ─────────
+    if (!isJCPhone(agentLeg.from)) continue;
+
+    // If parent gave us a caller phone, use it
+    if (!callerPhone && parentInbound) {
+      callerPhone = parentInbound.from || '';
+    }
+
+    paired.push({
+      id: agentLeg.sid,
+      time: agentLeg.startTime,
+      agent: normalizeAgent(agentName),
+      from: callerPhone,
+      to: agentLeg.from,
+      client: resolveClient(agentLeg.from),
+      direction: 'inbound',
+      duration: agentLeg.duration,
+      totalDuration: agentLeg.duration,
+      ringTime: 0,
+      status: agentLeg.status,
+      agentLegSid: agentLeg.sid,
+    });
   }
 
   // Unmatched inbound legs (missed/unanswered)

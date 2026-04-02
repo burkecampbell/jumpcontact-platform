@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Suspense } from 'react';
 import NavBar from './NavBar';
 import Card from './Card';
 import { C, capitalize, fmtSpeed, fmtTalkTime, speedGrade, agentColor } from '@/lib/constants';
@@ -9,6 +9,7 @@ import type { DashboardData, RawCall, RepAgent } from '@/lib/getDashboard';
 import { Phone, PhoneMissed, TrendingUp, Zap, Users, ArrowDown, ArrowUp, Percent, Timer, Clock, ChevronUp, ChevronDown, Download, Share2 } from 'lucide-react';
 import ErrorBoundary from './ErrorBoundary';
 import InlinePlayer from './InlinePlayer';
+import { useBrand } from '@/hooks/useBrand';
 
 function buildPlayerUrl(call: RawCall): string {
   if (!call.recordingUrl || !call.callSid) return '';
@@ -99,7 +100,8 @@ function KPICard({ label, value, icon, delta, suffix, badge, inverse }: KPIProps
 
 type SortKey = 'calls' | 'talkMin' | 'speedSec' | 'wrapUpSec' | 'hoursScheduled' | 'convs' | 'convsPerHour';
 
-export default function LiveNowPage() {
+function LiveNowPageInner() {
+  const { brand, isMixed, fullName } = useBrand();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -108,7 +110,7 @@ export default function LiveNowPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch('/api/data');
+      const res = await fetch(`/api/data?brand=${brand}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setData(json);
@@ -118,9 +120,10 @@ export default function LiveNowPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [brand]);
 
   useEffect(() => {
+    setLoading(true);
     fetchData();
     const interval = setInterval(fetchData, 60_000);
     return () => clearInterval(interval);
@@ -209,8 +212,8 @@ export default function LiveNowPage() {
     <>
       <NavBar pulledAt={data.pulledAt} />
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* Pace Comparison Line */}
-        {yesterdayConv > 0 && (
+        {/* Pace Comparison Line (hidden in Mixed — conversions don't apply) */}
+        {!isMixed && yesterdayConv > 0 && (
           <div className="flex items-center gap-2 mb-3 px-1">
             <span className="text-xs" style={{ color: C.sub }}>
               Yesterday at this time: <span className="font-mono font-semibold" style={{ color: C.text }}>{yesterdayConv}</span> conversions
@@ -225,13 +228,15 @@ export default function LiveNowPage() {
 
         {/* KPI Cards */}
         <ErrorBoundary section="KPI Cards">
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-6">
-          <KPICard
-            label="Conversions"
-            value={todayConv}
-            icon={<TrendingUp size={18} />}
-            delta={todayConv - yesterdayConv}
-          />
+        <div className={`grid grid-cols-2 md:grid-cols-4 ${isMixed ? 'lg:grid-cols-6' : 'lg:grid-cols-8'} gap-4 mb-6`}>
+          {!isMixed && (
+            <KPICard
+              label="Conversions"
+              value={todayConv}
+              icon={<TrendingUp size={18} />}
+              delta={todayConv - yesterdayConv}
+            />
+          )}
           <KPICard
             label="Calls Answered"
             value={todayCalls}
@@ -261,13 +266,15 @@ export default function LiveNowPage() {
             value={fmtSpeed(avgWrap)}
             icon={<Clock size={18} />}
           />
-          <KPICard
-            label="Conv Rate"
-            value={convRate != null ? convRate : '—'}
-            suffix={convRate != null ? '%' : ''}
-            icon={<Percent size={18} />}
-            delta={convRate != null && yesterdayRate != null ? +(convRate - yesterdayRate).toFixed(1) : undefined}
-          />
+          {!isMixed && (
+            <KPICard
+              label="Conv Rate"
+              value={convRate != null ? convRate : '—'}
+              suffix={convRate != null ? '%' : ''}
+              icon={<Percent size={18} />}
+              delta={convRate != null && yesterdayRate != null ? +(convRate - yesterdayRate).toFixed(1) : undefined}
+            />
+          )}
           <Card className="flex-1 min-w-[160px]">
             <div className="flex items-start justify-between mb-2">
               <span className="text-xs font-medium" style={{ color: C.sub }}>Active Agents</span>
@@ -430,5 +437,13 @@ export default function LiveNowPage() {
         </ErrorBoundary>
       </div>
     </>
+  );
+}
+
+export default function LiveNowPage() {
+  return (
+    <Suspense fallback={<><NavBar /><div className="max-w-6xl mx-auto px-4 py-6"><div className="skeleton h-96 rounded-2xl" /></div></>}>
+      <LiveNowPageInner />
+    </Suspense>
   );
 }

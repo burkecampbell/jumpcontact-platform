@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Suspense } from 'react';
 import NavBar from './NavBar';
 import Card from './Card';
 import ErrorBoundary from './ErrorBoundary';
 import { C, GOAL, capitalize, computePace, agentColor, AGENT_SCHEDULE, fmtSpeed, fmtTalkTime } from '@/lib/constants';
 import type { DashboardData, AcctStat, RepAgent } from '@/lib/getDashboard';
 import { Target, BarChart3, Trophy, Zap, Phone, Clock, Timer, Download, TrendingUp, Award, Star, ShieldCheck, Crosshair } from 'lucide-react';
+import { useBrand } from '@/hooks/useBrand';
 
 // ── XLSX Export (branded Jump Contact report) ──────────────────────────────
 
@@ -211,14 +212,15 @@ function SpeedBadge({ sec }: { sec: number | null }) {
 
 // ── Main Component ──────────────────────────────────────────────────────────
 
-export default function RacePage() {
+function RacePageInner() {
+  const { brand } = useBrand();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch('/api/data');
+      const res = await fetch(`/api/data?brand=${brand}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setData(await res.json());
       setError(null);
@@ -227,9 +229,10 @@ export default function RacePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [brand]);
 
   useEffect(() => {
+    setLoading(true);
     fetchData();
     const interval = setInterval(fetchData, 120_000);
     return () => clearInterval(interval);
@@ -318,6 +321,12 @@ export default function RacePage() {
     mtdHoursMap[agent] = total;
   }
 
+  // ── Today's Competitive Metrics ──────────────────────────────────────────
+  const todayAgents = data.today.repActivity.agents;
+  // Build lookup for leaderboard (today's call data by agent)
+  const todayByAgent: Record<string, RepAgent> = {};
+  for (const a of todayAgents) todayByAgent[a.agent.toLowerCase()] = a;
+
   // Agent stats with projections
   const agentStats = mtd.byAgent.map(a => {
     const dailyAvg = pace.dayOfMonth > 0 ? +(a.count / pace.dayOfMonth).toFixed(1) : 0;
@@ -342,12 +351,6 @@ export default function RacePage() {
   const agentNames = mtd.byAgent.map(a => a.agent.toLowerCase());
 
   const topAccounts = mtd.byAccount || [];
-
-  // ── Today's Competitive Metrics ──────────────────────────────────────────
-  const todayAgents = data.today.repActivity.agents;
-  // Build lookup for leaderboard (today's call data by agent)
-  const todayByAgent: Record<string, RepAgent> = {};
-  for (const a of todayAgents) todayByAgent[a.agent.toLowerCase()] = a;
 
   return (
     <>
@@ -696,5 +699,13 @@ export default function RacePage() {
         </ErrorBoundary>
       </div>
     </>
+  );
+}
+
+export default function RacePage() {
+  return (
+    <Suspense fallback={<><NavBar /><div className="max-w-6xl mx-auto px-4 py-6"><div className="skeleton h-96 rounded-2xl" /></div></>}>
+      <RacePageInner />
+    </Suspense>
   );
 }

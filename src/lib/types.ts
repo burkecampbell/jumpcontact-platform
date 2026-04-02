@@ -185,6 +185,14 @@ export interface PeriodData {
   repActivity: RepActivity;
   teamStats: TeamStats | null;
   conversionRate: number | null;
+  // CDR-derived fields (populated for today + yesterday)
+  totalCalls?: number;
+  answeredCalls?: number;
+  answerRate?: number;
+  missedCallRate?: number;
+  teamAvgSpeed?: number;
+  fastestPickup?: number;
+  convPerHour?: number;
 }
 
 export interface RawCall {

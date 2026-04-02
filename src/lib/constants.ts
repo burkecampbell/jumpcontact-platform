@@ -35,17 +35,27 @@ export const MSC_ONLY_AGENTS = new Set([
 ]);
 
 export const AGENT_COLORS: Record<string, string> = {
-  burke:   '#4ade80',
-  omar:    '#38bdf8',
-  ian:     '#a78bfa',
-  danny:   '#fbbf24',
-  chris:   '#f87171',
-  sara:    '#94a3b8',
-  george:  '#22d3ee',
-  william: '#c084fc',
-  joseph:  '#34d399',
-  sue:     '#fb923c',
-  wendy:   '#e879f9',
+  // JC agents
+  burke:    '#4ade80',
+  omar:     '#38bdf8',
+  ian:      '#a78bfa',
+  danny:    '#fbbf24',
+  chris:    '#f87171',
+  george:   '#22d3ee',
+  william:  '#c084fc',
+  joseph:   '#34d399',
+  // MSC agents
+  desi:     '#f472b6',
+  richard:  '#fb923c',
+  francis:  '#06b6d4',
+  natalie:  '#a3e635',
+  sofia:    '#c084fc',
+  rebecca:  '#f59e0b',
+  anthony:  '#10b981',
+  // Blended
+  sara:     '#94a3b8',
+  sue:      '#fb923c',
+  wendy:    '#e879f9',
 };
 
 // ── Sheet IDs ───────────────────────────────────────────────────────

@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, Suspense } from 'react';
 import NavBar from './NavBar';
 import Card from './Card';
+import DateRangePicker, { type DateRange } from './DateRangePicker';
 import { C, capitalize, fmtTalkTime, ACTIVE_AGENTS, agentColor } from '@/lib/constants';
 import { formatPhone, formatDuration, formatTime } from '@/lib/formatters';
 import type { RawCall } from '@/lib/getDashboard';
@@ -10,6 +11,7 @@ import type { CallsResponse, AgentCallSummary } from '@/lib/api-types';
 import { ArrowDown, ArrowUp, Filter, Download, Volume2, Square, CheckSquare, Share2 } from 'lucide-react';
 import ErrorBoundary from './ErrorBoundary';
 import InlinePlayer from './InlinePlayer';
+import { useBrand } from '@/hooks/useBrand';
 
 // ── XLSX Export (branded Jump Contact report) ──────────────────────────────
 
@@ -240,15 +242,16 @@ function getTodayMST() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Edmonton' });
 }
 
-export default function CallsPage() {
+function CallsPageInner() {
+  const { brand, fullName } = useBrand();
   const [todayMST, setTodayMST] = useState('');
-  const [selectedDate, setSelectedDate] = useState('');
+  const [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' });
 
   // Initialize dates on client only to avoid SSR hydration mismatch
   useEffect(() => {
     const t = getTodayMST();
     setTodayMST(t);
-    setSelectedDate(t);
+    setDateRange({ from: t, to: t });
   }, []);
   const [data, setData] = useState<CallsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -258,10 +261,15 @@ export default function CallsPage() {
   const [dirFilter, setDirFilter] = useState<'all' | 'inbound' | 'outbound'>('all');
   const [selectedSids, setSelectedSids] = useState<Set<string>>(new Set());
 
-  const fetchData = useCallback(async (date: string) => {
+  const fetchData = useCallback(async (range: DateRange) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/calls?date=${date}&limit=500`);
+      const isSingleDay = range.from === range.to;
+      const brandParam = `&brand=${brand}`;
+      const url = isSingleDay
+        ? `/api/calls?date=${range.from}&limit=2000${brandParam}`
+        : `/api/calls?from=${range.from}&to=${range.to}&limit=2000${brandParam}`;
+      const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setData(await res.json());
       setError(null);
@@ -273,14 +281,14 @@ export default function CallsPage() {
   }, []);
 
   useEffect(() => {
-    if (!selectedDate) return; // Wait for client-side init
-    fetchData(selectedDate);
+    if (!dateRange.from) return; // Wait for client-side init
+    fetchData(dateRange);
     // Only auto-refresh if viewing today
-    if (selectedDate === todayMST) {
-      const interval = setInterval(() => fetchData(selectedDate), 120_000);
+    if (dateRange.from === todayMST && dateRange.to === todayMST) {
+      const interval = setInterval(() => fetchData(dateRange), 120_000);
       return () => clearInterval(interval);
     }
-  }, [fetchData, selectedDate, todayMST]);
+  }, [fetchData, dateRange, todayMST, brand]);
 
   // Build unique client list from call data
   const clientOptions = useMemo(() => {
@@ -305,7 +313,8 @@ export default function CallsPage() {
   const handleDownload = () => {
     if (!filtered.length) return;
     const subject = agentFilter !== 'all' ? agentFilter : 'all-agents';
-    downloadReport(filtered, `JC_Call-Report_${selectedDate}_${subject}.xlsx`, selectedDate);
+    const dateLabel = dateRange.from === dateRange.to ? dateRange.from : `${dateRange.from}_to_${dateRange.to}`;
+    downloadReport(filtered, `JC_Call-Report_${dateLabel}_${subject}.xlsx`, dateRange.from);
   };
 
   // Selection helpers
@@ -374,7 +383,7 @@ export default function CallsPage() {
         <NavBar />
         <div className="max-w-6xl mx-auto px-4 py-20 text-center">
           <p style={{ color: '#f87171' }}>Failed to load: {error}</p>
-          <button onClick={() => fetchData(selectedDate)} className="mt-4 px-4 py-2 rounded-lg text-sm" style={{ background: C.cyan, color: '#000' }}>
+          <button onClick={() => fetchData(dateRange)} className="mt-4 px-4 py-2 rounded-lg text-sm" style={{ background: C.cyan, color: '#000' }}>
             Retry
           </button>
         </div>
@@ -399,28 +408,13 @@ export default function CallsPage() {
           ))}
         </div>
 
-        {/* Date Picker + Filter Bar */}
+        {/* Date Range Picker + Filter Bar */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 rounded-lg px-3 py-1.5 border" style={{ background: C.card, borderColor: C.cyan + '44' }}>
-            <span className="text-xs font-semibold" style={{ color: C.cyan }}>📅</span>
-            <input
-              type="date"
-              value={selectedDate}
-              max={todayMST}
-              onChange={e => { if (e.target.value) { setSelectedDate(e.target.value); setSelectedSids(new Set()); } }}
-              className="bg-transparent border-none text-xs font-mono cursor-pointer outline-none"
-              style={{ color: C.text, colorScheme: 'dark', width: '120px' }}
-            />
-          </div>
-          {selectedDate !== todayMST && (
-            <button
-              onClick={() => { setSelectedDate(todayMST); setSelectedSids(new Set()); }}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold border-none cursor-pointer transition-colors"
-              style={{ background: C.cyan, color: '#0A0E1A' }}
-            >
-              ← Today
-            </button>
-          )}
+          <DateRangePicker
+            value={dateRange}
+            onChange={(r) => { setDateRange(r); setSelectedSids(new Set()); }}
+            maxDate={todayMST}
+          />
           <div style={{ width: 1, height: 20, background: C.border }} />
           <Filter size={14} style={{ color: C.sub }} />
           <FilterDropdown
@@ -582,5 +576,13 @@ export default function CallsPage() {
       </div>
       </ErrorBoundary>
     </>
+  );
+}
+
+export default function CallsPage() {
+  return (
+    <Suspense fallback={<><NavBar /><div className="max-w-6xl mx-auto px-4 py-6"><div className="skeleton h-96 rounded-2xl" /></div></>}>
+      <CallsPageInner />
+    </Suspense>
   );
 }

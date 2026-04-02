@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { fetchCallLegs, pairCallLegs, todayMST } from '@/lib/twilio';
 import {
   fetchConversions,
@@ -9,7 +9,8 @@ import {
   fetchYticaRepActivity,
   fetchYticaTeamStats,
 } from '@/lib/sheets';
-import { blendYticaIntoPerioData, filterOutMSCAgents } from '@/lib/blender';
+import { blendYticaIntoPerioData, filterByBrand } from '@/lib/blender';
+import { parseBrand } from '@/lib/brand';
 import {
   ACTIVE_AGENTS,
   OUTBOUND_AGENTS,
@@ -217,10 +218,45 @@ async function buildPeriodData(
 
   // Blend Ytica data if available
   period = blendYticaIntoPerioData(period, ytica);
-  // Filter out MSC-only agents
-  period = filterOutMSCAgents(period);
+  // Brand filtering is now applied in the GET handler per ?brand= param
 
   return period;
+}
+
+// ── Add CDR-derived call fields to any period ─────────────────────
+
+function addPeriodCallFields(
+  period: PeriodData,
+  calls: PairedCall[],
+): PeriodData {
+  const totalCalls = calls.length;
+  const answeredCalls = calls.filter(c => c.status === 'completed').length;
+  const answerRate = totalCalls > 0 ? Math.round((answeredCalls / totalCalls) * 100) : 0;
+  const missedInbound = calls.filter(c => c.direction === 'inbound' && c.duration === 0).length;
+  const totalInbound = calls.filter(c => c.direction === 'inbound').length;
+  const missedCallRate = totalInbound > 0
+    ? Math.round((missedInbound / totalInbound) * 1000) / 10
+    : 0;
+
+  const speedVals = period.repActivity.agents
+    .filter(a => a.speedSec !== null && a.speedSec !== undefined && a.speedSec > 0)
+    .map(a => a.speedSec!);
+  const teamAvgSpeed = period.repActivity.avgSpeedSec ?? (
+    speedVals.length > 0
+      ? Math.round((speedVals.reduce((s, v) => s + v, 0) / speedVals.length) * 10) / 10
+      : 0
+  );
+  const fastestPickup = speedVals.length > 0 ? Math.min(...speedVals) : 0;
+
+  return {
+    ...period,
+    totalCalls,
+    answeredCalls,
+    answerRate,
+    missedCallRate,
+    teamAvgSpeed,
+    fastestPickup,
+  };
 }
 
 // ── Build today's extra fields ─────────────────────────────────────
@@ -430,9 +466,42 @@ function getWeekDates(offsetWeeks: number): string[] {
 // GET handler
 // ════════════════════════════════════════════════════════════════════
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const data = await cached('dashboard-data', 30_000, fetchDashboardData);
+    const brand = parseBrand(request.nextUrl.searchParams.get('brand'));
+    const data = await cached(`dashboard-data:${brand}`, 30_000, async () => {
+      const raw = await fetchDashboardData();
+
+      // Apply brand filtering to today + yesterday
+      const filteredToday = filterByBrand(raw.today, brand);
+      const filteredYesterday = filterByBrand(raw.yesterday, brand);
+
+      // Recompute KPI cards from brand-filtered agent data
+      const todayAgents = filteredToday.repActivity.agents;
+      const brandCalls = todayAgents.reduce((s, a) => s + a.calls, 0);
+      const brandTalkSec = todayAgents.reduce((s, a) => s + (a.talkMin || 0) * 60, 0);
+      const speedVals = todayAgents.filter(a => a.speedSec != null && a.speedSec! > 0).map(a => a.speedSec!);
+      const brandAvgSpeed = speedVals.length > 0
+        ? Math.round((speedVals.reduce((s, v) => s + v, 0) / speedVals.length) * 10) / 10
+        : raw.today.teamAvgSpeed;
+      const brandFastest = speedVals.length > 0 ? Math.min(...speedVals) : raw.today.fastestPickup;
+
+      return {
+        ...raw,
+        today: {
+          ...filteredToday,
+          totalCalls: brandCalls,
+          answeredCalls: brandCalls,
+          answerRate: raw.today.answerRate, // answer rate stays global (Twilio-level)
+          missedCallRate: raw.today.missedCallRate,
+          teamAvgSpeed: brandAvgSpeed,
+          fastestPickup: brandFastest,
+          convPerHour: brand === 'mixed' ? undefined : raw.today.convPerHour,
+        },
+        yesterday: filteredYesterday,
+        brand,
+      };
+    });
     return NextResponse.json(data);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -510,54 +579,25 @@ async function fetchDashboardData(): Promise<DashboardData> {
   const today = addTodayFields(todayPeriod, todayCalls);
 
   // ── Yesterday ──────────────────────────────────────────────────
-  // Try Ytica first (gold source). If Ytica has no data (e.g. weekends),
-  // fall back to live Twilio CDR so yesterday never shows 0 agents.
+  // Always fetch CDR legs + TaskRouter stats for yesterday so we get
+  // totalCalls, answerRate, missed calls, pickup/decline/ghost rates.
+  // Ytica speed/wrapup data is blended on top via buildPeriodData.
   const yesterdayConv = histConversions.get(yesterdayStr) || { total: 0, byAgent: {}, byAccount: [], byHour: new Array(24).fill(0) };
 
-  let yesterday: PeriodData;
-  const hasYticaYesterday = yesterdayYtica && yesterdayYtica.agents.length > 0;
-
-  if (hasYticaYesterday) {
-    const yesterdayRepAgents: RepAgent[] = yesterdayYtica!.agents.map(a => ({
-      agent: a.agent,
-      calls: a.calls,
-      talkMin: a.talkMin,
-      speedSec: a.speedSec,
-      wrapUpSec: a.wrapUpSec,
-      hoursScheduled: getScheduledHours(schedule, a.agent, new Date(yesterdayStr + 'T00:00:00')),
-      convsPerHour: undefined,
-      conversions: (yesterdayConv.byAgent as Record<string, number>)[a.agent] || 0,
-    }));
-    const yesterdayByAgent: AgentStat[] = Object.entries(yesterdayConv.byAgent)
-      .map(([agent, count]) => ({ agent, count }))
-      .sort((a, b) => b.count - a.count);
-    const yesterdayAnswered = yesterdayRepAgents.reduce((s, a) => s + a.calls, 0);
-    const yesterdayConvRate = yesterdayAnswered > 0
-      ? Math.round((yesterdayConv.total / yesterdayAnswered) * 1000) / 10
-      : null;
-    yesterday = {
-      date: yesterdayStr,
-      conversions: { total: yesterdayConv.total, byAgent: yesterdayByAgent, byAccount: yesterdayConv.byAccount, hourly: yesterdayConv.byHour },
-      missedCalls: { total: 0, byAccount: [] },
-      repActivity: { agents: yesterdayRepAgents, outbound: [], avgSpeedSec: yesterdayYtica!.avgSpeedSec },
-      teamStats: yesterdayTeamStats ? { ...yesterdayTeamStats, source: 'ytica' as const } : null,
-      conversionRate: yesterdayConvRate,
-    };
-  } else {
-    // Ytica has no data — fetch live CDR from Twilio for yesterday
-    const [yesterdayLegs, yesterdayWorkerStats] = await Promise.all([
-      cached('yesterday-legs', 3_600_000, () => fetchCallLegs(yesterdayStr)),
-      cached('yesterday-workers', 3_600_000, () => fetchAllWorkerStats(yesterdayStr, auth)),
-    ]);
-    const yesterdayCalls = pairCallLegs(yesterdayLegs);
-    yesterday = await buildPeriodData(
-      yesterdayStr, yesterdayCalls,
-      { total: yesterdayConv.total, byAgent: yesterdayConv.byAgent as Record<string, number>, byAccount: yesterdayConv.byAccount, byHour: yesterdayConv.byHour, firstConvByAgent: {}, lastConvByAgent: {} },
-      yesterdayWorkerStats,
-      schedule, yesterdayYtica, yesterdayTeamStats,
-    );
-  }
-  yesterday = filterOutMSCAgents(yesterday);
+  const [yesterdayLegs, yesterdayWorkerStats] = await Promise.all([
+    cached('yesterday-legs', 3_600_000, () => fetchCallLegs(yesterdayStr)),
+    cached('yesterday-workers', 3_600_000, () => fetchAllWorkerStats(yesterdayStr, auth)),
+  ]);
+  const yesterdayCalls = pairCallLegs(yesterdayLegs);
+  let yesterday = await buildPeriodData(
+    yesterdayStr, yesterdayCalls,
+    { total: yesterdayConv.total, byAgent: yesterdayConv.byAgent as Record<string, number>, byAccount: yesterdayConv.byAccount, byHour: yesterdayConv.byHour, firstConvByAgent: {}, lastConvByAgent: {} },
+    yesterdayWorkerStats,
+    schedule, yesterdayYtica, yesterdayTeamStats,
+  );
+  // Add totalCalls, answeredCalls, answerRate, etc. — same as today
+  yesterday = addPeriodCallFields(yesterday, yesterdayCalls);
+  // Brand filtering is now applied in the GET handler per ?brand= param
 
   // ── MTD ────────────────────────────────────────────────────────
   // Build mtdMap from histConversions restricted to mtdDates
