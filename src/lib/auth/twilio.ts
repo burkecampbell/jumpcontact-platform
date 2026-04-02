@@ -11,4 +11,7 @@ export function twilioAccountSid(): string {
   return sid;
 }
 
-export const WORKSPACE_SID = process.env.TWILIO_WORKSPACE_SID || 'WSxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+export const WORKSPACE_SID = process.env.TWILIO_WORKSPACE_SID || '';
+if (!WORKSPACE_SID && typeof window === 'undefined') {
+  console.warn('[Twilio] TWILIO_WORKSPACE_SID not set — TaskRouter features will fail');
+}

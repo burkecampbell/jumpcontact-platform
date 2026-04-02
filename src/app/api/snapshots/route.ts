@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       )
       .orderBy(asc(dailySnapshots.date));
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       brand,
       from: fromDate,
       to: toDate,
@@ -70,6 +70,8 @@ export async function GET(request: NextRequest) {
       })),
       pulledAt: new Date().toISOString(),
     });
+    res.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+    return res;
   } catch (err) {
     console.error('[snapshots] Error:', err);
     return NextResponse.json(

@@ -237,8 +237,11 @@ describe('fmtSpeed', () => {
     expect(fmtSpeed(130)).toBe('2m 10s');
   });
 
-  it('rounds seconds', () => {
-    expect(fmtSpeed(12.7)).toBe('13s');
+  it('shows one decimal for fractional seconds', () => {
+    expect(fmtSpeed(12.7)).toBe('12.7s');
+    expect(fmtSpeed(17.3)).toBe('17.3s');
+    expect(fmtSpeed(5.0)).toBe('5s');    // whole numbers stay clean
+    expect(fmtSpeed(0.4)).toBe('0.4s');
   });
 
   it('formats exactly 60s', () => {

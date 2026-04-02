@@ -633,7 +633,9 @@ export async function GET(request: NextRequest) {
       _health: { staleness: { ytica: yticaAge, cdr: cdrAge }, reconciliation },
     };
 
-    return NextResponse.json(data);
+    const res = NextResponse.json(data);
+    res.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=60');
+    return res;
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error('[API /data]', message);

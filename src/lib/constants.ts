@@ -134,7 +134,11 @@ export function speedGrade(sec: number | null): { grade: string; color: string; 
 
 export function fmtSpeed(sec: number | null): string {
   if (sec === null) return '—';
-  return sec < 60 ? `${Math.round(sec)}s` : `${Math.floor(sec / 60)}m ${Math.round(sec % 60)}s`;
+  if (sec < 60) {
+    const rounded = Math.round(sec * 10) / 10;
+    return `${rounded % 1 === 0 ? rounded.toFixed(0) : rounded.toFixed(1)}s`;
+  }
+  return `${Math.floor(sec / 60)}m ${Math.round(sec % 60)}s`;
 }
 
 export function fmtDuration(sec: number): string {
