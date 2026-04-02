@@ -35,7 +35,7 @@ export const JC_ONLY_AGENTS = new Set([
 ]);
 
 export const BLENDED_AGENTS = new Set([
-  'sara', 'wendy',
+  'sara', 'wendy', 'jose',
 ]);
 
 /** Check if an agent should appear for a given brand */

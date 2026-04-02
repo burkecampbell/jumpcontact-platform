@@ -33,9 +33,9 @@ describe('normalizeAgent', () => {
     expect(normalizeAgent('  Omar  ')).toBe('omar');
   });
 
-  it('maps "jose" → "danny"', () => {
-    expect(normalizeAgent('Jose')).toBe('danny');
-    expect(normalizeAgent('jose')).toBe('danny');
+  it('jose is his own agent (not aliased to danny)', () => {
+    expect(normalizeAgent('Jose')).toBe('jose');
+    expect(normalizeAgent('jose')).toBe('jose');
   });
 
   it('maps "daniel" → "danny"', () => {
@@ -80,8 +80,8 @@ describe('decodeAgent', () => {
     expect(decodeAgent('client:burke_40jumpcontact_2Ecom')).toBe('burke');
   });
 
-  it('applies normalizeAgent (jose → danny)', () => {
-    expect(decodeAgent('client:jose_40jumpcontact_2Ecom')).toBe('danny');
+  it('decodes jose as his own agent', () => {
+    expect(decodeAgent('client:jose_40jumpcontact_2Ecom')).toBe('jose');
   });
 
   it('returns raw string if no client: prefix', () => {

@@ -52,6 +52,7 @@ export const AGENT_COLORS: Record<string, string> = {
   sofia:    '#c084fc',
   rebecca:  '#f59e0b',
   anthony:  '#10b981',
+  jose:     '#fb923c',
   // Blended
   sara:     '#94a3b8',
   sue:      '#fb923c',
@@ -71,7 +72,7 @@ export const TZ = 'America/Edmonton';
 // ── Helpers ─────────────────────────────────────────────────────────
 const AGENT_ALIASES: Record<string, string> = {
   'danny r': 'danny', 'danny rodriguez': 'danny',
-  'daniel': 'danny', 'jose': 'danny',
+  'daniel': 'danny',
 };
 
 const NON_AGENT_VALUES = new Set(['yes', 'no', 'true', 'false', 'n/a', 'na', '-', 'other', '']);

@@ -280,8 +280,8 @@ function RacePageInner() {
   const todayByAgent: Record<string, RepAgent> = {};
   for (const a of todayAgents) todayByAgent[a.agent.toLowerCase()] = a;
 
-  // Agent stats with projections
-  const agentStats = mtd.byAgent.filter(a => !EXCLUDED_AGENTS.includes(a.agent) && isAgentForBrand(a.agent, brand)).map(a => {
+  // Agent stats with projections — start from MTD conversions
+  const mtdAgentStats = mtd.byAgent.filter(a => !EXCLUDED_AGENTS.includes(a.agent) && isAgentForBrand(a.agent, brand)).map(a => {
     const dailyAvg = pace.dayOfMonth > 0 ? +(a.count / pace.dayOfMonth).toFixed(1) : 0;
     const projected = Math.round(dailyAvg * pace.daysInMonth);
     let bestDay = 0;
@@ -297,6 +297,20 @@ function RacePageInner() {
     const trueYield = todayRep?.trueYield;
     return { ...a, dailyAvg, projected, bestDay, mtdHours, convPerHr, pickupRate, trueYield };
   });
+
+  // Add agents who have calls today but 0 MTD conversions (e.g., MSC agents
+  // whose GHL conversions aren't flowing yet, or new agents)
+  const mtdAgentNames = new Set(mtdAgentStats.map(a => a.agent.toLowerCase()));
+  for (const rep of todayAgents) {
+    if (mtdAgentNames.has(rep.agent.toLowerCase())) continue;
+    if (!isAgentForBrand(rep.agent, brand)) continue;
+    mtdAgentStats.push({
+      agent: rep.agent, count: 0, dailyAvg: 0, projected: 0, bestDay: 0,
+      mtdHours: mtdHoursMap[rep.agent.toLowerCase()] ?? 0, convPerHr: null,
+      pickupRate: rep.pickupRate, trueYield: rep.trueYield,
+    });
+  }
+  const agentStats = mtdAgentStats;
 
   // Build daily grid: days of month × agents
   const mtdDaily = mtd.mtdDaily ?? [];
