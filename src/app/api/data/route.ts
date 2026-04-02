@@ -596,6 +596,28 @@ export async function GET(request: NextRequest) {
     // Strip internal fields from response
     const { _todayCalls, _yesterdayCalls, _schedule, _workerStats, _yesterdayWorkerStats, _todayConversions, _yesterdayConv, ...cleanRaw } = raw;
 
+    // Debug: compute all 3 brand views to verify additivity
+    const debugJC = deriveBrandView(raw.today, 'jc', todaySummary);
+    const debugMSC = deriveBrandView(raw.today, 'msc', todaySummary);
+    const debugMixed = deriveBrandView(raw.today, 'mixed', todaySummary);
+    const _brandDebug = {
+      teamTotal: raw.today.teamStats?.totalCalls ?? null,
+      cdrAnswered: { jc: todaySummary.jc.answered, msc: todaySummary.msc.answered, unknown: todaySummary.unknown.answered },
+      cdrMissed: { jc: todaySummary.jc.missed, msc: todaySummary.msc.missed, unknown: todaySummary.unknown.missed },
+      agentRatios: todaySummary.agentRatios,
+      derived: {
+        jc: { answeredCalls: debugJC.answeredCalls, missed: debugJC.missedCalls.total, agentSum: debugJC.repActivity.agents.reduce((s, a) => s + a.calls, 0), agentCount: debugJC.repActivity.agents.length },
+        msc: { answeredCalls: debugMSC.answeredCalls, missed: debugMSC.missedCalls.total, agentSum: debugMSC.repActivity.agents.reduce((s, a) => s + a.calls, 0), agentCount: debugMSC.repActivity.agents.length },
+        mixed: { answeredCalls: debugMixed.answeredCalls, missed: debugMixed.missedCalls.total, agentSum: debugMixed.repActivity.agents.reduce((s, a) => s + a.calls, 0), agentCount: debugMixed.repActivity.agents.length },
+      },
+      additivity: {
+        answeredMatch: (debugJC.answeredCalls ?? 0) + (debugMSC.answeredCalls ?? 0) === debugMixed.answeredCalls,
+        missedMatch: debugJC.missedCalls.total + debugMSC.missedCalls.total === debugMixed.missedCalls.total,
+        agentSumJCplusMSC: debugJC.repActivity.agents.reduce((s, a) => s + a.calls, 0) + debugMSC.repActivity.agents.reduce((s, a) => s + a.calls, 0),
+        agentSumMixed: debugMixed.repActivity.agents.reduce((s, a) => s + a.calls, 0),
+      },
+    };
+
     const data = {
       ...cleanRaw,
       today: {
@@ -605,6 +627,7 @@ export async function GET(request: NextRequest) {
       yesterday: derivedYesterday,
       recentCalls: brandRecentCalls,
       dataQuality,
+      _brandDebug,
       brand,
     };
 
