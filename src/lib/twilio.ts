@@ -157,6 +157,7 @@ export function pairCallLegs(legs: CallLeg[]): PairedCall[] {
         ringTime,
         status: agentLeg.status,
         agentLegSid: agentLeg.sid,
+        pairMethod: 'trunk-match',
       });
       continue;
     }
@@ -209,6 +210,7 @@ export function pairCallLegs(legs: CallLeg[]): PairedCall[] {
           ringTime,
           status: agentLeg.status,
           agentLegSid: agentLeg.sid,
+          pairMethod: 'cross-trunk',
         });
         continue;
       }
@@ -257,6 +259,7 @@ export function pairCallLegs(legs: CallLeg[]): PairedCall[] {
         ringTime,
         status: agentLeg.status,
         agentLegSid: agentLeg.sid,
+        pairMethod: 'parent-sid',
       });
       continue;
     }
@@ -282,6 +285,7 @@ export function pairCallLegs(legs: CallLeg[]): PairedCall[] {
       ringTime: 0,
       status: agentLeg.status,
       agentLegSid: agentLeg.sid,
+      pairMethod: 'fallback',
     });
   }
 
@@ -303,6 +307,7 @@ export function pairCallLegs(legs: CallLeg[]): PairedCall[] {
       ringTime: 0,
       status: leg.status,
       agentLegSid: undefined,
+      pairMethod: 'missed',
     });
   }
 
@@ -331,6 +336,7 @@ export function pairCallLegs(legs: CallLeg[]): PairedCall[] {
         ringTime: 0,
         status: leg.status,
         agentLegSid: leg.sid,
+        pairMethod: 'outbound',
       });
     }
   }

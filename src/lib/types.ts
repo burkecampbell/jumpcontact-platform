@@ -13,6 +13,26 @@ export interface CallLeg {
   parentCallSid?: string;
 }
 
+// ── Data Provenance Tags ────────────────────────────────────────────
+// Every call carries metadata about HOW it was paired and HOW its brand
+// was determined.  When either is 'unknown', it's a data gap — visible
+// in the UI and API quality metrics, never silently defaulted.
+
+export type PairMethod =
+  | 'trunk-match'     // Strategy 1: same trunk, time window
+  | 'cross-trunk'     // Strategy 1b: different trunk, brand-compatible
+  | 'parent-sid'      // Strategy 2: parent call SID chain
+  | 'fallback'        // Strategy 3: best-effort, missing data
+  | 'missed'          // Unmatched inbound (no agent)
+  | 'outbound';       // Agent-initiated outbound
+
+export type BrandSource =
+  | 'client-name'     // Resolved from clientBrands map
+  | 'trunk-phone'     // Resolved from brands map in clients.json
+  | 'agent-definitive'// MSC-only or JC-only agent
+  | 'agent-blended'   // Blended agent, could be either brand
+  | 'unknown';        // No signal — data gap, needs investigation
+
 export interface PairedCall {
   id: string;
   time: string;
@@ -27,6 +47,20 @@ export interface PairedCall {
   status: string;
   recordingSid?: string;
   agentLegSid?: string;
+  /** How this call was paired (which strategy matched the agent to the inbound leg) */
+  pairMethod?: PairMethod;
+  /** How the brand was determined for filtering */
+  brandSource?: BrandSource;
+  /** The resolved brand ('jc' | 'msc' | null if unknown) */
+  resolvedBrand?: 'jc' | 'msc' | null;
+}
+
+export interface DataQuality {
+  totalCalls: number;
+  paired: { trunkMatch: number; crossTrunk: number; parentSid: number; fallback: number; missed: number; outbound: number };
+  branded: { clientName: number; trunkPhone: number; agentDefinitive: number; agentBlended: number; unknown: number };
+  /** Percentage of calls with definitive brand assignment */
+  brandConfidence: number;
 }
 
 export interface CallsResponse {
@@ -288,5 +322,6 @@ export interface DashboardData {
   recentCalls: RawCall[];
   weekend?: { friday: PeriodData; saturday: PeriodData; sunday: PeriodData };
   prevMonthChampions?: MonthChampions;
+  dataQuality?: DataQuality;
   pulledAt: string;
 }

@@ -24,30 +24,66 @@ import {
 import { cached } from '@/lib/cache';
 import { resolveClient, isMscPhone, getClientBrand } from '@/lib/clients';
 
-/** Filter paired calls by brand — same logic as /api/calls route */
-function filterCallsByBrand(calls: PairedCall[], brand: Brand): PairedCall[] {
-  if (brand === 'mixed') return calls;
-  return calls.filter(call => {
-    // Client name brand is the most reliable
+/** Resolve the brand of each call and tag it with the source of that determination.
+ *  Returns calls with `resolvedBrand` and `brandSource` set.
+ *  Unknown-brand calls get `resolvedBrand: null` — they only appear in Mixed. */
+function resolveCallBrands(calls: PairedCall[]): PairedCall[] {
+  return calls.map(call => {
+    // 1. Client name brand — most reliable
     if (call.client) {
       const cb = getClientBrand(call.client);
-      if (cb) return cb === brand;
+      if (cb) return { ...call, resolvedBrand: cb, brandSource: 'client-name' as const };
     }
-    // Trunk phone number
+    // 2. Trunk phone number
     const trunk = call.direction === 'inbound' ? call.to : call.from;
     if (trunk?.startsWith('+')) {
       const trunkIsMsc = isMscPhone(trunk);
-      return brand === 'msc' ? trunkIsMsc : !trunkIsMsc;
+      return { ...call, resolvedBrand: trunkIsMsc ? 'msc' as const : 'jc' as const, brandSource: 'trunk-phone' as const };
     }
-    // Agent brand for calls with no trunk/client info
+    // 3. Definitive agent brand (MSC-only / JC-only)
     const agent = normalizeAgent(call.agent || '');
     if (agent) {
       const lower = agent.toLowerCase();
-      if (MSC_ONLY_AGENTS.has(lower)) return brand === 'msc';
-      if (JC_ONLY_AGENTS.has(lower)) return brand === 'jc';
+      if (MSC_ONLY_AGENTS.has(lower)) return { ...call, resolvedBrand: 'msc' as const, brandSource: 'agent-definitive' as const };
+      if (JC_ONLY_AGENTS.has(lower)) return { ...call, resolvedBrand: 'jc' as const, brandSource: 'agent-definitive' as const };
+      // Blended agent with no trunk/client — we DON'T know the brand
+      return { ...call, resolvedBrand: null, brandSource: 'agent-blended' as const };
     }
-    return brand === 'jc';
+    // 4. No signal at all
+    return { ...call, resolvedBrand: null, brandSource: 'unknown' as const };
   });
+}
+
+/** Filter tagged calls by brand. Unknown-brand calls only appear in Mixed. */
+function filterCallsByBrand(calls: PairedCall[], brand: Brand): PairedCall[] {
+  if (brand === 'mixed') return calls;
+  return calls.filter(call => call.resolvedBrand === brand);
+}
+
+/** Build data quality metrics from tagged calls */
+function buildDataQuality(calls: PairedCall[]): import('@/lib/types').DataQuality {
+  const paired = { trunkMatch: 0, crossTrunk: 0, parentSid: 0, fallback: 0, missed: 0, outbound: 0 };
+  const branded = { clientName: 0, trunkPhone: 0, agentDefinitive: 0, agentBlended: 0, unknown: 0 };
+  for (const c of calls) {
+    if (c.pairMethod === 'trunk-match') paired.trunkMatch++;
+    else if (c.pairMethod === 'cross-trunk') paired.crossTrunk++;
+    else if (c.pairMethod === 'parent-sid') paired.parentSid++;
+    else if (c.pairMethod === 'fallback') paired.fallback++;
+    else if (c.pairMethod === 'missed') paired.missed++;
+    else if (c.pairMethod === 'outbound') paired.outbound++;
+    if (c.brandSource === 'client-name') branded.clientName++;
+    else if (c.brandSource === 'trunk-phone') branded.trunkPhone++;
+    else if (c.brandSource === 'agent-definitive') branded.agentDefinitive++;
+    else if (c.brandSource === 'agent-blended') branded.agentBlended++;
+    else branded.unknown++;
+  }
+  const definitive = branded.clientName + branded.trunkPhone + branded.agentDefinitive;
+  return {
+    totalCalls: calls.length,
+    paired,
+    branded,
+    brandConfidence: calls.length > 0 ? Math.round((definitive / calls.length) * 1000) / 10 : 100,
+  };
 }
 import { twilioAuth, WORKSPACE_SID } from '@/lib/auth/twilio';
 import { fetchAllWorkerStats } from '@/lib/daily-analytics';
@@ -523,9 +559,12 @@ export async function GET(request: NextRequest) {
     const todayConvRaw = raw._todayConversions || { total: 0, byAgent: {}, byAccount: [], byHour: new Array(24).fill(0) };
     const yesterdayConvRaw = raw._yesterdayConv || { total: 0, byAgent: {}, byAccount: [], byHour: new Array(24).fill(0) };
 
-    // Filter calls to this brand's trunks
-    const brandTodayCalls = filterCallsByBrand(todayPaired, brand);
-    const brandYesterdayCalls = filterCallsByBrand(yesterdayPaired, brand);
+    // Tag every call with its brand source, then filter
+    const taggedToday = resolveCallBrands(todayPaired);
+    const taggedYesterday = resolveCallBrands(yesterdayPaired);
+    const brandTodayCalls = filterCallsByBrand(taggedToday, brand);
+    const brandYesterdayCalls = filterCallsByBrand(taggedYesterday, brand);
+    const dataQuality = buildDataQuality(taggedToday);
 
     // Rebuild rep activity from brand-filtered calls
     const todayDateObj = new Date((raw.date || todayMST()) + 'T00:00:00');
@@ -592,6 +631,7 @@ export async function GET(request: NextRequest) {
         answeredCalls: brandYesterdayCalls.filter(c => c.status === 'completed').length,
       },
       recentCalls: brandRecentCalls,
+      dataQuality,
       brand,
     };
 
