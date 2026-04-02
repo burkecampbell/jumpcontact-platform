@@ -108,7 +108,7 @@ export function deriveBrandView(
   return deriveSingleBrandView(period, brand, summary);
 }
 
-/** Mixed: keep all agents, strip conversions (incompatible sources), use Ytica totals */
+/** Mixed: keep all agents, keep merged conversions (JC Sheets + MSC GHL), use Ytica totals */
 function deriveMixedView(period: PeriodData, summary: BrandCallSummary): PeriodData {
   const teamTotal = period.teamStats?.totalCalls;
   const totalMissed = summary.jc.missed + summary.msc.missed + summary.unknown.missed;
@@ -117,18 +117,8 @@ function deriveMixedView(period: PeriodData, summary: BrandCallSummary): PeriodD
 
   return {
     ...period,
-    // Strip conversions — JC=Sheets, MSC=GHL, can't mix
-    conversions: { total: 0, byAgent: [], byAccount: [], hourly: new Array(24).fill(0) },
-    conversionRate: null,
-    repActivity: {
-      ...period.repActivity,
-      agents: period.repActivity.agents.map(a => ({
-        ...a,
-        conversions: 0,
-        convsPerHour: undefined,
-        trueYield: undefined,
-      })),
-    },
+    // Conversions are already merged (JC Sheets + MSC GHL) upstream in route.ts
+    // No longer stripped — Mixed shows the true combined picture
     // Headline metrics
     answeredCalls,
     totalCalls,

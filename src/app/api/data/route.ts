@@ -89,7 +89,8 @@ function buildDataQuality(calls: PairedCall[]): import('@/lib/types').DataQualit
 
 import { twilioAuth, WORKSPACE_SID } from '@/lib/auth/twilio';
 import { fetchAllWorkerStats } from '@/lib/daily-analytics';
-import { fetchMscConversions } from '@/lib/ops-center';
+import { fetchMscConversions, fetchMscConversionsRange } from '@/lib/ops-center';
+import type { MscConversions } from '@/lib/ops-center';
 import type {
   DashboardData,
   PeriodData,
@@ -522,6 +523,8 @@ export async function GET(request: NextRequest) {
       _yesterdayWorkerStats?: Record<string, { wrapUpSec: number; totalActiveSec: number; avgWrapUp: number; reservationsCreated?: number; reservationsAccepted?: number; reservationsRejected?: number; reservationsTimedOut?: number }>;
       _todayConversions?: { total: number; byAgent: Record<string, number>; byAccount: AcctStat[]; byHour: number[] };
       _yesterdayConv?: { total: number; byAgent: Record<string, number>; byAccount: AcctStat[]; byHour: number[] };
+      _mscConvToday?: MscConversions | null;
+      _mscConvYesterday?: MscConversions | null;
     };
 
     // ── Brand pipeline: Mixed-first, derive everything ──────────
@@ -548,28 +551,39 @@ export async function GET(request: NextRequest) {
     const brandTodayCalls = filterCallsByBrand(taggedToday, brand);
     const brandRecentCalls = buildRecentCalls(brandTodayCalls);
 
-    // MSC conversions from GHL (not Google Sheets)
-    if (brand === 'msc') {
-      try {
-        const mscConv = await cached('msc-conv-today', 60_000, () =>
-          fetchMscConversions(raw.date || todayMST()),
-        );
-        derivedToday = {
-          ...derivedToday,
-          conversions: {
-            total: mscConv.total,
-            byAgent: Object.entries(mscConv.byAgent).map(([agent, count]) => ({ agent, count })),
-            byAccount: mscConv.byAccount,
-            hourly: mscConv.byHour,
-          },
-        };
-      } catch (err) {
-        console.warn('[API /data] MSC conversions unavailable:', err instanceof Error ? err.message : err);
-      }
+    // Brand-specific conversion overrides:
+    // - Mixed: uses merged JC+MSC (already in canonical period from todayConvMerged)
+    // - JC: override with Sheets-only conversions (strip MSC)
+    // - MSC: override with GHL-only conversions (strip JC)
+    const jcConv = raw._todayConversions;
+    const mscConv = raw._mscConvToday;
+    if (brand === 'jc' && jcConv) {
+      // JC view: only Google Sheets conversions
+      derivedToday = {
+        ...derivedToday,
+        conversions: {
+          total: jcConv.total,
+          byAgent: Object.entries(jcConv.byAgent).map(([agent, count]) => ({ agent, count: count as number })),
+          byAccount: jcConv.byAccount,
+          hourly: jcConv.byHour,
+        },
+      };
+    } else if (brand === 'msc' && mscConv) {
+      // MSC view: only GHL conversions
+      derivedToday = {
+        ...derivedToday,
+        conversions: {
+          total: mscConv.total,
+          byAgent: Object.entries(mscConv.byAgent).map(([agent, count]) => ({ agent, count })),
+          byAccount: mscConv.byAccount,
+          hourly: mscConv.byHour,
+        },
+      };
     }
+    // Mixed: derivedToday already has merged conversions from buildPeriodData(todayConvMerged)
 
     // Strip internal fields from response
-    const { _todayCalls, _yesterdayCalls, _schedule, _workerStats, _yesterdayWorkerStats, _todayConversions, _yesterdayConv, ...cleanRaw } = raw;
+    const { _todayCalls, _yesterdayCalls, _schedule, _workerStats, _yesterdayWorkerStats, _todayConversions, _yesterdayConv, _mscConvToday, _mscConvYesterday, ...cleanRaw } = raw;
 
     // Brand breakdown: always compute JC + MSC views so Mixed insights
     // can show fully attributed call counts (no mystery buckets)
@@ -609,7 +623,7 @@ export async function GET(request: NextRequest) {
       ...cleanRaw,
       today: {
         ...derivedToday,
-        convPerHour: brand === 'mixed' ? undefined : raw.today.convPerHour,
+        convPerHour: raw.today.convPerHour,
       },
       yesterday: derivedYesterday,
       recentCalls: brandRecentCalls,
@@ -669,6 +683,9 @@ async function fetchDashboardData(): Promise<DashboardData> {
     ytdRaw,
     yesterdayYtica,
     yesterdayTeamStats,
+    mscConvToday,
+    mscConvYesterday,
+    mscConvHist,
   ] = await Promise.all([
     cached('today-legs', 30_000, () => fetchCallLegs(todayStr)),
     cached('today-conv', 30_000, () => fetchConversions(todayStr)),
@@ -680,14 +697,62 @@ async function fetchDashboardData(): Promise<DashboardData> {
     cached('ytd', 3_600_000, () => fetchYTD(year)),
     cached('yesterday-ytica', 3_600_000, () => fetchYticaRepActivity(yesterdayStr)),
     cached('yesterday-team', 3_600_000, () => fetchYticaTeamStats(yesterdayStr)),
+    cached('msc-conv-today', 60_000, () => fetchMscConversions(todayStr).catch(() => null)),
+    cached('msc-conv-yesterday', 3_600_000, () => fetchMscConversions(yesterdayStr).catch(() => null)),
+    cached('msc-conv-hist', 3_600_000, () =>
+      fetchMscConversionsRange(allHistDates[0], allHistDates[allHistDates.length - 1]).catch(() => [] as MscConversions[]),
+    ),
   ]);
+
+  // ── Merge MSC (GHL) conversions into JC (Sheets) conversions ──
+  // JC conversions come from Google Sheets. MSC conversions come from
+  // GHL via ops-center. For Mixed view we need both combined.
+  // For JC view, only Sheets. For MSC view, only GHL.
+  type ConvEntry = { total: number; byAgent: Record<string, number>; byAccount: AcctStat[]; byHour: number[] };
+
+  function mergeConversions(jc: ConvEntry, msc: MscConversions | null): ConvEntry {
+    if (!msc || msc.total === 0) return jc;
+    const byAgent = { ...jc.byAgent };
+    for (const [agent, count] of Object.entries(msc.byAgent)) {
+      byAgent[agent] = (byAgent[agent] || 0) + count;
+    }
+    const acctMap: Record<string, number> = {};
+    for (const a of jc.byAccount) acctMap[a.account] = (acctMap[a.account] || 0) + a.count;
+    for (const a of msc.byAccount) acctMap[a.account] = (acctMap[a.account] || 0) + a.count;
+    const byAccount = Object.entries(acctMap).map(([account, count]) => ({ account, count })).sort((a, b) => b.count - a.count);
+    const byHour = jc.byHour.map((h, i) => h + (msc.byHour[i] || 0));
+    return { total: jc.total + msc.total, byAgent, byAccount, byHour };
+  }
+
+  // Build MSC historical lookup: date → MscConversions
+  const mscHistMap = new Map<string, MscConversions>();
+  if (Array.isArray(mscConvHist)) {
+    for (const entry of mscConvHist) {
+      if (entry?.date) mscHistMap.set(entry.date, entry);
+    }
+  }
+
+  // Merge MSC into historical conversion map
+  for (const [date, jcEntry] of histConversions) {
+    const mscEntry = mscHistMap.get(date);
+    if (mscEntry) {
+      histConversions.set(date, mergeConversions(jcEntry, mscEntry));
+    }
+  }
+
+  // Merge MSC into today's conversions (preserve firstConvByAgent/lastConvByAgent from Sheets)
+  const todayConvMerged = {
+    ...mergeConversions(todayConversions, mscConvToday),
+    firstConvByAgent: todayConversions.firstConvByAgent,
+    lastConvByAgent: todayConversions.lastConvByAgent,
+  };
 
   // ── Today ──────────────────────────────────────────────────────
   const todayCalls = pairCallLegs(todayLegs);
   const todayPeriod = await buildPeriodData(
     todayStr,
     todayCalls,
-    todayConversions,
+    todayConvMerged,
     todayWorkerStats,
     schedule,
     todayYtica,
@@ -724,12 +789,12 @@ async function fetchDashboardData(): Promise<DashboardData> {
     if (entry) mtdMap.set(d, entry);
     else mtdMap.set(d, { total: 0, byAgent: {}, byAccount: [], byHour: new Array(24).fill(0) });
   }
-  // Override today's entry with live data
+  // Override today's entry with live merged data (JC Sheets + MSC GHL)
   mtdMap.set(todayStr, {
-    total: todayConversions.total,
-    byAgent: todayConversions.byAgent,
-    byAccount: todayConversions.byAccount,
-    byHour: todayConversions.byHour,
+    total: todayConvMerged.total,
+    byAgent: todayConvMerged.byAgent,
+    byAccount: todayConvMerged.byAccount,
+    byHour: todayConvMerged.byHour,
   });
   const mtd = buildMtd(mtdMap, now);
 
@@ -749,7 +814,7 @@ async function fetchDashboardData(): Promise<DashboardData> {
   let thisWeek = 0;
   for (const d of thisWeekDates) {
     if (d === todayStr) {
-      thisWeek += todayConversions.total;
+      thisWeek += todayConvMerged.total;
     } else {
       thisWeek += histConversions.get(d)?.total ?? 0;
     }
@@ -850,7 +915,7 @@ async function fetchDashboardData(): Promise<DashboardData> {
   // ── Assemble ───────────────────────────────────────────────────
   const pulledAt = new Date().toISOString();
 
-  const dashboard: DashboardData & { _todayCalls?: PairedCall[]; _yesterdayCalls?: PairedCall[]; _schedule?: Awaited<ReturnType<typeof fetchSchedule>>; _workerStats?: Record<string, { wrapUpSec: number; totalActiveSec: number; avgWrapUp: number; reservationsCreated?: number; reservationsAccepted?: number; reservationsRejected?: number; reservationsTimedOut?: number }>; _yesterdayWorkerStats?: typeof yesterdayWorkerStats; _todayConversions?: typeof todayConversions; _yesterdayConv?: typeof yesterdayConv } = {
+  const dashboard: DashboardData & { _todayCalls?: PairedCall[]; _yesterdayCalls?: PairedCall[]; _schedule?: Awaited<ReturnType<typeof fetchSchedule>>; _workerStats?: Record<string, { wrapUpSec: number; totalActiveSec: number; avgWrapUp: number; reservationsCreated?: number; reservationsAccepted?: number; reservationsRejected?: number; reservationsTimedOut?: number }>; _yesterdayWorkerStats?: typeof yesterdayWorkerStats; _todayConversions?: typeof todayConversions; _yesterdayConv?: typeof yesterdayConv; _mscConvToday?: MscConversions | null; _mscConvYesterday?: MscConversions | null } = {
     today,
     yesterday,
     mtd,
@@ -872,6 +937,8 @@ async function fetchDashboardData(): Promise<DashboardData> {
     _yesterdayWorkerStats: yesterdayWorkerStats,
     _todayConversions: todayConversions,
     _yesterdayConv: yesterdayConv,
+    _mscConvToday: mscConvToday,
+    _mscConvYesterday: mscConvYesterday,
   };
 
   return dashboard;

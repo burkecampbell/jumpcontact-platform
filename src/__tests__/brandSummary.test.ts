@@ -200,7 +200,7 @@ describe('buildBrandSummary', () => {
 // ── deriveBrandView ───────────────────────────────────────────────
 
 describe('deriveBrandView', () => {
-  it('mixed view returns all agents with zeroed conversions', () => {
+  it('mixed view preserves merged conversions from canonical period', () => {
     const period = makePeriod([
       makeAgent('omar'),
       makeAgent('sue'),
@@ -213,8 +213,8 @@ describe('deriveBrandView', () => {
 
     const mixed = deriveBrandView(period, 'mixed', summary);
     expect(mixed.repActivity.agents).toHaveLength(3);
-    expect(mixed.conversions.total).toBe(0); // Mixed zeroes conversions
-    expect(mixed.conversionRate).toBeNull();
+    // Mixed now keeps conversions (JC Sheets + MSC GHL merged upstream in route.ts)
+    expect(mixed.conversions.total).toBe(10); // from canonical period
   });
 
   it('jc view excludes MSC-only agents', () => {

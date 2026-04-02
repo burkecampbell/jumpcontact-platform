@@ -78,9 +78,8 @@ describe('deriveBrandView', () => {
       expect(mixed.missedCalls.total).toBe(10); // 6 + 4 + 0 unknown
     });
 
-    it('strips conversions (incompatible sources)', () => {
-      expect(mixed.conversions.total).toBe(0);
-      expect(mixed.conversionRate).toBeNull();
+    it('preserves merged conversions (JC Sheets + MSC GHL combined upstream)', () => {
+      expect(mixed.conversions.total).toBe(10); // passed through from canonical period
     });
   });
 
