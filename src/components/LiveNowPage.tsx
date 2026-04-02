@@ -10,93 +10,10 @@ import { Phone, PhoneMissed, TrendingUp, Zap, Users, ArrowDown, ArrowUp, Percent
 import ErrorBoundary from './ErrorBoundary';
 import InlinePlayer from './InlinePlayer';
 import { useBrand } from '@/hooks/useBrand';
+import MixedInsights from './MixedInsights';
 
-function buildPlayerUrl(call: RawCall): string {
-  if (!call.recordingUrl || !call.callSid) return '';
-  const p = new URLSearchParams({
-    sid: call.callSid,
-    ...(call.agentLegSid ? { agent_sid: call.agentLegSid } : {}),
-    agent: capitalize(call.agent),
-    client: call.account || '',
-    phone: formatPhone(call.phone),
-    dur: formatDuration(call.duration),
-    dir: call.direction,
-    time: call.time,
-  });
-  return `${window.location.origin}/play?${p}`;
-}
-
-async function shareRecording(call: RawCall) {
-  const url = buildPlayerUrl(call);
-  if (!url) return;
-  const agentName = capitalize(call.agent);
-  const clientName = call.account || 'Unknown';
-  const phone = formatPhone(call.phone);
-  const dur = formatDuration(call.duration);
-  const dir = call.direction === 'inbound' ? '📞 Inbound' : '📲 Outbound';
-  const time = new Date(call.time).toLocaleString('en-US', {
-    timeZone: 'America/Edmonton',
-    weekday: 'short', month: 'short', day: 'numeric',
-    hour: 'numeric', minute: '2-digit', hour12: true,
-  });
-  const title = `Jump Contact — ${clientName} Call Recording`;
-  const text = [
-    `${dir} Call Recording`,
-    `━━━━━━━━━━━━━━━━━━`,
-    `Agent: ${agentName}`,
-    `Client: ${clientName}`,
-    `Phone: ${phone}`,
-    `Duration: ${dur}`,
-    `Time: ${time}`,
-    ``,
-    `🎧 Listen to the full recording:`,
-  ].join('\n');
-  if (navigator.share) {
-    try { await navigator.share({ title, text, url }); return; } catch { /* cancelled */ }
-  }
-  await navigator.clipboard.writeText(`${title}\n\n${text}\n${url}`);
-  alert('Recording link copied to clipboard!');
-}
-
-interface KPIProps {
-  label: string;
-  value: string | number;
-  icon: React.ReactNode;
-  delta?: number | null;
-  suffix?: string;
-  badge?: { label: string; color: string };
-  inverse?: boolean; // lower is better (e.g. missed calls)
-}
-
-function KPICard({ label, value, icon, delta, suffix, badge, inverse }: KPIProps) {
-  const isPositive = inverse ? (delta ?? 0) <= 0 : (delta ?? 0) >= 0;
-  return (
-    <Card className="flex-1 min-w-[160px]">
-      <div className="flex items-start justify-between mb-2">
-        <span className="text-xs font-medium" style={{ color: C.sub }}>{label}</span>
-        <span style={{ color: C.cyan }}>{icon}</span>
-      </div>
-      <div className="flex items-end gap-2">
-        <span className="text-2xl font-bold count-up" style={{ color: C.text }}>
-          {value}{suffix || ''}
-        </span>
-        {badge && (
-          <span className="text-xs font-bold px-1.5 py-0.5 rounded mb-0.5"
-                style={{ background: badge.color + '22', color: badge.color }}>
-            {badge.label}
-          </span>
-        )}
-      </div>
-      {delta !== undefined && delta !== null && (
-        <div className="flex items-center gap-1 mt-1">
-          <span className="text-xs" style={{ color: isPositive ? '#4ade80' : '#f87171' }}>
-            {delta >= 0 ? '▲' : '▼'} {Math.abs(delta)} vs yesterday
-          </span>
-        </div>
-      )}
-    </Card>
-  );
-}
+import KPICard from './KPICard';
+import { shareRecording } from '@/lib/recording-utils';
 
 type SortKey = 'calls' | 'talkMin' | 'speedSec' | 'wrapUpSec' | 'hoursScheduled' | 'convs' | 'convsPerHour';
 
@@ -212,6 +129,9 @@ function LiveNowPageInner() {
     <>
       <NavBar pulledAt={data.pulledAt} />
       <div className="max-w-7xl mx-auto px-4 py-6">
+        {/* Mixed: Cross-brand insights */}
+        {isMixed && <MixedInsights agents={agents} />}
+
         {/* Pace Comparison Line (hidden in Mixed — conversions don't apply) */}
         {!isMixed && yesterdayConv > 0 && (
           <div className="flex items-center gap-2 mb-3 px-1">

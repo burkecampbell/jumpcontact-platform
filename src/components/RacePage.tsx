@@ -85,57 +85,8 @@ async function downloadClientReport(
   XLSX.writeFile(wb, `JC_Conversions-Report_${dateStr}.xlsx`);
 }
 
-// ── Shared Table Cells ─────────────────────────────────────────────────────
-function TH({ children, right }: { children: React.ReactNode; right?: boolean }) {
-  return (
-    <th className={`px-3 py-2 text-xs font-medium whitespace-nowrap ${right ? 'text-right' : 'text-left'}`} style={{ color: C.sub }}>
-      {children}
-    </th>
-  );
-}
-
-function TD({ children, mono, right, color }: { children: React.ReactNode; mono?: boolean; right?: boolean; color?: string }) {
-  return (
-    <td className={`px-3 py-2.5 text-[13px] ${mono ? 'font-mono' : ''} ${right ? 'text-right' : ''}`} style={{ color: color || C.text }}>
-      {children}
-    </td>
-  );
-}
-
-// ── SVG Ring Chart ──────────────────────────────────────────────────────────
-
-function RingChart({ value, max, label }: { value: number; max: number; label: string }) {
-  const pct = Math.min(value / Math.max(max, 1), 1);
-  const r = 72, stroke = 10;
-  const circ = 2 * Math.PI * r;
-  const offset = circ * (1 - pct);
-  const over = value >= max;
-
-  return (
-    <div className="flex flex-col items-center">
-      <svg viewBox="0 0 180 180" className="w-44 h-44">
-        <circle cx="90" cy="90" r={r} fill="none" stroke="rgba(139,146,168,0.12)" strokeWidth={stroke} />
-        <circle
-          cx="90" cy="90" r={r} fill="none"
-          stroke={over ? C.lime : C.cyan}
-          strokeWidth={stroke}
-          strokeLinecap="round"
-          strokeDasharray={circ}
-          strokeDashoffset={offset}
-          transform="rotate(-90 90 90)"
-          className="transition-all duration-1000 ease-out"
-        />
-        <text x="90" y="82" textAnchor="middle" fill={C.text} fontSize="32" fontWeight="700">
-          {value.toLocaleString()}
-        </text>
-        <text x="90" y="104" textAnchor="middle" fill={C.sub} fontSize="13">
-          / {max.toLocaleString()} goal
-        </text>
-      </svg>
-      <span className="text-xs font-medium mt-1" style={{ color: C.sub }}>{label}</span>
-    </div>
-  );
-}
+import { TH, TD } from './TableCells';
+import RingChart from './RingChart';
 
 // ── Pace Stat Pill ──────────────────────────────────────────────────────────
 

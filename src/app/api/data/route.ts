@@ -24,6 +24,7 @@ import { cached } from '@/lib/cache';
 import { resolveClient } from '@/lib/clients';
 import { twilioAuth, WORKSPACE_SID } from '@/lib/auth/twilio';
 import { fetchAllWorkerStats } from '@/lib/daily-analytics';
+import { fetchMscConversions } from '@/lib/ops-center';
 import type {
   DashboardData,
   PeriodData,
@@ -474,8 +475,29 @@ export async function GET(request: NextRequest) {
     const raw = await cached('dashboard-data', 30_000, fetchDashboardData);
 
     // Apply brand filtering on read (cheap, no API calls)
-    const filteredToday = filterByBrand(raw.today, brand);
-    const filteredYesterday = filterByBrand(raw.yesterday, brand);
+    let filteredToday = filterByBrand(raw.today, brand);
+    let filteredYesterday = filterByBrand(raw.yesterday, brand);
+
+    // MSC conversions come from GHL (via ops-center), not Google Sheets
+    if (brand === 'msc') {
+      try {
+        const mscConv = await cached('msc-conv-today', 60_000, () =>
+          fetchMscConversions(raw.date || todayMST()),
+        );
+        filteredToday = {
+          ...filteredToday,
+          conversions: {
+            total: mscConv.total,
+            byAgent: Object.entries(mscConv.byAgent).map(([agent, count]) => ({ agent, count })),
+            byAccount: mscConv.byAccount,
+            hourly: mscConv.byHour,
+          },
+        };
+      } catch (err) {
+        console.warn('[API /data] MSC conversions unavailable:', err instanceof Error ? err.message : err);
+        // Fall through with JC conversion data stripped by filterByBrand
+      }
+    }
 
     // Recompute KPI cards from brand-filtered agent data
     const todayAgents = filteredToday.repActivity.agents;

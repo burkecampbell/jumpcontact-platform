@@ -29,61 +29,7 @@ function fmtTimeXLS(iso: string): string {
   });
 }
 
-function buildPlayerUrl(call: RawCall): string {
-  if (!call.recordingUrl || !call.callSid) return '';
-  const p = new URLSearchParams({
-    sid: call.callSid,
-    ...(call.agentLegSid ? { agent_sid: call.agentLegSid } : {}),
-    agent: capitalize(call.agent),
-    client: call.account || '',
-    phone: formatPhone(call.phone),
-    dur: fmtDur(call.duration),
-    dir: call.direction,
-    time: call.time,
-  });
-  return `${window.location.origin}/play?${p}`;
-}
-
-async function shareRecording(call: RawCall) {
-  const url = buildPlayerUrl(call);
-  if (!url) return;
-  const agentName = capitalize(call.agent);
-  const clientName = call.account || 'Unknown';
-  const phone = formatPhone(call.phone);
-  const dur = fmtDur(call.duration);
-  const dir = call.direction === 'inbound' ? '📞 Inbound' : '📲 Outbound';
-  const time = new Date(call.time).toLocaleString('en-US', {
-    timeZone: 'America/Edmonton',
-    weekday: 'short', month: 'short', day: 'numeric',
-    hour: 'numeric', minute: '2-digit', hour12: true,
-  });
-
-  const title = `Jump Contact — ${clientName} Call Recording`;
-  const text = [
-    `${dir} Call Recording`,
-    `━━━━━━━━━━━━━━━━━━`,
-    `Agent: ${agentName}`,
-    `Client: ${clientName}`,
-    `Phone: ${phone}`,
-    `Duration: ${dur}`,
-    `Time: ${time}`,
-    ``,
-    `🎧 Listen to the full recording:`,
-  ].join('\n');
-
-  if (navigator.share) {
-    try {
-      await navigator.share({ title, text, url });
-      return;
-    } catch {
-      // User cancelled or share failed — fall through to clipboard
-    }
-  }
-
-  const full = `${title}\n\n${text}\n${url}`;
-  await navigator.clipboard.writeText(full);
-  alert('Recording link copied to clipboard!');
-}
+import { shareRecording, buildPlayerUrl } from '@/lib/recording-utils';
 
 async function downloadReport(calls: RawCall[], filename: string, date: string) {
   const XLSX = await import('xlsx');
