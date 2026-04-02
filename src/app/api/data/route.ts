@@ -308,7 +308,7 @@ function addTodayFields(
 
 function buildRecentCalls(calls: PairedCall[]): RawCall[] {
   return calls
-    .filter(c => c.agent) // Only include calls with a matched agent
+    .filter(c => c.agent && c.client) // Only include calls with a matched agent AND known client
     .slice(0, 20)
     .map(c => ({
       time: c.time,
