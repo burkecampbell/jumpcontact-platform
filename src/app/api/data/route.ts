@@ -308,7 +308,7 @@ function addTodayFields(
 
 function buildRecentCalls(calls: PairedCall[]): RawCall[] {
   return calls
-    .filter(c => c.agent && c.client) // Only include calls with a matched agent AND known client
+    .filter(c => c.agent && c.client && c.from) // Matched agent, known client, and caller phone
     .slice(0, 20)
     .map(c => ({
       time: c.time,
@@ -525,13 +525,17 @@ export async function GET(request: NextRequest) {
           return brand === 'jc';
         });
 
+    // Total calls includes missed; answered is agent-handled only
+    const brandMissed = filteredToday.missedCalls.total;
+    const brandTotal = brandCalls + brandMissed;
+
     const data = {
       ...raw,
       today: {
         ...filteredToday,
-        totalCalls: brandCalls,
+        totalCalls: brandTotal,
         answeredCalls: brandCalls,
-        answerRate: raw.today.answerRate, // answer rate stays global (Twilio-level)
+        answerRate: brandTotal > 0 ? Math.round((brandCalls / brandTotal) * 100) : 0,
         missedCallRate: raw.today.missedCallRate,
         teamAvgSpeed: brandAvgSpeed,
         fastestPickup: brandFastest,

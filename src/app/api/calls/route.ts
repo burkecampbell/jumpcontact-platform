@@ -189,8 +189,8 @@ export async function GET(request: NextRequest) {
     // Sort newest first across all days
     allPaired.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
 
-    // Only show calls with a known client
-    const clientPaired = allPaired.filter(c => c.client);
+    // Only show calls with a known client and a caller phone number
+    const clientPaired = allPaired.filter(c => c.client && c.from);
 
     // Filter by brand using trunk phone number (the source of truth)
     const brand = parseBrand(searchParams.get('brand'));
