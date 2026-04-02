@@ -269,9 +269,12 @@ export function blendYticaIntoPerioData(period: PeriodData, ytica: YticaRepActiv
     const y = yticaMap.get(agent.agent.toLowerCase());
     if (!y) return agent;
 
-    const speedSec = agent.speedSec != null && agent.speedSec > 0
-      ? agent.speedSec
-      : y.speedSec ?? agent.speedSec;
+    // Ytica speed = actual ring duration (5-6s typical).
+    // CDR speed = total customer wait including queue/IVR (14-20s).
+    // Ytica wins when available — it's more accurate.
+    const speedSec = y.speedSec != null && y.speedSec > 0
+      ? y.speedSec
+      : agent.speedSec;
 
     return {
       ...agent,

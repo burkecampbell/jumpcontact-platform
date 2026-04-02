@@ -9,6 +9,7 @@ import { C, GOAL, capitalize, computePace, agentColor, AGENT_SCHEDULE, fmtSpeed,
 import type { DashboardData, AcctStat, RepAgent } from '@/lib/getDashboard';
 import { Target, BarChart3, Trophy, Zap, Phone, Clock, Timer, Download, TrendingUp, Award, Star, ShieldCheck, Crosshair } from 'lucide-react';
 import { useBrand } from '@/hooks/useBrand';
+import { isAgentForBrand } from '@/lib/brand';
 
 // ── XLSX Export (branded Jump Contact report) ──────────────────────────────
 
@@ -280,7 +281,7 @@ function RacePageInner() {
   for (const a of todayAgents) todayByAgent[a.agent.toLowerCase()] = a;
 
   // Agent stats with projections
-  const agentStats = mtd.byAgent.filter(a => !EXCLUDED_AGENTS.includes(a.agent)).map(a => {
+  const agentStats = mtd.byAgent.filter(a => !EXCLUDED_AGENTS.includes(a.agent) && isAgentForBrand(a.agent, brand)).map(a => {
     const dailyAvg = pace.dayOfMonth > 0 ? +(a.count / pace.dayOfMonth).toFixed(1) : 0;
     const projected = Math.round(dailyAvg * pace.daysInMonth);
     let bestDay = 0;
@@ -300,7 +301,7 @@ function RacePageInner() {
   // Build daily grid: days of month × agents
   const mtdDaily = mtd.mtdDaily ?? [];
   const dayNumbers = Array.from({ length: pace.dayOfMonth }, (_, i) => i + 1);
-  const agentNames = mtd.byAgent.filter(a => !EXCLUDED_AGENTS.includes(a.agent)).map(a => a.agent.toLowerCase());
+  const agentNames = mtd.byAgent.filter(a => !EXCLUDED_AGENTS.includes(a.agent) && isAgentForBrand(a.agent, brand)).map(a => a.agent.toLowerCase());
 
   const topAccounts = mtd.byAccount || [];
 

@@ -353,16 +353,16 @@ describe('blendYticaIntoPerioData', () => {
     expect(omar.calls).toBe(15); // Ytica calls preferred
   });
 
-  it('preserves CDR speed when agent already has valid speed', () => {
-    const period = makePeriod([makeAgent('omar', { speedSec: 6 })]);
+  it('prefers Ytica speed over CDR speed (Ytica = ring time, CDR = total wait)', () => {
+    const period = makePeriod([makeAgent('omar', { speedSec: 16 })]);
     const ytica: YticaRepActivity = {
-      agents: [{ agent: 'omar', calls: 10, talkMin: 30, speedSec: 9, wrapUpSec: 15, avgHandlingMin: null, inboundConversations: 0, holdTimeSec: null }],
-      avgSpeedSec: 9,
+      agents: [{ agent: 'omar', calls: 10, talkMin: 30, speedSec: 5, wrapUpSec: 15, avgHandlingMin: null, inboundConversations: 0, holdTimeSec: null }],
+      avgSpeedSec: 5,
       source: 'ytica',
     };
     const result = blendYticaIntoPerioData(period, ytica);
     const omar = result.repActivity.agents.find(a => a.agent === 'omar')!;
-    expect(omar.speedSec).toBe(6); // CDR speed preserved
+    expect(omar.speedSec).toBe(5); // Ytica wins — measures actual ring, not queue+IVR
   });
 
   it('adds ytica-only agents to the blended list', () => {
