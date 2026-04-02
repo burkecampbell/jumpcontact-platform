@@ -3,9 +3,27 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { capitalize, agentColor, fmtSpeed, fmtTalkTime, speedGrade, normalizeAgent, EXCLUDED_AGENTS } from '@/lib/constants';
+import { useSpringValue } from '@/hooks/useSpringValue';
 import type { DashboardData, RepAgent, AgentStat, AcctStat, MonthChampions } from '@/lib/types';
 
 type LayoutMode = 'auto' | 'tv' | 'mobile';
+
+// Scale targets per mode (multiplier applied to all sizes)
+const SCALE_TARGETS: Record<LayoutMode, number> = {
+  mobile: 1,
+  auto: 1.1,
+  tv: 1.5,
+};
+const MAX_WIDTH_TARGETS: Record<LayoutMode, number> = {
+  mobile: 640,
+  auto: 960,
+  tv: 9999, // full width
+};
+const PADDING_TARGETS: Record<LayoutMode, number> = {
+  mobile: 28,
+  auto: 40,
+  tv: 80,
+};
 
 // ── Theme (light, newspaper feel) ──────────────────────────────────
 
@@ -42,25 +60,30 @@ function dayOfWeekShort(dateStr: string): string {
 
 // ── Sub-components ──────────────────────────────────────────────────
 
+// Scale context — all sub-components read this
+let _s = 1; // current spring scale (set by parent before render)
+function setScale(v: number) { _s = v; }
+function sz(base: number) { return Math.round(base * _s); }
+
 function Num({ children, size = 48 }: { children: React.ReactNode; size?: number }) {
   return (
-    <span style={{ fontSize: size, fontWeight: 200, color: T.ink, lineHeight: 1, fontFamily: "'SF Mono','JetBrains Mono','Consolas',monospace", fontVariantNumeric: 'tabular-nums', letterSpacing: -1 }}>
+    <span style={{ fontSize: sz(size), fontWeight: 200, color: T.ink, lineHeight: 1, fontFamily: "'SF Mono','JetBrains Mono','Consolas',monospace", fontVariantNumeric: 'tabular-nums', letterSpacing: -1 }}>
       {children}
     </span>
   );
 }
 
 function Label({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 2.5, color: T.inkFaint }}>{children}</div>;
+  return <div style={{ fontSize: sz(10), fontWeight: 600, textTransform: 'uppercase', letterSpacing: 2.5, color: T.inkFaint }}>{children}</div>;
 }
 
 function Divider() {
-  return <div style={{ height: 1, background: T.border, margin: '24px 0' }} />;
+  return <div style={{ height: 1, background: T.border, margin: `${sz(24)}px 0` }} />;
 }
 
 function Pill({ children, color = T.inkMuted }: { children: React.ReactNode; color?: string }) {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, color, background: color + '0d', border: `1px solid ${color}22`, padding: '3px 10px', borderRadius: 20 }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: sz(11), fontWeight: 600, color, background: color + '0d', border: `1px solid ${color}22`, padding: `${sz(3)}px ${sz(10)}px`, borderRadius: 20 }}>
       {children}
     </span>
   );
@@ -70,8 +93,8 @@ function Note({ tone = 'neutral', children }: { tone?: string; children: React.R
   const colors: Record<string, string> = { positive: T.positive, caution: T.caution, negative: T.negative, neutral: T.inkMuted };
   const c = colors[tone] || T.inkMuted;
   return (
-    <div style={{ padding: '14px 18px', borderLeft: `2px solid ${c}`, background: T.subtle, borderRadius: '0 8px 8px 0', marginTop: 16 }}>
-      <div style={{ color: T.inkSoft, fontSize: 14, lineHeight: 1.7 }}>{children}</div>
+    <div style={{ padding: `${sz(14)}px ${sz(18)}px`, borderLeft: `2px solid ${c}`, background: T.subtle, borderRadius: '0 8px 8px 0', marginTop: sz(16) }}>
+      <div style={{ color: T.inkSoft, fontSize: sz(14), lineHeight: 1.7 }}>{children}</div>
     </div>
   );
 }
@@ -80,16 +103,17 @@ function AgentBar({ rank, name, value, max, suffix = '' }: { rank: number; name:
   const numVal = typeof value === 'number' ? value : parseFloat(String(value)) || 0;
   const pct = max > 0 ? Math.max((numVal / max) * 100, 3) : 3;
   const isTop3 = rank < 3;
+  const badgeSize = sz(28);
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '32px 80px 1fr auto', alignItems: 'center', gap: 12, padding: '14px 0', borderBottom: `1px solid ${T.border}` }}>
-      <div style={{ width: 28, height: 28, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, background: isTop3 ? T.ink : 'transparent', color: isTop3 ? '#fff' : T.inkFaint, border: isTop3 ? 'none' : `1px solid ${T.border}` }}>{rank + 1}</div>
-      <div style={{ fontWeight: 600, fontSize: 15, color: T.ink }}>{capitalize(name)}</div>
-      <div style={{ position: 'relative', height: 6, background: T.subtle, borderRadius: 3, overflow: 'hidden' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: `${badgeSize}px ${sz(80)}px 1fr auto`, alignItems: 'center', gap: sz(12), padding: `${sz(14)}px 0`, borderBottom: `1px solid ${T.border}` }}>
+      <div style={{ width: badgeSize, height: badgeSize, borderRadius: badgeSize / 2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: sz(12), fontWeight: 700, background: isTop3 ? T.ink : 'transparent', color: isTop3 ? '#fff' : T.inkFaint, border: isTop3 ? 'none' : `1px solid ${T.border}` }}>{rank + 1}</div>
+      <div style={{ fontWeight: 600, fontSize: sz(15), color: T.ink }}>{capitalize(name)}</div>
+      <div style={{ position: 'relative', height: sz(6), background: T.subtle, borderRadius: 3, overflow: 'hidden' }}>
         <div style={{ width: `${pct}%`, height: '100%', borderRadius: 3, background: agentColor(name), opacity: 0.75 }} />
       </div>
-      <div style={{ textAlign: 'right', minWidth: 60 }}>
-        <span style={{ fontFamily: "'SF Mono','JetBrains Mono','Consolas',monospace", fontSize: 20, fontWeight: 600, color: T.ink }}>{value}</span>
-        {suffix && <span style={{ fontSize: 12, color: T.inkFaint, marginLeft: 2 }}>{suffix}</span>}
+      <div style={{ textAlign: 'right', minWidth: sz(60) }}>
+        <span style={{ fontFamily: "'SF Mono','JetBrains Mono','Consolas',monospace", fontSize: sz(20), fontWeight: 600, color: T.ink }}>{value}</span>
+        {suffix && <span style={{ fontSize: sz(12), color: T.inkFaint, marginLeft: 2 }}>{suffix}</span>}
       </div>
     </div>
   );
@@ -339,17 +363,13 @@ export default function MorningDashboard() {
   const searchParams = useSearchParams();
   const mode = (searchParams.get('mode') as LayoutMode) || 'auto';
 
-  // Layout config per mode
-  const layout = useMemo(() => {
-    switch (mode) {
-      case 'tv':
-        return { maxWidth: '100%', padding: '40px 80px', fontSize: 1.35, headerSize: 36, heroSize: 80, barHeight: 8 };
-      case 'mobile':
-        return { maxWidth: '640px', padding: '28px', fontSize: 1, headerSize: 28, heroSize: 48, barHeight: 6 };
-      default: // auto
-        return { maxWidth: '960px', padding: '28px 40px', fontSize: 1.1, headerSize: 32, heroSize: 56, barHeight: 7 };
-    }
-  }, [mode]);
+  // Spring-animated layout values
+  const scale = useSpringValue(SCALE_TARGETS[mode], 180, 22);
+  const maxW = useSpringValue(MAX_WIDTH_TARGETS[mode], 120, 18);
+  const pad = useSpringValue(PADDING_TARGETS[mode], 150, 20);
+
+  // Set the module-level scale so all sub-components use it
+  setScale(scale);
 
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -417,10 +437,8 @@ export default function MorningDashboard() {
     }
   }
 
-  const scale = layout.fontSize;
-
   return (
-    <div style={{ background: T.bg, minHeight: '100vh', color: T.ink, fontFamily: "'Inter','Helvetica Neue',system-ui,sans-serif", maxWidth: layout.maxWidth, margin: '0 auto', fontSize: `${scale}rem` }}>
+    <div style={{ background: T.bg, minHeight: '100vh', color: T.ink, fontFamily: "'Inter','Helvetica Neue',system-ui,sans-serif", maxWidth: maxW >= 9000 ? '100%' : `${Math.round(maxW)}px`, margin: '0 auto', transition: 'max-width 0.1s' }}>
       {/* Mode switcher (top-right corner) */}
       <div style={{ position: 'fixed', top: 12, right: 12, display: 'flex', gap: 4, zIndex: 50 }}>
         {(['mobile', 'auto', 'tv'] as LayoutMode[]).map(m => (
@@ -432,28 +450,28 @@ export default function MorningDashboard() {
       </div>
 
       {/* Header */}
-      <header style={{ padding: `32px ${layout.padding} 0`, borderBottom: `1px solid ${T.border}`, paddingBottom: 24 }}>
+      <header style={{ padding: `${sz(32)}px ${pad}px 0`, borderBottom: `1px solid ${T.border}`, paddingBottom: sz(24) }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <div style={{ fontSize: 11 * scale, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 3, color: T.inkFaint }}>Jump Contact</div>
-            <h1 style={{ fontSize: layout.headerSize, fontWeight: 800, margin: '6px 0 0', letterSpacing: -0.8, color: T.ink, lineHeight: 1.1 }}>
+            <div style={{ fontSize: sz(11), fontWeight: 600, textTransform: 'uppercase', letterSpacing: 3, color: T.inkFaint }}>Jump Contact</div>
+            <h1 style={{ fontSize: sz(28), fontWeight: 800, margin: '6px 0 0', letterSpacing: -0.8, color: T.ink, lineHeight: 1.1 }}>
               {todayName}<br />Morning Meeting
             </h1>
           </div>
           <div style={{ textAlign: 'right', marginRight: mode === 'tv' ? 120 : 0 }}>
-            <div style={{ fontSize: 12 * scale, color: T.inkMuted }}>{todayDate}</div>
-            <div style={{ fontSize: 12 * scale, color: T.inkFaint, marginTop: 2 }}>Reviewing {dayOfWeekShort(data.yesterdayDate || '')}</div>
+            <div style={{ fontSize: sz(12), color: T.inkMuted }}>{todayDate}</div>
+            <div style={{ fontSize: sz(12), color: T.inkFaint, marginTop: 2 }}>Reviewing {dayOfWeekShort(data.yesterdayDate || '')}</div>
           </div>
         </div>
       </header>
 
       {/* Step tabs */}
-      <nav style={{ padding: `16px ${layout.padding}`, borderBottom: `1px solid ${T.border}`, overflowX: 'auto' }}>
+      <nav style={{ padding: `${sz(16)}px ${pad}px`, borderBottom: `1px solid ${T.border}`, overflowX: 'auto' }}>
         <div style={{ display: 'flex', gap: 0 }}>
           {steps.map((s, i) => (
-            <button key={s.key} onClick={() => setStep(i)} style={{ flex: 1, padding: '10px 4px', border: 'none', cursor: 'pointer', background: 'transparent', borderBottom: step === i ? `2px solid ${T.ink}` : '2px solid transparent', transition: 'all 0.2s' }}>
-              <div style={{ fontSize: 10 * scale, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: step === i ? T.ink : T.inkFaint, transition: 'color 0.2s' }}>
-                <span style={{ fontFamily: "'SF Mono',monospace", marginRight: 4, fontSize: 9 * scale }}>{s.num}</span>{s.label}
+            <button key={s.key} onClick={() => setStep(i)} style={{ flex: 1, padding: `${sz(10)}px 4px`, border: 'none', cursor: 'pointer', background: 'transparent', borderBottom: step === i ? `2px solid ${T.ink}` : '2px solid transparent', transition: 'all 0.2s' }}>
+              <div style={{ fontSize: sz(10), fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: step === i ? T.ink : T.inkFaint, transition: 'color 0.2s' }}>
+                <span style={{ fontFamily: "'SF Mono',monospace", marginRight: 4, fontSize: sz(9) }}>{s.num}</span>{s.label}
               </div>
             </button>
           ))}
@@ -461,27 +479,27 @@ export default function MorningDashboard() {
       </nav>
 
       {/* Progress bar */}
-      <div style={{ display: 'flex', gap: 2, padding: `0 ${layout.padding}`, marginTop: -1 }}>
-        {steps.map((_, i) => <div key={i} style={{ flex: 1, height: mode === 'tv' ? 3 : 2, background: i <= step ? T.ink : T.border, transition: 'background 0.3s' }} />)}
+      <div style={{ display: 'flex', gap: 2, padding: `0 ${pad}px`, marginTop: -1 }}>
+        {steps.map((_, i) => <div key={i} style={{ flex: 1, height: sz(2), background: i <= step ? T.ink : T.border, transition: 'background 0.3s' }} />)}
       </div>
 
       {/* Content */}
-      <main style={{ padding: layout.padding }}>
-        <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontFamily: "'SF Mono',monospace", fontSize: 11 * scale, fontWeight: 700, color: T.inkFaint, background: T.subtle, padding: '4px 10px', borderRadius: 4, border: `1px solid ${T.border}` }}>{steps[step].num}</span>
-          <h2 style={{ fontSize: 22 * scale, fontWeight: 700, margin: 0, color: T.ink, letterSpacing: -0.3 }}>{steps[step].label}</h2>
+      <main style={{ padding: `${pad}px` }}>
+        <div style={{ marginBottom: sz(24), display: 'flex', alignItems: 'center', gap: sz(12) }}>
+          <span style={{ fontFamily: "'SF Mono',monospace", fontSize: sz(11), fontWeight: 700, color: T.inkFaint, background: T.subtle, padding: `${sz(4)}px ${sz(10)}px`, borderRadius: 4, border: `1px solid ${T.border}` }}>{steps[step].num}</span>
+          <h2 style={{ fontSize: sz(22), fontWeight: 700, margin: 0, color: T.ink, letterSpacing: -0.3 }}>{steps[step].label}</h2>
         </div>
         {renderStep()}
       </main>
 
       {/* Footer nav */}
-      <footer style={{ padding: `20px ${layout.padding} 32px`, borderTop: `1px solid ${T.border}` }}>
+      <footer style={{ padding: `${sz(20)}px ${pad}px ${sz(32)}px`, borderTop: `1px solid ${T.border}` }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <button onClick={() => step > 0 && setStep(step - 1)} style={{ padding: '10px 20px', borderRadius: 8, fontSize: 13 * scale, fontWeight: 600, border: `1px solid ${T.border}`, background: T.surface, color: step === 0 ? T.inkFaint : T.ink, cursor: step === 0 ? 'default' : 'pointer', fontFamily: 'inherit' }}>&larr; Back</button>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {steps.map((_, i) => <div key={i} onClick={() => setStep(i)} style={{ width: mode === 'tv' ? 10 : 6, height: mode === 'tv' ? 10 : 6, borderRadius: '50%', cursor: 'pointer', background: i === step ? T.ink : T.border, transition: 'background 0.3s' }} />)}
+          <button onClick={() => step > 0 && setStep(step - 1)} style={{ padding: `${sz(10)}px ${sz(20)}px`, borderRadius: 8, fontSize: sz(13), fontWeight: 600, border: `1px solid ${T.border}`, background: T.surface, color: step === 0 ? T.inkFaint : T.ink, cursor: step === 0 ? 'default' : 'pointer', fontFamily: 'inherit' }}>&larr; Back</button>
+          <div style={{ display: 'flex', gap: sz(8) }}>
+            {steps.map((_, i) => <div key={i} onClick={() => setStep(i)} style={{ width: sz(6), height: sz(6), borderRadius: '50%', cursor: 'pointer', background: i === step ? T.ink : T.border, transition: 'background 0.3s' }} />)}
           </div>
-          <button onClick={() => step < total - 1 && setStep(step + 1)} style={{ padding: '10px 20px', borderRadius: 8, fontSize: 13 * scale, fontWeight: 600, border: 'none', background: step === total - 1 ? T.subtle : T.ink, color: step === total - 1 ? T.inkFaint : '#fff', cursor: step === total - 1 ? 'default' : 'pointer', fontFamily: 'inherit' }}>Next &rarr;</button>
+          <button onClick={() => step < total - 1 && setStep(step + 1)} style={{ padding: `${sz(10)}px ${sz(20)}px`, borderRadius: 8, fontSize: sz(13), fontWeight: 600, border: 'none', background: step === total - 1 ? T.subtle : T.ink, color: step === total - 1 ? T.inkFaint : '#fff', cursor: step === total - 1 ? 'default' : 'pointer', fontFamily: 'inherit' }}>Next &rarr;</button>
         </div>
       </footer>
     </div>
