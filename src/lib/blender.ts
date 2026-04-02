@@ -174,6 +174,14 @@ function deriveSingleBrandView(
       };
     });
 
+  // Remove blended agents who ended up with 0 calls for this brand
+  // (e.g., Sara took 16 MSC calls and 0 JC calls — don't show her on JC view)
+  const visibleAgents = filteredAgents.filter(a => {
+    const lower = a.agent.toLowerCase();
+    if (!BLENDED_AGENTS.has(lower)) return true;
+    return a.calls > 0;
+  });
+
   const filteredOutbound = period.repActivity.outbound.filter(a => {
     const lower = a.agent.toLowerCase();
     if (isJC) return !MSC_ONLY_AGENTS.has(lower);
@@ -181,7 +189,7 @@ function deriveSingleBrandView(
   });
 
   // ── 2. Brand-specific speed average ───────────────────────────
-  const speedVals = filteredAgents
+  const speedVals = visibleAgents
     .filter(a => a.speedSec != null && a.speedSec! > 0)
     .map(a => a.speedSec!);
   const avgSpeedSec = speedVals.length > 0
@@ -196,7 +204,7 @@ function deriveSingleBrandView(
     const jcShare = Math.round(teamTotal * summary.jc.answered / cdrTotal);
     answeredCalls = isJC ? jcShare : teamTotal - jcShare;
   } else {
-    answeredCalls = filteredAgents.reduce((s, a) => s + a.calls, 0);
+    answeredCalls = visibleAgents.reduce((s, a) => s + a.calls, 0);
   }
 
   // ── 4. Missed calls from CDR brand tags ───────────────────────
@@ -231,7 +239,7 @@ function deriveSingleBrandView(
   return {
     ...period,
     repActivity: {
-      agents: filteredAgents,
+      agents: visibleAgents,
       outbound: filteredOutbound,
       avgSpeedSec,
     },
