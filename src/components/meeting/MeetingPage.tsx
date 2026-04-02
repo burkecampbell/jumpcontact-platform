@@ -12,11 +12,10 @@ import StepTalkTime from './StepTalkTime';
 import StepSpeed from './StepSpeed';
 import StepConversions from './StepConversions';
 import StepMTD from './StepMTD';
-import StepSlack from './StepSlack';
 import { useBrand } from '@/hooks/useBrand';
 
-const JC_STEP_LABELS = ['Calls', 'Talk Time', 'Speed', 'Conversions', 'MTD Race', 'Slack Post'];
-const MIXED_STEP_LABELS = ['Calls', 'Talk Time', 'Speed', 'Slack Post']; // No conversions in Mixed
+const JC_STEP_LABELS = ['Calls', 'Talk Time', 'Speed', 'Conversions', 'MTD Race'];
+const MIXED_STEP_LABELS = ['Calls', 'Talk Time', 'Speed'];
 
 /** Main Meeting presentation shell — data fetch, step/tab state, keyboard nav */
 function MeetingPageInner() {
@@ -52,8 +51,9 @@ function MeetingPageInner() {
   // Keyboard nav
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
-      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); goTo(step + 1); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); goTo(step + 1); }
       if (e.key === 'ArrowLeft') { e.preventDefault(); goTo(step - 1); }
+      if (e.key === ' ') { e.preventDefault(); setAutoPlay(p => !p); }
     }
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
@@ -122,8 +122,6 @@ function MeetingPageInner() {
         return <StepConversions period={period} label={periodLabel} />;
       case 'MTD Race':
         return <StepMTD data={data!} />;
-      case 'Slack Post':
-        return <StepSlack data={data!} />;
       default:
         return null;
     }

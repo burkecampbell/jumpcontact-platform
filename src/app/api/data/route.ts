@@ -373,6 +373,7 @@ function buildMtd(
 ): MtdData {
   let total = 0;
   const agentTotals: Record<string, number> = {};
+  const agentDaily: Record<string, Record<string, number>> = {};
   const acctTotals: Record<string, number> = {};
   const hourly = new Array(24).fill(0);
   const mtdDaily: { date: string; total: number }[] = [];
@@ -384,6 +385,8 @@ function buildMtd(
     mtdDaily.push({ date, total: entry.total });
     for (const [agent, count] of Object.entries(entry.byAgent)) {
       agentTotals[agent] = (agentTotals[agent] || 0) + count;
+      if (!agentDaily[agent]) agentDaily[agent] = {};
+      agentDaily[agent][date] = count;
     }
     for (const a of entry.byAccount) {
       acctTotals[a.account] = (acctTotals[a.account] || 0) + a.count;
@@ -402,7 +405,7 @@ function buildMtd(
   const requiredDailyRate = daysRemaining > 0 ? Math.round((deficit / daysRemaining) * 10) / 10 : 0;
 
   const byAgent: AgentStat[] = Object.entries(agentTotals)
-    .map(([agent, count]) => ({ agent, count }))
+    .map(([agent, count]) => ({ agent, count, daily: agentDaily[agent] }))
     .sort((a, b) => b.count - a.count);
 
   const byAccount: AcctStat[] = Object.entries(acctTotals)

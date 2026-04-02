@@ -327,6 +327,9 @@ export function pairCallLegs(legs: CallLeg[]): PairedCall[] {
   }
 
   // Outbound calls (agent-initiated via Flex dialpad)
+  // The outbound-api leg has trunk phones but no agent identity.
+  // Look for a child leg with a client: URI (the agent's Flex leg)
+  // whose parentCallSid points to this outbound leg.
   const usedSids = new Set(paired.map(p => p.id));
   for (const leg of legs) {
     if (
@@ -338,10 +341,24 @@ export function pairCallLegs(legs: CallLeg[]): PairedCall[] {
     ) {
       if (!isJCPhone(leg.from)) continue;
       const client = resolveClient(leg.from) || '';
+
+      // Find the agent by looking for child legs with client: URI
+      let agentName = '';
+      for (const child of legs) {
+        if (child.parentCallSid === leg.sid && child.from.startsWith('client:')) {
+          agentName = normalizeAgent(decodeAgent(child.from));
+          break;
+        }
+        if (child.parentCallSid === leg.sid && child.to.startsWith('client:')) {
+          agentName = normalizeAgent(decodeAgent(child.to));
+          break;
+        }
+      }
+
       paired.push({
         id: leg.sid,
         time: leg.startTime,
-        agent: '',
+        agent: agentName,
         from: leg.from,
         to: leg.to,
         client,
