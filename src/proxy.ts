@@ -11,6 +11,7 @@ const isPublicRoute = createRouteMatcher([
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/api(.*)',
+  '/play(.*)',
 ]);
 
 /** Allowed CORS origins — deployment domain + localhost for dev */
