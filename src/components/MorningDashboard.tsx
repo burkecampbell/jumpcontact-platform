@@ -8,9 +8,9 @@ import type { DashboardData, RepAgent, AgentStat, AcctStat, MonthChampions } fro
 
 type LayoutMode = 'auto' | 'tv' | 'mobile';
 
-const SCALE: Record<LayoutMode, number> = { mobile: 1, auto: 1.15, tv: 1.8 };
+const SCALE: Record<LayoutMode, number> = { mobile: 1, auto: 1.3, tv: 2.8 };
 const MAX_W: Record<LayoutMode, number> = { mobile: 640, auto: 1000, tv: 9999 };
-const PAD: Record<LayoutMode, number> = { mobile: 28, auto: 48, tv: 100 };
+const PAD: Record<LayoutMode, number> = { mobile: 28, auto: 48, tv: 140 };
 
 const T = {
   bg: '#fafaf9', surface: '#ffffff', subtle: '#f5f5f4', border: '#e7e5e4',
