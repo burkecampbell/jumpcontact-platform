@@ -83,10 +83,16 @@ export function blendYticaIntoPerioData(period: PeriodData, ytica: YticaRepActiv
     const y = yticaMap.get(agent.agent.toLowerCase());
     if (!y) return agent;
 
+    // Prefer CDR speed (fractional precision) over Ytica (whole seconds)
+    // Only use Ytica speed if CDR has no data for this agent
+    const speedSec = agent.speedSec != null && agent.speedSec > 0
+      ? agent.speedSec
+      : y.speedSec ?? agent.speedSec;
+
     return {
       ...agent,
       wrapUpSec: y.wrapUpSec ?? agent.wrapUpSec,
-      speedSec: y.speedSec ?? agent.speedSec,
+      speedSec,
       calls: Math.max(agent.calls, y.calls),
     };
   });

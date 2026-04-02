@@ -8,9 +8,9 @@ import type { DashboardData, RepAgent, AgentStat, AcctStat, MonthChampions } fro
 
 type LayoutMode = 'auto' | 'tv' | 'mobile';
 
-const SCALE: Record<LayoutMode, number> = { mobile: 1, auto: 1.3, tv: 2.8 };
+const SCALE: Record<LayoutMode, number> = { mobile: 1, auto: 1.3, tv: 3.5 };
 const MAX_W: Record<LayoutMode, number> = { mobile: 640, auto: 1000, tv: 9999 };
-const PAD: Record<LayoutMode, number> = { mobile: 28, auto: 48, tv: 140 };
+const PAD: Record<LayoutMode, number> = { mobile: 28, auto: 48, tv: 160 };
 
 const T = {
   bg: '#fafaf9', surface: '#ffffff', subtle: '#f5f5f4', border: '#e7e5e4',
@@ -18,9 +18,9 @@ const T = {
   positive: '#15803d', caution: '#b45309', negative: '#b91c1c', gold: '#ca8a04',
 };
 
-// ── Scale helper (set by parent each render) ────────────────────────
+// ── Scale helper ────────────────────────────────────────────────────
 let _s = 1;
-function S(v: number) { return Math.round(v * _s); }
+function S(px: number) { return Math.round(px * _s); }
 
 function fmtMin(m: number) { return m >= 60 ? `${Math.floor(m / 60)}h ${Math.round(m % 60)}m` : `${Math.round(m)}m`; }
 function dayName(d: string) { return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' }); }
