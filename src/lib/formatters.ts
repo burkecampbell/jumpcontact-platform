@@ -34,3 +34,19 @@ export function formatTime(iso: string): string {
     return '—';
   }
 }
+
+/** Format with date + time — "Jan 15, 2:30 PM" */
+export function formatDateTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'America/Edmonton',
+    });
+  } catch {
+    return '—';
+  }
+}

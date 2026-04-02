@@ -5,7 +5,7 @@ import NavBar from './NavBar';
 import Card from './Card';
 import DateRangePicker, { type DateRange } from './DateRangePicker';
 import { C, capitalize, fmtTalkTime, ACTIVE_AGENTS, agentColor } from '@/lib/constants';
-import { formatPhone, formatDuration, formatTime } from '@/lib/formatters';
+import { formatPhone, formatDuration, formatTime, formatDateTime } from '@/lib/formatters';
 import type { RawCall } from '@/lib/getDashboard';
 import type { CallsResponse, AgentCallSummary } from '@/lib/api-types';
 import { ArrowDown, ArrowUp, Filter, Download, Volume2, Square, CheckSquare, Share2 } from 'lucide-react';
@@ -460,7 +460,7 @@ function CallsPageInner() {
                           </button>
                         )}
                       </td>
-                      <td className="px-5 py-2.5 font-mono text-xs" style={{ color: C.sub }}>{formatTime(call.time)}</td>
+                      <td className="px-5 py-2.5 font-mono text-xs" style={{ color: C.sub }}>{dateRange.from !== dateRange.to ? formatDateTime(call.time) : formatTime(call.time)}</td>
                       <td className="px-5 py-2.5">
                         <div className="flex items-center gap-1.5">
                           <span className="w-1.5 h-1.5 rounded-full" style={{ background: agentColor(call.agent) }} />
