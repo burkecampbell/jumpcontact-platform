@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, Suspense, useMemo } from 'react';
 import NavBar from '../NavBar';
+import HealthBanner from '../HealthBanner';
 import ErrorBoundary from '../ErrorBoundary';
 import { C, isMonday } from '@/lib/constants';
 import type { DashboardData, PeriodData } from '@/lib/types';
@@ -131,6 +132,7 @@ function MeetingPageInner() {
   return (
     <>
       <NavBar pulledAt={data.pulledAt} />
+      <HealthBanner />
       <div className="max-w-4xl mx-auto px-4 py-6">
         {/* Day Tabs */}
         <div className="flex items-center justify-center gap-2 mb-4">

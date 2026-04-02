@@ -8,6 +8,7 @@ import { formatPhone, formatDuration, formatTime } from '@/lib/formatters';
 import type { DashboardData, RawCall, RepAgent } from '@/lib/getDashboard';
 import { Phone, PhoneMissed, TrendingUp, Zap, Users, ArrowDown, ArrowUp, Percent, Timer, Clock, ChevronUp, ChevronDown, Download, Share2 } from 'lucide-react';
 import ErrorBoundary from './ErrorBoundary';
+import HealthBanner from './HealthBanner';
 import InlinePlayer from './InlinePlayer';
 import { useBrand } from '@/hooks/useBrand';
 import MixedInsights from './MixedInsights';
@@ -128,6 +129,7 @@ function LiveNowPageInner() {
   return (
     <>
       <NavBar pulledAt={data.pulledAt} />
+      <HealthBanner />
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Mixed: Cross-brand insights */}
         {isMixed && data.brandBreakdown && <MixedInsights breakdown={data.brandBreakdown} />}

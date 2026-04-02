@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, Suspense } from 'react';
 import NavBar from './NavBar';
+import HealthBanner from './HealthBanner';
 import Card from './Card';
 import DateRangePicker, { type DateRange } from './DateRangePicker';
 import { C, capitalize, fmtTalkTime, ACTIVE_AGENTS, agentColor } from '@/lib/constants';
@@ -344,6 +345,7 @@ function CallsPageInner() {
   return (
     <>
       <NavBar pulledAt={data.pulledAt} />
+      <HealthBanner />
       <ErrorBoundary section="Call Log">
       <div className="max-w-6xl mx-auto px-4 py-6 space-y-5">
 

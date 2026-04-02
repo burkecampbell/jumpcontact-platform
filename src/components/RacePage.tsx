@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, Suspense } from 'react';
 import NavBar from './NavBar';
+import HealthBanner from './HealthBanner';
 import Card from './Card';
 import ErrorBoundary from './ErrorBoundary';
 import { C, GOAL, capitalize, computePace, agentColor, AGENT_SCHEDULE, fmtSpeed, fmtTalkTime, EXCLUDED_AGENTS } from '@/lib/constants';
@@ -306,6 +307,7 @@ function RacePageInner() {
   return (
     <>
       <NavBar pulledAt={data.pulledAt} />
+      <HealthBanner />
       <div className="max-w-6xl mx-auto px-4 py-6 space-y-5">
         {/* Hero: Ring + Pace Strip */}
         <ErrorBoundary section="MTD Pace">
