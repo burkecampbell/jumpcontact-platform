@@ -84,20 +84,28 @@ async function readSheet(sheetId: string, range: string): Promise<string[][]> {
   return data.values || [];
 }
 
-// ── Date parsing (matches sheets.ts logic) ──────────────────────────
+// ── Date parsing — exact copy of sheets.ts parseFlexDate ────────────
 
-function parseFlexDate(val: string): Date | null {
-  if (!val) return null;
-  // Try ISO first
-  const iso = new Date(val);
-  if (!isNaN(iso.getTime()) && val.includes('-')) return iso;
-  // Try M/D/YYYY H:MM:SS
-  const m = val.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\s*(AM|PM)?/i);
-  if (m) {
-    let hr = parseInt(m[4]);
-    if (m[7]?.toUpperCase() === 'PM' && hr < 12) hr += 12;
-    if (m[7]?.toUpperCase() === 'AM' && hr === 12) hr = 0;
-    return new Date(parseInt(m[3]), parseInt(m[1]) - 1, parseInt(m[2]), hr, parseInt(m[5]), parseInt(m[6]));
+function parseFlexDate(s: string): Date | null {
+  const parts = s.trim().split(/[\s,]+/);
+  const datePart = parts[0];
+  // Default to noon (not midnight) — midnight UTC becomes yesterday in MST
+  const timePart = parts[1] || '12:00';
+  if (datePart.includes('-') && datePart.length === 10) {
+    return new Date(`${datePart}T${timePart}`);
+  }
+  const slash = datePart.split('/');
+  if (slash.length >= 3) {
+    const a = parseInt(slash[0]);
+    const b = parseInt(slash[1]);
+    const y = parseInt(slash[2]);
+    const year = y < 100 ? 2000 + y : y;
+    if (a > 12) return new Date(`${year}-${String(b).padStart(2, '0')}-${String(a).padStart(2, '0')}T${timePart}`);
+    if (b > 12) return new Date(`${year}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}T${timePart}`);
+    if (year >= 2026) {
+      return new Date(`${year}-${String(b).padStart(2, '0')}-${String(a).padStart(2, '0')}T${timePart}`);
+    }
+    return new Date(`${year}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}T${timePart}`);
   }
   return null;
 }
