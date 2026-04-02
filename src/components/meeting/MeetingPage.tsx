@@ -27,6 +27,7 @@ function MeetingPageInner() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState(0);
+  const [autoPlay, setAutoPlay] = useState(true);
   const [activeDay, setActiveDay] = useState<'today' | 'yesterday' | 'friday' | 'weekend'>('yesterday');
 
   const fetchData = useCallback(async () => {
@@ -57,11 +58,12 @@ function MeetingPageInner() {
     return () => window.removeEventListener('keydown', handleKey);
   }, [step, goTo]);
 
-  // Auto-advance every 12s
+  // Auto-advance every 12s (togglable)
   useEffect(() => {
+    if (!autoPlay) return;
     const t = setInterval(() => setStep(s => (s + 1) % total), 12_000);
     return () => clearInterval(t);
-  }, [total]);
+  }, [total, autoPlay]);
 
   if (loading || !data) {
     return (
@@ -184,15 +186,29 @@ function MeetingPageInner() {
           >
             &larr; Back
           </button>
-          <div className="flex gap-1.5">
-            {stepLabels.map((_, i) => (
-              <span
-                key={i}
-                className="w-2 h-2 rounded-full transition-colors cursor-pointer"
-                style={{ background: step === i ? C.cyan : 'rgba(139,146,168,0.2)' }}
-                onClick={() => goTo(i)}
-              />
-            ))}
+          <div className="flex items-center gap-3">
+            <div className="flex gap-1.5">
+              {stepLabels.map((_, i) => (
+                <span
+                  key={i}
+                  className="w-2 h-2 rounded-full transition-colors cursor-pointer"
+                  style={{ background: step === i ? C.cyan : 'rgba(139,146,168,0.2)' }}
+                  onClick={() => goTo(i)}
+                />
+              ))}
+            </div>
+            <button
+              onClick={() => setAutoPlay(p => !p)}
+              className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border-none cursor-pointer transition-colors"
+              style={{
+                background: autoPlay ? C.cyan + '22' : 'rgba(139,146,168,0.1)',
+                color: autoPlay ? C.cyan : C.sub,
+                border: `1px solid ${autoPlay ? C.cyan + '44' : 'transparent'}`,
+              }}
+              title={autoPlay ? 'Pause auto-advance' : 'Resume auto-advance'}
+            >
+              {autoPlay ? '\u25AE\u25AE' : '\u25B6'}
+            </button>
           </div>
           <button
             onClick={() => goTo(step + 1)}

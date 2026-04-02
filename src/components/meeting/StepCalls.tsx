@@ -9,7 +9,10 @@ import { TH, TD } from './TableCells';
 /** Step 1: Calls Answered — agent performance table */
 export default function StepCalls({ period, label }: { period: PeriodData; label: string }) {
   const agents = period.repActivity.agents;
-  const total = agents.reduce((s, a) => s + a.calls, 0);
+  const agentSum = agents.reduce((s, a) => s + a.calls, 0);
+  // Use the API-derived headline (Ytica teamStats with proportional brand split)
+  // when available — it enforces JC + MSC = Mixed. Fall back to agent sum.
+  const total = period.answeredCalls ?? agentSum;
   const totalTalk = agents.reduce((s, a) => s + a.talkMin, 0);
 
   return (

@@ -9,8 +9,8 @@ import {
   fetchYticaRepActivity,
   fetchYticaTeamStats,
 } from '@/lib/sheets';
-import { blendYticaIntoPerioData, filterByBrand } from '@/lib/blender';
-import { parseBrand, MSC_ONLY_AGENTS, JC_ONLY_AGENTS, type Brand } from '@/lib/brand';
+import { blendYticaIntoPerioData, filterByBrand, type BrandSplitRatios } from '@/lib/blender';
+import { parseBrand, MSC_ONLY_AGENTS, JC_ONLY_AGENTS, BLENDED_AGENTS, type Brand } from '@/lib/brand';
 import {
   ACTIVE_AGENTS,
   OUTBOUND_AGENTS,
@@ -85,6 +85,67 @@ function buildDataQuality(calls: PairedCall[]): import('@/lib/types').DataQualit
     brandConfidence: calls.length > 0 ? Math.round((definitive / calls.length) * 1000) / 10 : 100,
   };
 }
+/** Compute brand split ratios for blended agents from CDR brand-tagged calls.
+ *  For each blended agent, returns the fraction of their calls belonging to JC vs MSC.
+ *  Calls with unknown brand are excluded — only definitive JC/MSC calls count. */
+function computeBlendedSplits(calls: PairedCall[]): BrandSplitRatios {
+  const counts: Record<string, { jc: number; msc: number }> = {};
+
+  for (const call of calls) {
+    const agent = normalizeAgent(call.agent || '')?.toLowerCase();
+    if (!agent || !BLENDED_AGENTS.has(agent)) continue;
+    if (!counts[agent]) counts[agent] = { jc: 0, msc: 0 };
+    if (call.resolvedBrand === 'jc') counts[agent].jc++;
+    else if (call.resolvedBrand === 'msc') counts[agent].msc++;
+  }
+
+  const ratios: BrandSplitRatios = {};
+  for (const [agent, c] of Object.entries(counts)) {
+    const known = c.jc + c.msc;
+    if (known === 0) {
+      ratios[agent] = { jc: 0.5, msc: 0.5 }; // No data — 50/50 fallback
+    } else {
+      ratios[agent] = { jc: c.jc / known, msc: c.msc / known };
+    }
+  }
+  return ratios;
+}
+
+/** Compute team-level brand proportion from CDR brand-tagged calls.
+ *  Returns the fraction of ALL known-brand calls that are JC.
+ *  Used to proportionally split teamStats.totalCalls so JC + MSC = Mixed exactly. */
+function computeBrandProportion(calls: PairedCall[]): { jcFraction: number; mscFraction: number } {
+  let jc = 0;
+  let msc = 0;
+  for (const call of calls) {
+    if (call.resolvedBrand === 'jc') jc++;
+    else if (call.resolvedBrand === 'msc') msc++;
+  }
+  const known = jc + msc;
+  if (known === 0) return { jcFraction: 0.5, mscFraction: 0.5 };
+  return { jcFraction: jc / known, mscFraction: msc / known };
+}
+
+/** Derive headline totals for a brand.
+ *  Mixed = teamStats total (Ytica truth). JC/MSC = proportional share.
+ *  JC + MSC = Mixed, mathematically enforced. */
+function deriveBrandTotals(
+  brand: Brand,
+  teamTotal: number | null,
+  agentCallSum: number,
+  proportion: { jcFraction: number; mscFraction: number },
+): number {
+  // When teamStats is available, derive from it
+  if (teamTotal && teamTotal > 0) {
+    if (brand === 'mixed') return teamTotal;
+    if (brand === 'jc') return Math.round(teamTotal * proportion.jcFraction);
+    // MSC = total - JC to guarantee JC + MSC = Mixed exactly
+    return teamTotal - Math.round(teamTotal * proportion.jcFraction);
+  }
+  // Fallback for today (no teamStats yet): use agent sum
+  return agentCallSum;
+}
+
 import { twilioAuth, WORKSPACE_SID } from '@/lib/auth/twilio';
 import { fetchAllWorkerStats } from '@/lib/daily-analytics';
 import { fetchMscConversions } from '@/lib/ops-center';
@@ -548,17 +609,25 @@ export async function GET(request: NextRequest) {
     };
 
     // ── Brand filtering ────────────────────────────────────────
-    // Use the Ytica-blended data from buildPeriodData as the source
-    // of truth for agent metrics. filterByBrand only removes/keeps
-    // agents — it does NOT re-count calls from CDR.
     // Ytica data is authoritative (scraped daily at 6am).
-    // CDR is only used for real-time recent calls and data quality.
-    let filteredToday = filterByBrand(raw.today, brand);
-    let filteredYesterday = filterByBrand(raw.yesterday, brand);
+    // CDR is used for: real-time recent calls, data quality, and
+    // computing brand split ratios for blended agents (Wendy, Sara).
+    // filterByBrand now SPLITS blended agent call counts by brand
+    // instead of double-counting them in both JC and MSC views.
 
-    // Data quality from CDR pairing (informational only)
+    // Tag CDR calls with brand for split ratios and recent call filtering
     const todayPaired = raw._todayCalls || [];
     const taggedToday = resolveCallBrands(todayPaired);
+    const todaySplits = computeBlendedSplits(taggedToday);
+
+    const yesterdayPaired = raw._yesterdayCalls || [];
+    const taggedYesterday = resolveCallBrands(yesterdayPaired);
+    const yesterdaySplits = computeBlendedSplits(taggedYesterday);
+
+    let filteredToday = filterByBrand(raw.today, brand, todaySplits);
+    let filteredYesterday = filterByBrand(raw.yesterday, brand, yesterdaySplits);
+
+    // Data quality from CDR pairing (informational only)
     const dataQuality = buildDataQuality(taggedToday);
 
     // Recent calls filtered by brand (CDR-based, for the call list only)
@@ -584,9 +653,17 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Compute KPI cards from Ytica-blended agent data
+    // Compute KPI cards — headline totals derived from Ytica teamStats
+    // so JC + MSC = Mixed exactly (proportional split from CDR brand distribution)
+    const todayProportion = computeBrandProportion(taggedToday);
     const todayAgents = filteredToday.repActivity.agents;
-    const brandAnswered = todayAgents.reduce((s, a) => s + a.calls, 0);
+    const todayAgentSum = todayAgents.reduce((s, a) => s + a.calls, 0);
+    const brandAnswered = deriveBrandTotals(
+      brand,
+      filteredToday.teamStats?.totalCalls ?? null,
+      todayAgentSum,
+      todayProportion,
+    );
     const brandMissed = filteredToday.missedCalls.total;
     const brandTotal = brandAnswered + brandMissed;
     const speedVals = todayAgents.filter(a => a.speedSec != null && a.speedSec! > 0).map(a => a.speedSec!);
@@ -612,7 +689,26 @@ export async function GET(request: NextRequest) {
         fastestPickup: brandFastest,
         convPerHour: brand === 'mixed' ? undefined : raw.today.convPerHour,
       },
-      yesterday: filteredYesterday,
+      yesterday: (() => {
+        // Headline totals from Ytica teamStats with proportional brand split
+        const ydProportion = computeBrandProportion(taggedYesterday);
+        const ydAgents = filteredYesterday.repActivity.agents;
+        const ydAgentSum = ydAgents.reduce((s, a) => s + a.calls, 0);
+        const ydAnswered = deriveBrandTotals(
+          brand,
+          filteredYesterday.teamStats?.totalCalls ?? null,
+          ydAgentSum,
+          ydProportion,
+        );
+        const ydMissed = filteredYesterday.missedCalls?.total ?? 0;
+        const ydTotal = ydAnswered + ydMissed;
+        return {
+          ...filteredYesterday,
+          totalCalls: ydTotal,
+          answeredCalls: ydAnswered,
+          answerRate: ydTotal > 0 ? Math.round((ydAnswered / ydTotal) * 100) : 0,
+        };
+      })(),
       recentCalls: brandRecentCalls,
       dataQuality,
       brand,

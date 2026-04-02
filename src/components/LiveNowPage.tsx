@@ -78,8 +78,8 @@ function LiveNowPageInner() {
 
   const todayConv     = data.today.conversions.total;
   const yesterdayConv = data.yesterday.conversions.total;
-  const todayCalls    = data.today.repActivity.agents.reduce((s, a) => s + a.calls, 0);
-  const yesterdayCalls= data.yesterday.repActivity.agents.reduce((s, a) => s + a.calls, 0);
+  const todayCalls    = data.today.answeredCalls ?? data.today.repActivity.agents.reduce((s, a) => s + a.calls, 0);
+  const yesterdayCalls= data.yesterday.answeredCalls ?? data.yesterday.repActivity.agents.reduce((s, a) => s + a.calls, 0);
   const todayMissed   = data.today.missedCalls.total;
   const yesterdayMissed= data.yesterday.missedCalls.total;
   const avgSpeed      = data.today.repActivity.avgSpeedSec;

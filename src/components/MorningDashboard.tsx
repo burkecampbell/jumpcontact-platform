@@ -84,7 +84,7 @@ function AgentBar({ rank, name, value, max, suffix = '' }: { rank: number; name:
 
 function StepCalls({ data }: { data: DashboardData }) {
   const agents = data.yesterday.repActivity.agents.filter(a => !EXCLUDED_AGENTS.includes(a.agent)).sort((a, b) => b.calls - a.calls);
-  const total = agents.reduce((s, a) => s + a.calls, 0);
+  const total = data.yesterday.answeredCalls ?? agents.reduce((s, a) => s + a.calls, 0);
   return (
     <div>
       <div style={{ marginBottom: G(24) }}><Label>Total calls answered</Label><div style={{ marginTop: G(8) }}><Num>{total}</Num></div></div>

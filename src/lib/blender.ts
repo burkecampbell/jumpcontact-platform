@@ -2,44 +2,61 @@ import type { PeriodData, RepAgent } from './types';
 import type { YticaAgent, YticaRepActivity } from './sheets';
 import { type Brand, MSC_ONLY_AGENTS, BLENDED_AGENTS } from './brand';
 
+// ── Brand Split Ratios ──────────────────────────────────────────────────────
+// For blended agents (Wendy, Sara), the fraction of their calls belonging
+// to each brand. Derived from CDR brand resolution (client name / trunk phone).
+
+export interface BrandSplitRatios {
+  [agent: string]: { jc: number; msc: number };
+}
+
 // ── Brand Filtering ─────────────────────────────────────────────────────────
 
-/** Filter period data by brand. The main entry point. */
-export function filterByBrand(period: PeriodData, brand: Brand): PeriodData {
+/** Filter period data by brand. Blended agents are SPLIT, not duplicated.
+ *  @param splits — CDR-derived fractions for blended agents */
+export function filterByBrand(period: PeriodData, brand: Brand, splits?: BrandSplitRatios): PeriodData {
   switch (brand) {
-    case 'jc':
-      return filterOutMSCAgents(period);
-    case 'msc':
-      return filterToMSCAgents(period);
     case 'mixed':
       return stripConversions(period); // keep ALL agents, remove conversion data
+    case 'jc':
+    case 'msc':
+      return filterAndSplitByBrand(period, brand, splits);
   }
 }
 
-/** JC view: remove MSC-only agents */
-export function filterOutMSCAgents(period: PeriodData): PeriodData {
+/** JC/MSC view: keep the right agents, SPLIT blended agent call counts */
+function filterAndSplitByBrand(
+  period: PeriodData,
+  brand: 'jc' | 'msc',
+  splits?: BrandSplitRatios,
+): PeriodData {
+  const isJC = brand === 'jc';
   return {
     ...period,
     repActivity: {
       ...period.repActivity,
-      agents: period.repActivity.agents.filter(a => !MSC_ONLY_AGENTS.has(a.agent.toLowerCase())),
-      outbound: period.repActivity.outbound.filter(a => !MSC_ONLY_AGENTS.has(a.agent.toLowerCase())),
-    },
-  };
-}
-
-/** MSC view: keep only MSC-only + blended agents */
-export function filterToMSCAgents(period: PeriodData): PeriodData {
-  return {
-    ...period,
-    repActivity: {
-      ...period.repActivity,
-      agents: period.repActivity.agents.filter(a => {
-        const lower = a.agent.toLowerCase();
-        return MSC_ONLY_AGENTS.has(lower) || BLENDED_AGENTS.has(lower);
-      }),
+      agents: period.repActivity.agents
+        .filter(a => {
+          const lower = a.agent.toLowerCase();
+          if (isJC) return !MSC_ONLY_AGENTS.has(lower); // JC + blended
+          return MSC_ONLY_AGENTS.has(lower) || BLENDED_AGENTS.has(lower); // MSC + blended
+        })
+        .map(a => {
+          const lower = a.agent.toLowerCase();
+          if (!BLENDED_AGENTS.has(lower)) return a; // Pure agent — no split needed
+          // Split blended agent's calls by brand ratio
+          const ratio = splits?.[lower];
+          if (!ratio) return { ...a, calls: 0, talkMin: 0 }; // No CDR data — safe zero
+          const fraction = isJC ? ratio.jc : ratio.msc;
+          return {
+            ...a,
+            calls: Math.round(a.calls * fraction),
+            talkMin: +(a.talkMin * fraction).toFixed(1),
+          };
+        }),
       outbound: period.repActivity.outbound.filter(a => {
         const lower = a.agent.toLowerCase();
+        if (isJC) return !MSC_ONLY_AGENTS.has(lower);
         return MSC_ONLY_AGENTS.has(lower) || BLENDED_AGENTS.has(lower);
       }),
     },
@@ -93,7 +110,8 @@ export function blendYticaIntoPerioData(period: PeriodData, ytica: YticaRepActiv
       ...agent,
       wrapUpSec: y.wrapUpSec ?? agent.wrapUpSec,
       speedSec,
-      calls: Math.max(agent.calls, y.calls),
+      // Prefer Ytica calls (source of truth) when available; fall back to CDR
+      calls: y.calls > 0 ? y.calls : agent.calls,
     };
   });
 
