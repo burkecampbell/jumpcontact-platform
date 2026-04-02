@@ -181,6 +181,35 @@ describe('deriveBrandView', () => {
   });
 });
 
+describe('no-ratio fallback (blended agent with no CDR data)', () => {
+  // Sara has calls but NO CDR ratio — should split 50/50 not zero
+  const noRatioSummary: BrandCallSummary = {
+    ...makeSummary(),
+    agentRatios: { wendy: { jc: 0.7, msc: 0.3 } }, // Sara missing!
+  };
+  const period = makePeriod(['omar', 'sue', 'wendy', 'sara']);
+
+  it('splits evenly when no CDR ratio exists', () => {
+    const jc = deriveBrandView(period, 'jc', noRatioSummary);
+    const msc = deriveBrandView(period, 'msc', noRatioSummary);
+    const saraJC = jc.repActivity.agents.find(a => a.agent === 'sara')!.calls;
+    const saraMSC = msc.repActivity.agents.find(a => a.agent === 'sara')!.calls;
+    expect(saraJC).toBe(5);  // ceil(10/2)
+    expect(saraMSC).toBe(5); // floor(10/2)
+    expect(saraJC + saraMSC).toBe(10); // exact additivity
+  });
+
+  it('handles odd call counts exactly', () => {
+    const oddPeriod = makePeriod(['omar', 'sue', 'wendy', 'sara']);
+    oddPeriod.repActivity.agents.find(a => a.agent === 'sara')!.calls = 17;
+    const jc = deriveBrandView(oddPeriod, 'jc', noRatioSummary);
+    const msc = deriveBrandView(oddPeriod, 'msc', noRatioSummary);
+    const saraJC = jc.repActivity.agents.find(a => a.agent === 'sara')!.calls;
+    const saraMSC = msc.repActivity.agents.find(a => a.agent === 'sara')!.calls;
+    expect(saraJC + saraMSC).toBe(17); // ceil(9) + floor(8) = 17
+  });
+});
+
 describe('buildBrandSummary', () => {
   it('buckets calls by brand correctly', () => {
     const calls: PairedCall[] = [

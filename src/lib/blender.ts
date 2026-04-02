@@ -165,12 +165,22 @@ function deriveSingleBrandView(
       const lower = a.agent.toLowerCase();
       if (!BLENDED_AGENTS.has(lower)) return a;
       const ratio = summary.agentRatios[lower];
-      if (!ratio) return { ...a, calls: 0, talkMin: 0 };
-      const fraction = isJC ? ratio.jc : ratio.msc;
+      // No CDR ratio → split 50/50 (NOT zero — zeroing loses calls from Mixed)
+      // JC gets ceil, MSC gets floor → guarantees JC + MSC = original exactly
+      if (!ratio) {
+        const calls = isJC ? Math.ceil(a.calls / 2) : Math.floor(a.calls / 2);
+        const talk = isJC
+          ? +(Math.ceil(a.talkMin * 10 / 2) / 10).toFixed(1)
+          : +(a.talkMin - Math.ceil(a.talkMin * 10 / 2) / 10).toFixed(1);
+        return { ...a, calls, talkMin: +talk };
+      }
+      // JC gets round(), MSC gets remainder → exact additivity
+      const jcCalls = Math.round(a.calls * ratio.jc);
+      const jcTalk = +(a.talkMin * ratio.jc).toFixed(1);
       return {
         ...a,
-        calls: Math.round(a.calls * fraction),
-        talkMin: +(a.talkMin * fraction).toFixed(1),
+        calls: isJC ? jcCalls : a.calls - jcCalls,
+        talkMin: isJC ? jcTalk : +(a.talkMin - jcTalk).toFixed(1),
       };
     });
 
