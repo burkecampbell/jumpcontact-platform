@@ -7,7 +7,7 @@ import Card from './Card';
 import ErrorBoundary from './ErrorBoundary';
 import { C, GOAL, capitalize, computePace, agentColor, AGENT_SCHEDULE, fmtSpeed, fmtTalkTime, EXCLUDED_AGENTS } from '@/lib/constants';
 import type { DashboardData, AcctStat, RepAgent } from '@/lib/getDashboard';
-import { Target, BarChart3, Trophy, Zap, Phone, Clock, Timer, Download, TrendingUp, Award, Star, ShieldCheck, Crosshair } from 'lucide-react';
+import { Target, BarChart3, Trophy, Zap, Phone, Clock, Timer, Download, TrendingUp, Award, Star, ShieldCheck, Crosshair, ChevronUp, ChevronDown } from 'lucide-react';
 import { useBrand } from '@/hooks/useBrand';
 import { isAgentForBrand } from '@/lib/brand';
 
@@ -89,6 +89,27 @@ async function downloadClientReport(
 
 import { TH, TD } from './TableCells';
 import RingChart from './RingChart';
+// ── Sortable Table Header ───────────────────────────────────────────────────
+
+function SortTH({ k, cur, asc, set, flip, children }: {
+  k: RaceSortKey; cur: RaceSortKey; asc: boolean;
+  set: (k: RaceSortKey) => void; flip: (v: boolean | ((p: boolean) => boolean)) => void;
+  children: React.ReactNode;
+}) {
+  const active = cur === k;
+  return (
+    <th
+      className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider cursor-pointer select-none whitespace-nowrap"
+      style={{ color: active ? C.cyan : C.sub }}
+      onClick={() => { if (active) flip((p: boolean) => !p); else { set(k); flip(false); } }}
+    >
+      <span className="inline-flex items-center gap-0.5">
+        {children}
+        {active && (asc ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
+      </span>
+    </th>
+  );
+}
 
 // ── Pace Stat Pill ──────────────────────────────────────────────────────────
 
@@ -165,11 +186,15 @@ function SpeedBadge({ sec }: { sec: number | null }) {
 
 // ── Main Component ──────────────────────────────────────────────────────────
 
+type RaceSortKey = 'mtd' | 'avgDay' | 'convHr' | 'projected' | 'bestDay' | 'calls' | 'speed' | 'pickup' | 'yield';
+
 function RacePageInner() {
   const { brand } = useBrand();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<RaceSortKey>('mtd');
+  const [sortAsc, setSortAsc] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -317,6 +342,27 @@ function RacePageInner() {
   const dayNumbers = Array.from({ length: pace.dayOfMonth }, (_, i) => i + 1);
   const agentNames = mtd.byAgent.filter(a => !EXCLUDED_AGENTS.includes(a.agent) && isAgentForBrand(a.agent, brand)).map(a => a.agent.toLowerCase());
 
+  // Sort agents by selected column
+  const sortedAgents = [...agentStats].sort((a, b) => {
+    const todayA = todayByAgent[a.agent.toLowerCase()];
+    const todayB = todayByAgent[b.agent.toLowerCase()];
+    let va = 0, vb = 0;
+    switch (sortKey) {
+      case 'mtd': va = a.count; vb = b.count; break;
+      case 'avgDay': va = a.dailyAvg; vb = b.dailyAvg; break;
+      case 'convHr': va = a.convPerHr ?? -1; vb = b.convPerHr ?? -1; break;
+      case 'projected': va = a.projected; vb = b.projected; break;
+      case 'bestDay': va = a.bestDay; vb = b.bestDay; break;
+      case 'calls': va = todayA?.calls ?? 0; vb = todayB?.calls ?? 0; break;
+      case 'speed': va = todayA?.speedSec ?? 999; vb = todayB?.speedSec ?? 999; break;
+      case 'pickup': va = todayA?.pickupRate ?? -1; vb = todayB?.pickupRate ?? -1; break;
+      case 'yield': va = todayA?.trueYield ?? -1; vb = todayB?.trueYield ?? -1; break;
+    }
+    // For speed, lower is better — ascending by default
+    if (sortKey === 'speed') return sortAsc ? vb - va : va - vb;
+    return sortAsc ? va - vb : vb - va;
+  });
+
   const topAccounts = mtd.byAccount || [];
 
   return (
@@ -458,20 +504,20 @@ function RacePageInner() {
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                   <TH>#</TH>
                   <TH>Agent</TH>
-                  <TH right>MTD</TH>
-                  <TH right>Avg/Day</TH>
-                  <TH right>Conv/Hr</TH>
-                  <TH right>Projected</TH>
-                  <TH right>Best Day</TH>
+                  <SortTH k="mtd" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>MTD</SortTH>
+                  <SortTH k="avgDay" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Avg/Day</SortTH>
+                  <SortTH k="convHr" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Conv/Hr</SortTH>
+                  <SortTH k="projected" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Projected</SortTH>
+                  <SortTH k="bestDay" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Best Day</SortTH>
                   <th className="px-1 py-2" style={{ borderLeft: `1px solid ${C.border}` }} />
-                  <TH right>Calls</TH>
-                  <TH right>Speed</TH>
-                  <TH right>Pickup</TH>
-                  <TH right>Yield</TH>
+                  <SortTH k="calls" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Calls</SortTH>
+                  <SortTH k="speed" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Speed</SortTH>
+                  <SortTH k="pickup" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Pickup</SortTH>
+                  <SortTH k="yield" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Yield</SortTH>
                 </tr>
               </thead>
               <tbody>
-                {agentStats.map((a, i) => {
+                {sortedAgents.map((a, i) => {
                   const today = todayByAgent[a.agent.toLowerCase()];
                   return (
                   <tr key={a.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>

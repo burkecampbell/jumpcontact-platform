@@ -269,12 +269,19 @@ export function blendYticaIntoPerioData(period: PeriodData, ytica: YticaRepActiv
     const y = yticaMap.get(agent.agent.toLowerCase());
     if (!y) return agent;
 
-    // Ytica speed = actual ring duration (5-6s typical).
-    // CDR speed = total customer wait including queue/IVR (14-20s).
-    // Ytica wins when available — it's more accurate.
-    const speedSec = y.speedSec != null && y.speedSec > 0
-      ? y.speedSec
-      : agent.speedSec;
+    // Ytica speed = actual ring duration (authoritative, but whole seconds).
+    // CDR speed = inbound-to-agent gap (includes queue, but has decimal precision).
+    // Strategy: use Ytica value but if CDR is close (within 3s), prefer CDR for precision.
+    let speedSec = agent.speedSec;
+    if (y.speedSec != null && y.speedSec > 0) {
+      if (agent.speedSec != null && agent.speedSec > 0 && Math.abs(agent.speedSec - y.speedSec) <= 3) {
+        // CDR and Ytica agree (within 3s) — use CDR for decimal precision
+        speedSec = agent.speedSec;
+      } else {
+        // Ytica is authoritative when CDR diverges significantly
+        speedSec = y.speedSec;
+      }
+    }
 
     return {
       ...agent,
