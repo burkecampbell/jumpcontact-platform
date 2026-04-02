@@ -23,6 +23,32 @@ import {
 } from '@/lib/constants';
 import { cached } from '@/lib/cache';
 import { resolveClient, isMscPhone, getClientBrand } from '@/lib/clients';
+
+/** Filter paired calls by brand — same logic as /api/calls route */
+function filterCallsByBrand(calls: PairedCall[], brand: Brand): PairedCall[] {
+  if (brand === 'mixed') return calls;
+  return calls.filter(call => {
+    // Client name brand is the most reliable
+    if (call.client) {
+      const cb = getClientBrand(call.client);
+      if (cb) return cb === brand;
+    }
+    // Trunk phone number
+    const trunk = call.direction === 'inbound' ? call.to : call.from;
+    if (trunk?.startsWith('+')) {
+      const trunkIsMsc = isMscPhone(trunk);
+      return brand === 'msc' ? trunkIsMsc : !trunkIsMsc;
+    }
+    // Agent brand for calls with no trunk/client info
+    const agent = normalizeAgent(call.agent || '');
+    if (agent) {
+      const lower = agent.toLowerCase();
+      if (MSC_ONLY_AGENTS.has(lower)) return brand === 'msc';
+      if (JC_ONLY_AGENTS.has(lower)) return brand === 'jc';
+    }
+    return brand === 'jc';
+  });
+}
 import { twilioAuth, WORKSPACE_SID } from '@/lib/auth/twilio';
 import { fetchAllWorkerStats } from '@/lib/daily-analytics';
 import { fetchMscConversions } from '@/lib/ops-center';
@@ -475,13 +501,43 @@ export async function GET(request: NextRequest) {
     const brand = parseBrand(request.nextUrl.searchParams.get('brand'));
 
     // Cache raw (unfiltered) data once — all brands share the same fetch
-    const raw = await cached('dashboard-data', 30_000, fetchDashboardData);
+    const raw = await cached('dashboard-data', 30_000, fetchDashboardData) as DashboardData & {
+      _todayCalls?: PairedCall[];
+      _yesterdayCalls?: PairedCall[];
+      _schedule?: Awaited<ReturnType<typeof fetchSchedule>>;
+      _workerStats?: Record<string, { wrapUpSec: number; totalActiveSec: number; avgWrapUp: number; reservationsCreated?: number; reservationsAccepted?: number; reservationsRejected?: number; reservationsTimedOut?: number }>;
+      _yesterdayWorkerStats?: Record<string, { wrapUpSec: number; totalActiveSec: number; avgWrapUp: number; reservationsCreated?: number; reservationsAccepted?: number; reservationsRejected?: number; reservationsTimedOut?: number }>;
+      _todayConversions?: { total: number; byAgent: Record<string, number>; byAccount: AcctStat[]; byHour: number[] };
+      _yesterdayConv?: { total: number; byAgent: Record<string, number>; byAccount: AcctStat[]; byHour: number[] };
+    };
 
-    // Apply brand filtering on read (cheap, no API calls)
-    let filteredToday = filterByBrand(raw.today, brand);
-    let filteredYesterday = filterByBrand(raw.yesterday, brand);
+    // ── Brand-level call filtering ──────────────────────────────
+    // Filter paired calls by trunk brand, then rebuild agent stats.
+    // This ensures Wendy's calls are split: JC trunk calls go to JC,
+    // MSC trunk calls go to MSC. No double-counting.
+    const todayPaired = raw._todayCalls || [];
+    const yesterdayPaired = raw._yesterdayCalls || [];
+    const sched = raw._schedule || [];
+    const todayWS = raw._workerStats || {};
+    const yesterdayWS = raw._yesterdayWorkerStats || {};
+    const todayConvRaw = raw._todayConversions || { total: 0, byAgent: {}, byAccount: [], byHour: new Array(24).fill(0) };
+    const yesterdayConvRaw = raw._yesterdayConv || { total: 0, byAgent: {}, byAccount: [], byHour: new Array(24).fill(0) };
 
-    // MSC conversions come from GHL (via ops-center), not Google Sheets
+    // Filter calls to this brand's trunks
+    const brandTodayCalls = filterCallsByBrand(todayPaired, brand);
+    const brandYesterdayCalls = filterCallsByBrand(yesterdayPaired, brand);
+
+    // Rebuild rep activity from brand-filtered calls
+    const todayDateObj = new Date((raw.date || todayMST()) + 'T00:00:00');
+    const brandTodayRep = buildRepActivity(brandTodayCalls, todayConvRaw, todayWS, sched, todayDateObj);
+    const yesterdayDateObj = new Date((raw.yesterdayDate || '') + 'T00:00:00');
+    const brandYesterdayRep = buildRepActivity(brandYesterdayCalls, yesterdayConvRaw, yesterdayWS, sched, yesterdayDateObj);
+
+    // Apply brand agent filter on top (remove MSC-only from JC, etc.)
+    let filteredToday = filterByBrand({ ...raw.today, repActivity: brandTodayRep }, brand);
+    let filteredYesterday = filterByBrand({ ...raw.yesterday, repActivity: brandYesterdayRep }, brand);
+
+    // MSC conversions from GHL (not Google Sheets)
     if (brand === 'msc') {
       try {
         const mscConv = await cached('msc-conv-today', 60_000, () =>
@@ -498,53 +554,43 @@ export async function GET(request: NextRequest) {
         };
       } catch (err) {
         console.warn('[API /data] MSC conversions unavailable:', err instanceof Error ? err.message : err);
-        // Fall through with JC conversion data stripped by filterByBrand
       }
     }
 
-    // Recompute KPI cards from brand-filtered agent data
+    // Compute KPI cards from brand-filtered data
     const todayAgents = filteredToday.repActivity.agents;
-    const brandCalls = todayAgents.reduce((s, a) => s + a.calls, 0);
+    const brandAnswered = todayAgents.reduce((s, a) => s + a.calls, 0);
+    const brandMissedCalls = brandTodayCalls.filter(c => c.direction === 'inbound' && c.duration === 0).length;
+    const brandTotal = brandAnswered + brandMissedCalls;
     const speedVals = todayAgents.filter(a => a.speedSec != null && a.speedSec! > 0).map(a => a.speedSec!);
     const brandAvgSpeed = speedVals.length > 0
       ? Math.round((speedVals.reduce((s, v) => s + v, 0) / speedVals.length) * 10) / 10
-      : raw.today.teamAvgSpeed;
-    const brandFastest = speedVals.length > 0 ? Math.min(...speedVals) : raw.today.fastestPickup;
+      : 0;
+    const brandFastest = speedVals.length > 0 ? Math.min(...speedVals) : 0;
 
-    // Filter recentCalls by brand (same logic as /api/calls)
-    const brandRecentCalls = brand === 'mixed'
-      ? raw.recentCalls
-      : raw.recentCalls.filter(call => {
-          const agent = normalizeAgent(call.agent || '');
-          if (agent) {
-            const lower = agent.toLowerCase();
-            if (MSC_ONLY_AGENTS.has(lower)) return brand === 'msc';
-            if (JC_ONLY_AGENTS.has(lower)) return brand === 'jc';
-          }
-          if (call.account) {
-            const cb = getClientBrand(call.account);
-            if (cb) return cb === brand;
-          }
-          return brand === 'jc';
-        });
+    // Filter recent calls by brand
+    const brandRecentCalls = buildRecentCalls(brandTodayCalls);
 
-    // Total calls includes missed; answered is agent-handled only
-    const brandMissed = filteredToday.missedCalls.total;
-    const brandTotal = brandCalls + brandMissed;
+    // Strip internal fields from response
+    const { _todayCalls, _yesterdayCalls, _schedule, _workerStats, _yesterdayWorkerStats, _todayConversions, _yesterdayConv, ...cleanRaw } = raw;
 
     const data = {
-      ...raw,
+      ...cleanRaw,
       today: {
         ...filteredToday,
         totalCalls: brandTotal,
-        answeredCalls: brandCalls,
-        answerRate: brandTotal > 0 ? Math.round((brandCalls / brandTotal) * 100) : 0,
-        missedCallRate: raw.today.missedCallRate,
+        answeredCalls: brandAnswered,
+        answerRate: brandTotal > 0 ? Math.round((brandAnswered / brandTotal) * 100) : 0,
+        missedCallRate: brandTotal > 0 ? Math.round((brandMissedCalls / brandTotal) * 1000) / 10 : 0,
         teamAvgSpeed: brandAvgSpeed,
         fastestPickup: brandFastest,
         convPerHour: brand === 'mixed' ? undefined : raw.today.convPerHour,
       },
-      yesterday: filteredYesterday,
+      yesterday: {
+        ...filteredYesterday,
+        totalCalls: brandYesterdayCalls.length,
+        answeredCalls: brandYesterdayCalls.filter(c => c.status === 'completed').length,
+      },
       recentCalls: brandRecentCalls,
       brand,
     };
@@ -780,7 +826,7 @@ async function fetchDashboardData(): Promise<DashboardData> {
   // ── Assemble ───────────────────────────────────────────────────
   const pulledAt = new Date().toISOString();
 
-  const dashboard: DashboardData = {
+  const dashboard: DashboardData & { _todayCalls?: PairedCall[]; _yesterdayCalls?: PairedCall[]; _schedule?: Awaited<ReturnType<typeof fetchSchedule>>; _workerStats?: Record<string, { wrapUpSec: number; totalActiveSec: number; avgWrapUp: number; reservationsCreated?: number; reservationsAccepted?: number; reservationsRejected?: number; reservationsTimedOut?: number }>; _yesterdayWorkerStats?: typeof yesterdayWorkerStats; _todayConversions?: typeof todayConversions; _yesterdayConv?: typeof yesterdayConv } = {
     today,
     yesterday,
     mtd,
@@ -794,6 +840,14 @@ async function fetchDashboardData(): Promise<DashboardData> {
     recentCalls,
     prevMonthChampions,
     pulledAt,
+    // Internal: used by GET handler for brand-specific rebuilds
+    _todayCalls: todayCalls,
+    _yesterdayCalls: yesterdayCalls,
+    _schedule: schedule,
+    _workerStats: todayWorkerStats,
+    _yesterdayWorkerStats: yesterdayWorkerStats,
+    _todayConversions: todayConversions,
+    _yesterdayConv: yesterdayConv,
   };
 
   return dashboard;
