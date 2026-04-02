@@ -132,5 +132,94 @@ export function getClerkPageElements() {
     userPreviewSecondaryIdentifier: {
       color: C.sub,
     },
+    // ── UserProfile modal (Manage Account) ──
+    modalBackdrop: {
+      background: 'rgba(0,0,0,0.7)',
+    },
+    modalContent: {
+      background: C.bg,
+      border: `1px solid ${C.border}`,
+    },
+    // Navbar (left sidebar: Profile, Security)
+    navbar: {
+      background: C.bg,
+      borderRight: `1px solid ${C.border}`,
+    },
+    navbarButton: {
+      color: C.sub,
+    },
+    navbarButtonIcon: {
+      color: C.sub,
+    },
+    // Active nav item
+    'navbarButton__active': {
+      color: C.cyan,
+    },
+    // Page content area
+    pageScrollBox: {
+      background: C.bg,
+    },
+    page: {
+      color: C.text,
+    },
+    // Profile details section
+    profileSection: {
+      borderBottom: `1px solid ${C.border}`,
+    },
+    profileSectionTitleText: {
+      color: C.text,
+    },
+    profileSectionTitle: {
+      borderBottom: `1px solid ${C.border}`,
+    },
+    profileSectionContent: {
+      color: C.text,
+    },
+    profileSectionPrimaryButton: {
+      color: C.cyan,
+    },
+    // Account page heading
+    headerTitle__profile: {
+      color: C.text,
+    },
+    headerSubtitle__profile: {
+      color: C.sub,
+    },
+    // Form fields inside profile
+    formFieldLabel__profile: {
+      color: C.sub,
+    },
+    // Badges (Primary, Verified, etc.)
+    badge: {
+      color: C.sub,
+      background: 'rgba(62,165,195,0.15)',
+      borderColor: C.border,
+    },
+    // Connected accounts section
+    providerIcon: {
+      filter: 'brightness(1.2)',
+    },
+    // General text overrides for the modal
+    accordionTriggerButton: {
+      color: C.text,
+    },
+    accordionContent: {
+      color: C.sub,
+    },
+    // Section subtitles / descriptions
+    formHeaderTitle: {
+      color: C.text,
+    },
+    formHeaderSubtitle: {
+      color: C.sub,
+    },
+    // Active devices / sessions section
+    activeDeviceListItem: {
+      borderBottom: `1px solid ${C.border}`,
+    },
+    // Destructive action buttons (sign out of all, delete)
+    formButtonReset: {
+      color: C.pink,
+    },
   };
 }
