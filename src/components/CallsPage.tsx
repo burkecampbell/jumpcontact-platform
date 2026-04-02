@@ -278,7 +278,7 @@ function CallsPageInner() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [brand]);
 
   useEffect(() => {
     if (!dateRange.from) return; // Wait for client-side init
@@ -288,7 +288,7 @@ function CallsPageInner() {
       const interval = setInterval(() => fetchData(dateRange), 120_000);
       return () => clearInterval(interval);
     }
-  }, [fetchData, dateRange, todayMST, brand]);
+  }, [fetchData, dateRange, todayMST]);
 
   // Build unique client list from call data
   const clientOptions = useMemo(() => {

@@ -3,7 +3,7 @@ import { normalizeAgent, decodeAgent, TZ } from './constants';
 import { resolveClient, isJCPhone } from './clients';
 import type { CallLeg, PairedCall } from './types';
 
-const PAIR_WINDOW_MS = 30_000;
+const PAIR_WINDOW_MS = 60_000;
 const PAGE_SIZE = 500;
 
 interface TwilioCallResource {
@@ -158,6 +158,48 @@ export function pairCallLegs(legs: CallLeg[]): PairedCall[] {
         agentLegSid: agentLeg.sid,
       });
       continue;
+    }
+
+    // ── Strategy 1b: Cross-trunk time-window match ─────────────────
+    //   Flex TaskRouter creates agent legs whose `from` is a different
+    //   trunk than the inbound leg's `to`.  Match ANY unmatched inbound
+    //   leg within the time window regardless of trunk number.
+    {
+      let crossBest: CallLeg | undefined;
+      let crossDelta = PAIR_WINDOW_MS + 1;
+
+      for (const inbound of inboundLegs) {
+        if (pairedInboundSids.has(inbound.sid)) continue;
+        const inboundTime = new Date(inbound.startTime).getTime();
+        const delta = Math.abs(agentTime - inboundTime);
+        if (delta < crossDelta) {
+          crossDelta = delta;
+          crossBest = inbound;
+        }
+      }
+
+      if (crossBest && crossDelta <= PAIR_WINDOW_MS) {
+        pairedInboundSids.add(crossBest.sid);
+
+        const inboundMs = new Date(crossBest.startTime).getTime();
+        const ringTime = agentTime > inboundMs ? Math.round((agentTime - inboundMs) / 1000) : 0;
+
+        paired.push({
+          id: crossBest.sid,
+          time: crossBest.startTime,
+          agent: normalizeAgent(agentName),
+          from: crossBest.from,
+          to: crossBest.to,
+          client: resolveClient(crossBest.to),
+          direction: 'inbound',
+          duration: agentLeg.duration,
+          totalDuration: crossBest.duration,
+          ringTime,
+          status: agentLeg.status,
+          agentLegSid: agentLeg.sid,
+        });
+        continue;
+      }
     }
 
     // ── Strategy 2: Parent-call SID lookup ─────────────────────────

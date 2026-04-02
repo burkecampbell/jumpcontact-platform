@@ -469,39 +469,39 @@ function getWeekDates(offsetWeeks: number): string[] {
 export async function GET(request: NextRequest) {
   try {
     const brand = parseBrand(request.nextUrl.searchParams.get('brand'));
-    const data = await cached(`dashboard-data:${brand}`, 30_000, async () => {
-      const raw = await fetchDashboardData();
 
-      // Apply brand filtering to today + yesterday
-      const filteredToday = filterByBrand(raw.today, brand);
-      const filteredYesterday = filterByBrand(raw.yesterday, brand);
+    // Cache raw (unfiltered) data once — all brands share the same fetch
+    const raw = await cached('dashboard-data', 30_000, fetchDashboardData);
 
-      // Recompute KPI cards from brand-filtered agent data
-      const todayAgents = filteredToday.repActivity.agents;
-      const brandCalls = todayAgents.reduce((s, a) => s + a.calls, 0);
-      const brandTalkSec = todayAgents.reduce((s, a) => s + (a.talkMin || 0) * 60, 0);
-      const speedVals = todayAgents.filter(a => a.speedSec != null && a.speedSec! > 0).map(a => a.speedSec!);
-      const brandAvgSpeed = speedVals.length > 0
-        ? Math.round((speedVals.reduce((s, v) => s + v, 0) / speedVals.length) * 10) / 10
-        : raw.today.teamAvgSpeed;
-      const brandFastest = speedVals.length > 0 ? Math.min(...speedVals) : raw.today.fastestPickup;
+    // Apply brand filtering on read (cheap, no API calls)
+    const filteredToday = filterByBrand(raw.today, brand);
+    const filteredYesterday = filterByBrand(raw.yesterday, brand);
 
-      return {
-        ...raw,
-        today: {
-          ...filteredToday,
-          totalCalls: brandCalls,
-          answeredCalls: brandCalls,
-          answerRate: raw.today.answerRate, // answer rate stays global (Twilio-level)
-          missedCallRate: raw.today.missedCallRate,
-          teamAvgSpeed: brandAvgSpeed,
-          fastestPickup: brandFastest,
-          convPerHour: brand === 'mixed' ? undefined : raw.today.convPerHour,
-        },
-        yesterday: filteredYesterday,
-        brand,
-      };
-    });
+    // Recompute KPI cards from brand-filtered agent data
+    const todayAgents = filteredToday.repActivity.agents;
+    const brandCalls = todayAgents.reduce((s, a) => s + a.calls, 0);
+    const speedVals = todayAgents.filter(a => a.speedSec != null && a.speedSec! > 0).map(a => a.speedSec!);
+    const brandAvgSpeed = speedVals.length > 0
+      ? Math.round((speedVals.reduce((s, v) => s + v, 0) / speedVals.length) * 10) / 10
+      : raw.today.teamAvgSpeed;
+    const brandFastest = speedVals.length > 0 ? Math.min(...speedVals) : raw.today.fastestPickup;
+
+    const data = {
+      ...raw,
+      today: {
+        ...filteredToday,
+        totalCalls: brandCalls,
+        answeredCalls: brandCalls,
+        answerRate: raw.today.answerRate, // answer rate stays global (Twilio-level)
+        missedCallRate: raw.today.missedCallRate,
+        teamAvgSpeed: brandAvgSpeed,
+        fastestPickup: brandFastest,
+        convPerHour: brand === 'mixed' ? undefined : raw.today.convPerHour,
+      },
+      yesterday: filteredYesterday,
+      brand,
+    };
+
     return NextResponse.json(data);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';

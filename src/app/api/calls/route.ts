@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchCallLegs, pairCallLegs, todayMST } from '@/lib/twilio';
 import { ACTIVE_AGENTS, capitalize, normalizeAgent } from '@/lib/constants';
-import { parseBrand, isAgentForBrand } from '@/lib/brand';
+import { parseBrand, isAgentForBrand, type Brand } from '@/lib/brand';
+import { isMscPhone, getClientBrand } from '@/lib/clients';
 import { cached } from '@/lib/cache';
 import type { PairedCall } from '@/lib/types';
 
@@ -53,19 +54,45 @@ function dateRange(from: string, to: string): string[] {
   return dates;
 }
 
-/** Fetch and cache calls for a single date */
-async function fetchDayCalls(date: string, today: string): Promise<RawCall[]> {
+/** Fetch and cache paired calls for a single date (keep PairedCall for trunk-based filtering) */
+async function fetchDayPaired(date: string, today: string): Promise<PairedCall[]> {
   const isToday = date === today;
   const ttl = isToday ? 30_000 : 3_600_000;
   const cacheKey = `calls:${date}`;
-  return cached<RawCall[]>(cacheKey, ttl, async () => {
+  return cached<PairedCall[]>(cacheKey, ttl, async () => {
     const legs = await fetchCallLegs(date);
-    const paired = pairCallLegs(legs);
-    return paired.map(toRawCall);
+    return pairCallLegs(legs);
   });
 }
 
-function buildAgentSummaries(calls: RawCall[], brand: ReturnType<typeof parseBrand>): AgentCallSummary[] {
+/** Determine if a PairedCall belongs to the given brand.
+ *  Source of truth: trunk phone number (PairedCall.to for inbound).
+ *  Fallback: client name brand mapping, then agent brand membership. */
+function isCallForBrand(call: PairedCall, brand: Brand): boolean {
+  if (brand === 'mixed') return true;
+
+  // 1. Trunk-based: the trunk is `to` for inbound, `from` for outbound
+  const trunk = call.direction === 'inbound' ? call.to : call.from;
+  if (trunk?.startsWith('+')) {
+    const trunkIsMsc = isMscPhone(trunk);
+    return brand === 'msc' ? trunkIsMsc : !trunkIsMsc;
+  }
+
+  // 2. Client name brand mapping
+  if (call.client) {
+    const clientBrand = getClientBrand(call.client);
+    if (clientBrand) return clientBrand === brand;
+  }
+
+  // 3. Last resort: agent brand membership
+  const agent = normalizeAgent(call.agent || '');
+  if (agent) return isAgentForBrand(agent, brand);
+
+  // Unknown — include in JC by default
+  return brand === 'jc';
+}
+
+function buildAgentSummaries(calls: RawCall[], brand: Brand): AgentCallSummary[] {
   const map = new Map<string, { calls: number; talkSec: number }>();
 
   // Seed with brand-appropriate agents
@@ -78,10 +105,10 @@ function buildAgentSummaries(calls: RawCall[], brand: ReturnType<typeof parseBra
   for (const call of calls) {
     const key = normalizeAgent(call.agent);
     if (!key) continue;
-    // For mixed, allow any agent; otherwise check brand membership
-    if (!isAgentForBrand(key, brand)) continue;
     let entry = map.get(key);
     if (!entry) {
+      // Agent not seeded (blended or new) — add them
+      if (!isAgentForBrand(key, brand)) continue;
       entry = { calls: 0, talkSec: 0 };
       map.set(key, entry);
     }
@@ -143,18 +170,24 @@ export async function GET(request: NextRequest) {
       0,
     );
 
-    // Fetch all days in parallel, each individually cached
+    // Fetch all days in parallel, each individually cached as PairedCall[]
     const dayResults = await Promise.all(
-      dates.map(d => fetchDayCalls(d, today)),
+      dates.map(d => fetchDayPaired(d, today)),
     );
-    const allCalls = dayResults.flat();
+    const allPaired = dayResults.flat();
     // Sort newest first across all days
-    allCalls.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+    allPaired.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
 
+    // Filter by brand using trunk phone number (the source of truth)
     const brand = parseBrand(searchParams.get('brand'));
-    const agents = buildAgentSummaries(allCalls, brand);
-    const total = allCalls.length;
-    const page = allCalls.slice(offset, offset + limit);
+    const brandPaired = allPaired.filter(c => isCallForBrand(c, brand));
+
+    // Convert to RawCall for the response
+    const brandCalls = brandPaired.map(toRawCall);
+
+    const agents = buildAgentSummaries(brandCalls, brand);
+    const total = brandCalls.length;
+    const page = brandCalls.slice(offset, offset + limit);
     const hasMore = offset + limit < total;
 
     return NextResponse.json({
