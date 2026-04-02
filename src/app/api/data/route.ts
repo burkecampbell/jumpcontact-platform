@@ -14,6 +14,7 @@ import { parseBrand, MSC_ONLY_AGENTS, JC_ONLY_AGENTS, type Brand } from '@/lib/b
 import {
   ACTIVE_AGENTS,
   OUTBOUND_AGENTS,
+  EXCLUDED_AGENTS,
   MONTHLY_GOAL,
   DAILY_GOAL,
   TZ,
@@ -712,25 +713,23 @@ async function fetchDashboardData(): Promise<DashboardData> {
         fetchConversionsForDates(prevDates),
       );
 
-      // Aggregate per agent
+      // Aggregate per agent (excluding Sara, Sue, etc.)
+      const excluded = new Set(EXCLUDED_AGENTS.map(a => a.toLowerCase()));
       const agentTotals: Record<string, number> = {};
       const agentBestDay: Record<string, number> = {};
+      const agentDaysActive: Record<string, number> = {};
       for (const [, entry] of prevConvs) {
         for (const [agent, count] of Object.entries(entry.byAgent)) {
           const name = normalizeAgent(agent);
-          if (!name) continue;
+          if (!name || excluded.has(name)) continue;
           agentTotals[name] = (agentTotals[name] || 0) + count;
           agentBestDay[name] = Math.max(agentBestDay[name] || 0, count);
+          agentDaysActive[name] = (agentDaysActive[name] || 0) + 1;
         }
       }
 
-      // Use yesterday's rep activity for calls/speed/talk (it's the last day of prev month)
-      const agents = yesterday.repActivity.agents;
-      // For month-level calls/speed/talk we use the MTD data from yesterday
-      // which was the last day — but MTD resets on day 1. So use yesterday's agents.
-
       function topTwo(arr: [string, number][]): MonthChampion {
-        const sorted = arr.sort((a, b) => b[1] - a[1]);
+        const sorted = arr.filter(([name]) => !excluded.has(name.toLowerCase())).sort((a, b) => b[1] - a[1]);
         return {
           agent: sorted[0]?.[0] || '',
           value: sorted[0]?.[1] || 0,
@@ -740,7 +739,7 @@ async function fetchDashboardData(): Promise<DashboardData> {
       }
 
       function topTwoMin(arr: [string, number][]): MonthChampion {
-        const sorted = arr.filter(([, v]) => v > 0).sort((a, b) => a[1] - b[1]);
+        const sorted = arr.filter(([name, v]) => v > 0 && !excluded.has(name.toLowerCase())).sort((a, b) => a[1] - b[1]);
         return {
           agent: sorted[0]?.[0] || '',
           value: sorted[0]?.[1] || 0,
@@ -749,23 +748,27 @@ async function fetchDashboardData(): Promise<DashboardData> {
         };
       }
 
+      // Yesterday's agents for speed/talk (daily data is all we have for CDR metrics)
+      const ydAgents = yesterday.repActivity.agents.filter(a => !excluded.has(a.agent.toLowerCase()));
+
       const monthName = new Date(prevYear, prevMonthNum - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
       prevMonthChampions = {
         month: monthName,
         mostConversions: topTwo(Object.entries(agentTotals)),
-        mostCalls: topTwo(agents.map(a => [a.agent, a.calls] as [string, number])),
+        // For calls/speed/talk we only have yesterday's snapshot — label accordingly
+        mostCalls: topTwo(ydAgents.map(a => [a.agent, a.calls] as [string, number])),
         fastestSpeed: topTwoMin(
-          agents.filter(a => a.speedSec != null && a.speedSec > 0).map(a => [a.agent, a.speedSec!] as [string, number]),
+          ydAgents.filter(a => a.speedSec != null && a.speedSec > 0).map(a => [a.agent, a.speedSec!] as [string, number]),
         ),
-        mostTalkTime: topTwo(agents.map(a => [a.agent, a.talkMin] as [string, number])),
+        mostTalkTime: topTwo(ydAgents.map(a => [a.agent, a.talkMin] as [string, number])),
         bestConvRate: topTwo(
-          agents
-            .filter(a => a.calls >= 10)
-            .map(a => {
-              const convs = agentTotals[a.agent.toLowerCase()] || agentTotals[a.agent] || 0;
-              const rate = a.calls > 0 ? Math.round((convs / a.calls) * 1000) / 10 : 0;
-              return [a.agent, rate] as [string, number];
+          Object.entries(agentTotals)
+            .filter(([, convs]) => convs >= 5) // minimum 5 conversions to qualify
+            .map(([name, convs]) => {
+              const days = agentDaysActive[name] || 1;
+              const rate = Math.round((convs / days) * 100) / 100; // convs per active day
+              return [name, rate] as [string, number];
             }),
         ),
       };

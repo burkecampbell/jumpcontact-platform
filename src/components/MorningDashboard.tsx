@@ -255,10 +255,10 @@ function StepMTD({ data }: { data: DashboardData }) {
 function StepChampions({ champions }: { champions: MonthChampions }) {
   const cards = [
     { icon: '\uD83C\uDFC6', title: 'Most Conversions', ...champions.mostConversions, suffix: '' },
-    { icon: '\uD83D\uDCDE', title: 'Most Calls', ...champions.mostCalls, suffix: '' },
-    { icon: '\u26A1', title: 'Fastest Speed', ...champions.fastestSpeed, suffix: 's' },
-    { icon: '\uD83D\uDDE3\uFE0F', title: 'Most Talk Time', ...champions.mostTalkTime, suffix: 'm' },
-    { icon: '\uD83C\uDFAF', title: 'Best Conv Rate', ...champions.bestConvRate, suffix: '%' },
+    { icon: '\uD83D\uDCDE', title: 'Most Calls (last day)', ...champions.mostCalls, suffix: '' },
+    { icon: '\u26A1', title: 'Fastest Speed (last day)', ...champions.fastestSpeed, suffix: 's' },
+    { icon: '\uD83D\uDDE3\uFE0F', title: 'Most Talk Time (last day)', ...champions.mostTalkTime, suffix: 'm' },
+    { icon: '\uD83C\uDFAF', title: 'Best Conv/Day', ...champions.bestConvRate, suffix: '/day' },
   ];
   return (
     <div>
