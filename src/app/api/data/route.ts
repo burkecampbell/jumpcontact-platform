@@ -547,34 +547,22 @@ export async function GET(request: NextRequest) {
       _yesterdayConv?: { total: number; byAgent: Record<string, number>; byAccount: AcctStat[]; byHour: number[] };
     };
 
-    // ── Brand-level call filtering ──────────────────────────────
-    // Filter paired calls by trunk brand, then rebuild agent stats.
-    // This ensures Wendy's calls are split: JC trunk calls go to JC,
-    // MSC trunk calls go to MSC. No double-counting.
-    const todayPaired = raw._todayCalls || [];
-    const yesterdayPaired = raw._yesterdayCalls || [];
-    const sched = raw._schedule || [];
-    const todayWS = raw._workerStats || {};
-    const yesterdayWS = raw._yesterdayWorkerStats || {};
-    const todayConvRaw = raw._todayConversions || { total: 0, byAgent: {}, byAccount: [], byHour: new Array(24).fill(0) };
-    const yesterdayConvRaw = raw._yesterdayConv || { total: 0, byAgent: {}, byAccount: [], byHour: new Array(24).fill(0) };
+    // ── Brand filtering ────────────────────────────────────────
+    // Use the Ytica-blended data from buildPeriodData as the source
+    // of truth for agent metrics. filterByBrand only removes/keeps
+    // agents — it does NOT re-count calls from CDR.
+    // Ytica data is authoritative (scraped daily at 6am).
+    // CDR is only used for real-time recent calls and data quality.
+    let filteredToday = filterByBrand(raw.today, brand);
+    let filteredYesterday = filterByBrand(raw.yesterday, brand);
 
-    // Tag every call with its brand source, then filter
+    // Data quality from CDR pairing (informational only)
+    const todayPaired = raw._todayCalls || [];
     const taggedToday = resolveCallBrands(todayPaired);
-    const taggedYesterday = resolveCallBrands(yesterdayPaired);
-    const brandTodayCalls = filterCallsByBrand(taggedToday, brand);
-    const brandYesterdayCalls = filterCallsByBrand(taggedYesterday, brand);
     const dataQuality = buildDataQuality(taggedToday);
 
-    // Rebuild rep activity from brand-filtered calls
-    const todayDateObj = new Date((raw.date || todayMST()) + 'T00:00:00');
-    const brandTodayRep = buildRepActivity(brandTodayCalls, todayConvRaw, todayWS, sched, todayDateObj);
-    const yesterdayDateObj = new Date((raw.yesterdayDate || '') + 'T00:00:00');
-    const brandYesterdayRep = buildRepActivity(brandYesterdayCalls, yesterdayConvRaw, yesterdayWS, sched, yesterdayDateObj);
-
-    // Apply brand agent filter on top (remove MSC-only from JC, etc.)
-    let filteredToday = filterByBrand({ ...raw.today, repActivity: brandTodayRep }, brand);
-    let filteredYesterday = filterByBrand({ ...raw.yesterday, repActivity: brandYesterdayRep }, brand);
+    // Recent calls filtered by brand (CDR-based, for the call list only)
+    const brandTodayCalls = filterCallsByBrand(taggedToday, brand);
 
     // MSC conversions from GHL (not Google Sheets)
     if (brand === 'msc') {
@@ -596,15 +584,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Compute KPI cards from brand-filtered data
+    // Compute KPI cards from Ytica-blended agent data
     const todayAgents = filteredToday.repActivity.agents;
     const brandAnswered = todayAgents.reduce((s, a) => s + a.calls, 0);
-    const brandMissedCalls = brandTodayCalls.filter(c => c.direction === 'inbound' && c.duration === 0).length;
-    const brandTotal = brandAnswered + brandMissedCalls;
+    const brandMissed = filteredToday.missedCalls.total;
+    const brandTotal = brandAnswered + brandMissed;
     const speedVals = todayAgents.filter(a => a.speedSec != null && a.speedSec! > 0).map(a => a.speedSec!);
-    const brandAvgSpeed = speedVals.length > 0
-      ? Math.round((speedVals.reduce((s, v) => s + v, 0) / speedVals.length) * 10) / 10
-      : 0;
+    const brandAvgSpeed = filteredToday.repActivity.avgSpeedSec ??
+      (speedVals.length > 0 ? Math.round((speedVals.reduce((s, v) => s + v, 0) / speedVals.length) * 10) / 10 : 0);
     const brandFastest = speedVals.length > 0 ? Math.min(...speedVals) : 0;
 
     // Filter recent calls by brand
@@ -620,16 +607,12 @@ export async function GET(request: NextRequest) {
         totalCalls: brandTotal,
         answeredCalls: brandAnswered,
         answerRate: brandTotal > 0 ? Math.round((brandAnswered / brandTotal) * 100) : 0,
-        missedCallRate: brandTotal > 0 ? Math.round((brandMissedCalls / brandTotal) * 1000) / 10 : 0,
+        missedCallRate: brandTotal > 0 ? Math.round((brandMissed / brandTotal) * 1000) / 10 : 0,
         teamAvgSpeed: brandAvgSpeed,
         fastestPickup: brandFastest,
         convPerHour: brand === 'mixed' ? undefined : raw.today.convPerHour,
       },
-      yesterday: {
-        ...filteredYesterday,
-        totalCalls: brandYesterdayCalls.length,
-        answeredCalls: brandYesterdayCalls.filter(c => c.status === 'completed').length,
-      },
+      yesterday: filteredYesterday,
       recentCalls: brandRecentCalls,
       dataQuality,
       brand,
