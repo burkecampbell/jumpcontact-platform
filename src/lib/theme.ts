@@ -38,10 +38,14 @@ export function getClerkPageElements() {
   return {
     // ── Sign-in / Sign-up pages ──
     card: {
-      background: C.card,
-      border: `1px solid ${C.border}`,
-      boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+      background: 'rgba(30,35,50,0.95)',
+      border: `1px solid rgba(62,165,195,0.3)`,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
       backdropFilter: 'blur(12px)',
+    },
+    // Force ALL text inside cards to be readable
+    cardBox: {
+      color: C.text,
     },
     formButtonPrimary: {
       background: C.cyan,
@@ -59,7 +63,7 @@ export function getClerkPageElements() {
       color: C.text,
     },
     headerSubtitle: {
-      color: C.sub,
+      color: '#b0b8cc',
     },
     socialButtonsBlockButton: {
       border: `1px solid ${C.border}`,
@@ -70,22 +74,22 @@ export function getClerkPageElements() {
       background: C.border,
     },
     dividerText: {
-      color: C.sub,
+      color: '#b0b8cc',
     },
     formFieldLabel: {
-      color: C.sub,
+      color: '#b0b8cc',
     },
     formFieldInputPlaceholder: {
       color: 'rgba(139,146,168,0.6)',
     },
     footerActionText: {
-      color: C.sub,
+      color: '#b0b8cc',
     },
     footer: {
-      color: C.sub,
+      color: '#b0b8cc',
     },
     footerAction: {
-      color: C.sub,
+      color: '#b0b8cc',
     },
     identityPreviewText: {
       color: C.text,
