@@ -67,38 +67,36 @@ async function fetchDayPaired(date: string, today: string): Promise<PairedCall[]
 
 /** Determine if a PairedCall belongs to the given brand.
  *
- *  Priority order:
- *  1. MSC-only / JC-only agent → definitive brand (overrides trunk)
- *  2. Trunk phone number → brands map in clients.json
- *  3. Client name → clientBrands map
- *  4. Blended agent or no agent → fall through to trunk/client
+ *  Priority order — the CALL's identity is what the caller dialed, not
+ *  which agent picked up.  A caller who dialed an MSC trunk reached an
+ *  MSC business, even if a JC agent handled overflow.
  *
- *  An MSC-only agent's call is ALWAYS MSC, even if the trunk is a JC
- *  number (cross-trunk pairing can assign different trunks). */
+ *  1. Client name brand (clientBrands map) — most reliable
+ *  2. Trunk phone (brands map in clients.json)
+ *  3. Agent brand (MSC-only / JC-only) — fallback for unknown trunks
+ *  4. Default to JC */
 function isCallForBrand(call: PairedCall, brand: Brand): boolean {
   if (brand === 'mixed') return true;
 
-  const agent = normalizeAgent(call.agent || '');
-
-  // 1. Definitive agent brand (MSC-only or JC-only agents are unambiguous)
-  if (agent) {
-    const lower = agent.toLowerCase();
-    if (MSC_ONLY_AGENTS.has(lower)) return brand === 'msc';
-    if (JC_ONLY_AGENTS.has(lower)) return brand === 'jc';
-    // Blended agent (wendy, sara) — fall through to trunk/client
+  // 1. Client name brand — "Nava Med Spa" → MSC, "Jacob J. Sapochnick" → JC
+  if (call.client) {
+    const clientBrand = getClientBrand(call.client);
+    if (clientBrand) return clientBrand === brand;
   }
 
-  // 2. Trunk-based: the trunk is `to` for inbound, `from` for outbound
+  // 2. Trunk phone number
   const trunk = call.direction === 'inbound' ? call.to : call.from;
   if (trunk?.startsWith('+')) {
     const trunkIsMsc = isMscPhone(trunk);
     return brand === 'msc' ? trunkIsMsc : !trunkIsMsc;
   }
 
-  // 3. Client name brand mapping
-  if (call.client) {
-    const clientBrand = getClientBrand(call.client);
-    if (clientBrand) return clientBrand === brand;
+  // 3. Agent brand — only for calls with no trunk/client info
+  const agent = normalizeAgent(call.agent || '');
+  if (agent) {
+    const lower = agent.toLowerCase();
+    if (MSC_ONLY_AGENTS.has(lower)) return brand === 'msc';
+    if (JC_ONLY_AGENTS.has(lower)) return brand === 'jc';
   }
 
   // 4. Unknown — include in JC by default

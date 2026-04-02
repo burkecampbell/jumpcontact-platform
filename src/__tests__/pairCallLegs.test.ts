@@ -65,6 +65,34 @@ describe('pairCallLegs', () => {
     expect(omarCall!.id).toBe('IN_A');
   });
 
+  it('does NOT cross-trunk pair MSC agent with JC trunk', () => {
+    // Richard (MSC-only) should never pair with Sapochnick (JC trunk)
+    const legs: CallLeg[] = [
+      leg({ sid: 'IN_JC', from: '+14155551234', to: '+16193739225', direction: 'inbound', startTime: '2026-04-01T16:00:00Z' }),
+      leg({ sid: 'AG_MSC', from: '+18632641010', to: 'client:richard_40jumpcontact_2Ecom', direction: 'outbound-api', startTime: '2026-04-01T16:00:10Z', duration: 36 }),
+    ];
+
+    const result = pairCallLegs(legs);
+    // JC inbound should be unmatched (missed), NOT paired with Richard
+    const jcInbound = result.find(c => c.id === 'IN_JC');
+    expect(jcInbound).toBeDefined();
+    expect(jcInbound!.agent).toBe(''); // unmatched, not 'richard'
+  });
+
+  it('DOES cross-trunk pair MSC agent with MSC trunk', () => {
+    // Richard (MSC-only) SHOULD pair with Gambhir (MSC trunk +16107728771)
+    const legs: CallLeg[] = [
+      leg({ sid: 'IN_MSC', from: '+14155551234', to: '+16107728771', direction: 'inbound', startTime: '2026-04-01T16:00:00Z' }),
+      leg({ sid: 'AG_MSC2', from: '+18632641010', to: 'client:richard_40jumpcontact_2Ecom', direction: 'outbound-api', startTime: '2026-04-01T16:00:10Z', duration: 36 }),
+    ];
+
+    const result = pairCallLegs(legs);
+    const paired = result.find(c => c.agent === 'richard');
+    expect(paired).toBeDefined();
+    expect(paired!.id).toBe('IN_MSC');
+    expect(paired!.ringTime).toBe(10);
+  });
+
   it('does not pair agent legs outside 60s window', () => {
     const legs: CallLeg[] = [
       leg({ sid: 'IN3', from: '+14155551234', to: '+16193739225', direction: 'inbound', startTime: '2026-04-01T16:00:00Z' }),

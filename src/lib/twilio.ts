@@ -1,6 +1,7 @@
 import { twilioAuth, twilioAccountSid } from './auth/twilio';
 import { normalizeAgent, decodeAgent, TZ } from './constants';
-import { resolveClient, isJCPhone } from './clients';
+import { resolveClient, isJCPhone, isMscPhone } from './clients';
+import { MSC_ONLY_AGENTS, JC_ONLY_AGENTS } from './brand';
 import type { CallLeg, PairedCall } from './types';
 
 const PAIR_WINDOW_MS = 60_000;
@@ -162,14 +163,25 @@ export function pairCallLegs(legs: CallLeg[]): PairedCall[] {
 
     // ── Strategy 1b: Cross-trunk time-window match ─────────────────
     //   Flex TaskRouter creates agent legs whose `from` is a different
-    //   trunk than the inbound leg's `to`.  Match ANY unmatched inbound
-    //   leg within the time window regardless of trunk number.
+    //   trunk than the inbound leg's `to`.  Match unmatched inbound legs
+    //   within the time window, but ONLY if the brand is compatible.
+    //   An MSC-only agent must not pair with a JC trunk and vice versa.
     {
+      const agentLower = normalizeAgent(agentName).toLowerCase();
+      const agentIsMsc = MSC_ONLY_AGENTS.has(agentLower);
+      const agentIsJc  = JC_ONLY_AGENTS.has(agentLower);
+
       let crossBest: CallLeg | undefined;
       let crossDelta = PAIR_WINDOW_MS + 1;
 
       for (const inbound of inboundLegs) {
         if (pairedInboundSids.has(inbound.sid)) continue;
+
+        // Brand compatibility: don't pair MSC agent with JC trunk or vice versa
+        const trunkIsMsc = isMscPhone(inbound.to);
+        if (agentIsMsc && !trunkIsMsc) continue;  // MSC agent + JC trunk = skip
+        if (agentIsJc  && trunkIsMsc)  continue;  // JC agent + MSC trunk = skip
+
         const inboundTime = new Date(inbound.startTime).getTime();
         const delta = Math.abs(agentTime - inboundTime);
         if (delta < crossDelta) {
