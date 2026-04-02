@@ -318,7 +318,8 @@ function fallbackSchedule(): ScheduleEntry[] {
 function parseFlexDate(s: string): Date | null {
   const parts = s.trim().split(/[\s,]+/);
   const datePart = parts[0];
-  const timePart = parts[1] || '00:00';
+  // Default to noon (not midnight) — midnight UTC becomes yesterday in MST
+  const timePart = parts[1] || '12:00';
   if (datePart.includes('-') && datePart.length === 10) {
     return new Date(`${datePart}T${timePart}`);
   }
