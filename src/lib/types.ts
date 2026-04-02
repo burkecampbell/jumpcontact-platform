@@ -212,6 +212,31 @@ export interface TeamStats {
   source: 'ytica';
 }
 
+// ── Brand Data Pipeline ────────────────────────────────────────────
+// CDR calls bucketed by brand. Built once per period, used by
+// deriveBrandView() to produce complete per-brand PeriodData.
+
+export interface BrandBucket {
+  answered: number;     // completed inbound calls
+  missed: number;       // inbound duration=0 calls
+  talkSec: number;      // total talk seconds
+  ringSum: number;      // sum of ring times (for avg speed)
+  ringCount: number;    // count of valid ring times
+}
+
+export interface BrandCallSummary {
+  jc: BrandBucket;
+  msc: BrandBucket;
+  unknown: BrandBucket;
+  /** Per blended agent: fraction of their calls that are JC vs MSC */
+  agentRatios: Record<string, { jc: number; msc: number }>;
+  /** Missed calls broken down by brand, then by account */
+  missedByBrand: {
+    jc: { total: number; byAccount: AcctStat[] };
+    msc: { total: number; byAccount: AcctStat[] };
+  };
+}
+
 export interface PeriodData {
   date: string;
   conversions: ConvPeriod;

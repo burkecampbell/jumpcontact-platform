@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { filterByBrand, stripConversions, type BrandSplitRatios } from '../lib/blender';
-import type { PeriodData } from '../lib/types';
+import { buildBrandSummary, deriveBrandView } from '../lib/blender';
+import type { PeriodData, PairedCall, BrandCallSummary } from '../lib/types';
+
+// ── Test fixtures ────────────────────────────────────────────────────
 
 function makePeriod(agents: string[]): PeriodData {
   return {
@@ -11,129 +13,202 @@ function makePeriod(agents: string[]): PeriodData {
       byAccount: [{ account: 'Acme', count: 10 }],
       hourly: new Array(24).fill(0),
     },
-    missedCalls: { total: 2, byAccount: [] },
+    missedCalls: { total: 10, byAccount: [{ account: 'Acme', count: 10 }] },
     repActivity: {
       agents: agents.map(a => ({
         agent: a,
         calls: 10,
         talkMin: 30,
-        speedSec: 5,
+        speedSec: a === 'wendy' ? 16 : a === 'sara' ? 5 : 10,
         wrapUpSec: 15,
         hoursScheduled: 8,
         conversions: 3,
         convsPerHour: 0.5,
       })),
       outbound: agents.map(a => ({ agent: a, callsMade: 2, talkMin: 5 })),
-      avgSpeedSec: 5,
+      avgSpeedSec: 10,
     },
-    teamStats: null,
+    teamStats: {
+      totalCalls: 50, inbound: 45, outbound: 5,
+      talkTime: '5h', avgTalk: '3m', missed: 10,
+      missedOver15: 2, missedPct: '18%', source: 'ytica' as const,
+    },
     conversionRate: 20,
   };
 }
 
-describe('filterByBrand', () => {
-  const agents = ['omar', 'burke', 'sue', 'desi', 'wendy', 'sara'];
-
-  // Split ratios: Wendy 70% JC / 30% MSC, Sara 50/50
-  const splits: BrandSplitRatios = {
-    wendy: { jc: 0.7, msc: 0.3 },
-    sara: { jc: 0.5, msc: 0.5 },
+/** Build a summary where Wendy is 70% JC / 30% MSC, Sara is 50/50,
+ *  and missed calls are 6 JC + 4 MSC */
+function makeSummary(): BrandCallSummary {
+  return {
+    jc: { answered: 25, missed: 6, talkSec: 3000, ringSum: 200, ringCount: 20 },
+    msc: { answered: 18, missed: 4, talkSec: 2000, ringSum: 180, ringCount: 15 },
+    unknown: { answered: 2, missed: 0, talkSec: 100, ringSum: 0, ringCount: 0 },
+    agentRatios: {
+      wendy: { jc: 0.7, msc: 0.3 },
+      sara: { jc: 0.5, msc: 0.5 },
+    },
+    missedByBrand: {
+      jc: { total: 6, byAccount: [{ account: 'JC Client', count: 6 }] },
+      msc: { total: 4, byAccount: [{ account: 'MSC Client', count: 4 }] },
+    },
   };
+}
 
-  describe('JC brand', () => {
-    it('removes MSC-only agents (desi, sue)', () => {
-      const period = makePeriod(agents);
-      const result = filterByBrand(period, 'jc', splits);
+const ALL_AGENTS = ['omar', 'burke', 'sue', 'desi', 'wendy', 'sara'];
 
-      const names = result.repActivity.agents.map(a => a.agent);
+// ── Tests ────────────────────────────────────────────────────────────
+
+describe('deriveBrandView', () => {
+  const period = makePeriod(ALL_AGENTS);
+  const summary = makeSummary();
+
+  describe('Mixed view', () => {
+    const mixed = deriveBrandView(period, 'mixed', summary);
+
+    it('keeps ALL agents', () => {
+      expect(mixed.repActivity.agents).toHaveLength(ALL_AGENTS.length);
+    });
+
+    it('uses teamStats.totalCalls for headline', () => {
+      expect(mixed.answeredCalls).toBe(50); // from teamStats
+    });
+
+    it('sums all missed calls', () => {
+      expect(mixed.missedCalls.total).toBe(10); // 6 + 4 + 0 unknown
+    });
+
+    it('strips conversions (incompatible sources)', () => {
+      expect(mixed.conversions.total).toBe(0);
+      expect(mixed.conversionRate).toBeNull();
+    });
+  });
+
+  describe('JC view', () => {
+    const jc = deriveBrandView(period, 'jc', summary);
+
+    it('excludes MSC-only agents (sue, desi)', () => {
+      const names = jc.repActivity.agents.map(a => a.agent);
       expect(names).toContain('omar');
       expect(names).toContain('burke');
-      expect(names).toContain('wendy'); // blended — present but split
-      expect(names).toContain('sara');  // blended — present but split
-      expect(names).not.toContain('desi');  // MSC-only
-      expect(names).not.toContain('sue');   // MSC-only
+      expect(names).toContain('wendy');
+      expect(names).toContain('sara');
+      expect(names).not.toContain('sue');
+      expect(names).not.toContain('desi');
     });
 
     it('splits blended agent calls by JC ratio', () => {
-      const period = makePeriod(agents);
-      const result = filterByBrand(period, 'jc', splits);
-      const wendy = result.repActivity.agents.find(a => a.agent === 'wendy')!;
+      const wendy = jc.repActivity.agents.find(a => a.agent === 'wendy')!;
       expect(wendy.calls).toBe(7); // 10 * 0.7
-      const sara = result.repActivity.agents.find(a => a.agent === 'sara')!;
+      const sara = jc.repActivity.agents.find(a => a.agent === 'sara')!;
       expect(sara.calls).toBe(5); // 10 * 0.5
     });
 
-    it('also filters outbound agents', () => {
-      const period = makePeriod(agents);
-      const result = filterByBrand(period, 'jc', splits);
-      const outboundNames = result.repActivity.outbound.map(a => a.agent);
-      expect(outboundNames).not.toContain('desi');
-      expect(outboundNames).not.toContain('sue');
+    it('uses brand-specific missed calls', () => {
+      expect(jc.missedCalls.total).toBe(6);
     });
 
-    it('preserves conversion data', () => {
-      const period = makePeriod(agents);
-      const result = filterByBrand(period, 'jc', splits);
-      expect(result.conversions.total).toBe(10);
-      expect(result.conversionRate).toBe(20);
+    it('derives answeredCalls from teamStats proportionally', () => {
+      // teamStats.totalCalls=50, jc.answered=25, msc.answered=18, total known=43
+      // jcShare = round(50 * 25/43) = round(29.07) = 29
+      expect(jc.answeredCalls).toBe(29);
+    });
+
+    it('computes brand-specific speed average', () => {
+      // JC agents: omar(10), burke(10), wendy(16), sara(5) → avg = (10+10+16+5)/4 = 10.25 → 10.3
+      expect(jc.repActivity.avgSpeedSec).toBe(10.3);
     });
   });
 
-  describe('MSC brand', () => {
-    it('keeps only MSC-only + blended agents', () => {
-      const period = makePeriod(agents);
-      const result = filterByBrand(period, 'msc', splits);
+  describe('MSC view', () => {
+    const msc = deriveBrandView(period, 'msc', summary);
 
-      const names = result.repActivity.agents.map(a => a.agent);
-      expect(names).toContain('desi');   // MSC-only
-      expect(names).toContain('sue');    // MSC-only
-      expect(names).toContain('wendy');  // blended — present but split
-      expect(names).toContain('sara');   // blended — present but split
-      expect(names).not.toContain('omar');  // JC-only
-      expect(names).not.toContain('burke'); // JC-only
+    it('keeps MSC-only + blended agents', () => {
+      const names = msc.repActivity.agents.map(a => a.agent);
+      expect(names).toContain('sue');
+      expect(names).toContain('desi');
+      expect(names).toContain('wendy');
+      expect(names).toContain('sara');
+      expect(names).not.toContain('omar');
+      expect(names).not.toContain('burke');
     });
 
     it('splits blended agent calls by MSC ratio', () => {
-      const period = makePeriod(agents);
-      const result = filterByBrand(period, 'msc', splits);
-      const wendy = result.repActivity.agents.find(a => a.agent === 'wendy')!;
+      const wendy = msc.repActivity.agents.find(a => a.agent === 'wendy')!;
       expect(wendy.calls).toBe(3); // 10 * 0.3
-      const sara = result.repActivity.agents.find(a => a.agent === 'sara')!;
+      const sara = msc.repActivity.agents.find(a => a.agent === 'sara')!;
       expect(sara.calls).toBe(5); // 10 * 0.5
+    });
+
+    it('uses brand-specific missed calls', () => {
+      expect(msc.missedCalls.total).toBe(4);
+    });
+
+    it('derives answeredCalls as teamTotal - JC (rounding guarantee)', () => {
+      // MSC = teamTotal - jcShare = 50 - 29 = 21
+      expect(msc.answeredCalls).toBe(21);
     });
   });
 
-  describe('JC + MSC = total (no double-counting)', () => {
-    it('blended agent calls sum to original total', () => {
-      const period = makePeriod(agents);
-      const jc = filterByBrand(period, 'jc', splits);
-      const msc = filterByBrand(period, 'msc', splits);
+  // ── CRITICAL: Additivity constraints ────────────────────────────
 
+  describe('JC + MSC = Mixed (additivity)', () => {
+    const jc = deriveBrandView(period, 'jc', summary);
+    const msc = deriveBrandView(period, 'msc', summary);
+    const mixed = deriveBrandView(period, 'mixed', summary);
+
+    it('answeredCalls: JC + MSC = Mixed', () => {
+      expect(jc.answeredCalls! + msc.answeredCalls!).toBe(mixed.answeredCalls);
+    });
+
+    it('missedCalls: JC + MSC = Mixed', () => {
+      expect(jc.missedCalls.total + msc.missedCalls.total).toBe(mixed.missedCalls.total);
+    });
+
+    it('totalCalls: JC + MSC = Mixed', () => {
+      expect(jc.totalCalls! + msc.totalCalls!).toBe(mixed.totalCalls);
+    });
+
+    it('blended agent calls sum to original', () => {
       const wendyJC = jc.repActivity.agents.find(a => a.agent === 'wendy')!.calls;
       const wendyMSC = msc.repActivity.agents.find(a => a.agent === 'wendy')!.calls;
-      expect(wendyJC + wendyMSC).toBe(10); // original calls = 10
+      expect(wendyJC + wendyMSC).toBe(10); // original calls
 
       const saraJC = jc.repActivity.agents.find(a => a.agent === 'sara')!.calls;
       const saraMSC = msc.repActivity.agents.find(a => a.agent === 'sara')!.calls;
-      expect(saraJC + saraMSC).toBe(10); // original calls = 10
+      expect(saraJC + saraMSC).toBe(10);
     });
   });
+});
 
-  describe('Mixed brand', () => {
-    it('keeps ALL agents but zeros conversions', () => {
-      const period = makePeriod(agents);
-      const result = filterByBrand(period, 'mixed');
+describe('buildBrandSummary', () => {
+  it('buckets calls by brand correctly', () => {
+    const calls: PairedCall[] = [
+      { id: '1', time: '', agent: 'omar', from: '', to: '', client: 'JC Client', direction: 'inbound', duration: 60, totalDuration: 60, ringTime: 5, status: 'completed', resolvedBrand: 'jc', brandSource: 'client-name' },
+      { id: '2', time: '', agent: 'sue', from: '', to: '', client: 'MSC Client', direction: 'inbound', duration: 30, totalDuration: 30, ringTime: 8, status: 'completed', resolvedBrand: 'msc', brandSource: 'client-name' },
+      { id: '3', time: '', agent: '', from: '', to: '', client: 'JC Client', direction: 'inbound', duration: 0, totalDuration: 0, ringTime: 0, status: 'no-answer', resolvedBrand: 'jc', brandSource: 'client-name' },
+      { id: '4', time: '', agent: '', from: '', to: '', client: 'MSC Client', direction: 'inbound', duration: 0, totalDuration: 0, ringTime: 0, status: 'no-answer', resolvedBrand: 'msc', brandSource: 'client-name' },
+    ];
 
-      const names = result.repActivity.agents.map(a => a.agent);
-      expect(names).toHaveLength(agents.length); // all kept
+    const summary = buildBrandSummary(calls);
+    expect(summary.jc.answered).toBe(1);
+    expect(summary.jc.missed).toBe(1);
+    expect(summary.msc.answered).toBe(1);
+    expect(summary.msc.missed).toBe(1);
+    expect(summary.missedByBrand.jc.total).toBe(1);
+    expect(summary.missedByBrand.msc.total).toBe(1);
+  });
 
-      expect(result.conversions.total).toBe(0);
-      expect(result.conversionRate).toBeNull();
+  it('computes blended agent ratios', () => {
+    const calls: PairedCall[] = [
+      { id: '1', time: '', agent: 'wendy', from: '', to: '', client: '', direction: 'inbound', duration: 60, totalDuration: 60, ringTime: 5, status: 'completed', resolvedBrand: 'jc', brandSource: 'trunk-phone' },
+      { id: '2', time: '', agent: 'wendy', from: '', to: '', client: '', direction: 'inbound', duration: 60, totalDuration: 60, ringTime: 5, status: 'completed', resolvedBrand: 'jc', brandSource: 'trunk-phone' },
+      { id: '3', time: '', agent: 'wendy', from: '', to: '', client: '', direction: 'inbound', duration: 60, totalDuration: 60, ringTime: 5, status: 'completed', resolvedBrand: 'msc', brandSource: 'trunk-phone' },
+    ];
 
-      for (const agent of result.repActivity.agents) {
-        expect(agent.conversions).toBe(0);
-        expect(agent.convsPerHour).toBeUndefined();
-      }
-    });
+    const summary = buildBrandSummary(calls);
+    // 2 JC + 1 MSC = 67% JC
+    expect(summary.agentRatios['wendy'].jc).toBeCloseTo(0.667, 2);
+    expect(summary.agentRatios['wendy'].msc).toBeCloseTo(0.333, 2);
   });
 });

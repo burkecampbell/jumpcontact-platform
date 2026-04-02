@@ -9,7 +9,7 @@ import {
   fetchYticaRepActivity,
   fetchYticaTeamStats,
 } from '@/lib/sheets';
-import { blendYticaIntoPerioData, filterByBrand, type BrandSplitRatios } from '@/lib/blender';
+import { blendYticaIntoPerioData, buildBrandSummary, deriveBrandView } from '@/lib/blender';
 import { parseBrand, MSC_ONLY_AGENTS, JC_ONLY_AGENTS, BLENDED_AGENTS, type Brand } from '@/lib/brand';
 import {
   ACTIVE_AGENTS,
@@ -85,66 +85,7 @@ function buildDataQuality(calls: PairedCall[]): import('@/lib/types').DataQualit
     brandConfidence: calls.length > 0 ? Math.round((definitive / calls.length) * 1000) / 10 : 100,
   };
 }
-/** Compute brand split ratios for blended agents from CDR brand-tagged calls.
- *  For each blended agent, returns the fraction of their calls belonging to JC vs MSC.
- *  Calls with unknown brand are excluded — only definitive JC/MSC calls count. */
-function computeBlendedSplits(calls: PairedCall[]): BrandSplitRatios {
-  const counts: Record<string, { jc: number; msc: number }> = {};
-
-  for (const call of calls) {
-    const agent = normalizeAgent(call.agent || '')?.toLowerCase();
-    if (!agent || !BLENDED_AGENTS.has(agent)) continue;
-    if (!counts[agent]) counts[agent] = { jc: 0, msc: 0 };
-    if (call.resolvedBrand === 'jc') counts[agent].jc++;
-    else if (call.resolvedBrand === 'msc') counts[agent].msc++;
-  }
-
-  const ratios: BrandSplitRatios = {};
-  for (const [agent, c] of Object.entries(counts)) {
-    const known = c.jc + c.msc;
-    if (known === 0) {
-      ratios[agent] = { jc: 0.5, msc: 0.5 }; // No data — 50/50 fallback
-    } else {
-      ratios[agent] = { jc: c.jc / known, msc: c.msc / known };
-    }
-  }
-  return ratios;
-}
-
-/** Compute team-level brand proportion from CDR brand-tagged calls.
- *  Returns the fraction of ALL known-brand calls that are JC.
- *  Used to proportionally split teamStats.totalCalls so JC + MSC = Mixed exactly. */
-function computeBrandProportion(calls: PairedCall[]): { jcFraction: number; mscFraction: number } {
-  let jc = 0;
-  let msc = 0;
-  for (const call of calls) {
-    if (call.resolvedBrand === 'jc') jc++;
-    else if (call.resolvedBrand === 'msc') msc++;
-  }
-  const known = jc + msc;
-  if (known === 0) return { jcFraction: 0.5, mscFraction: 0.5 };
-  return { jcFraction: jc / known, mscFraction: msc / known };
-}
-
-/** Derive headline totals for a brand.
- *  Mixed = teamStats total (Ytica truth). JC/MSC = proportional share.
- *  JC + MSC = Mixed, mathematically enforced. */
-function deriveBrandTotals(
-  brand: Brand,
-  teamTotal: number | null,
-  agentCallSum: number,
-  proportion: { jcFraction: number; mscFraction: number },
-): number {
-  // When teamStats is available, derive from it
-  if (teamTotal && teamTotal > 0) {
-    if (brand === 'mixed') return teamTotal;
-    if (brand === 'jc') return Math.round(teamTotal * proportion.jcFraction);
-    // MSC = total - JC to guarantee JC + MSC = Mixed exactly
-    return teamTotal - Math.round(teamTotal * proportion.jcFraction);
-  }
-  // Fallback for today (no teamStats yet): use agent sum
-  return agentCallSum;
-}
+// Old piecemeal functions removed — replaced by buildBrandSummary() + deriveBrandView() in blender.ts
 
 import { twilioAuth, WORKSPACE_SID } from '@/lib/auth/twilio';
 import { fetchAllWorkerStats } from '@/lib/daily-analytics';
@@ -608,30 +549,29 @@ export async function GET(request: NextRequest) {
       _yesterdayConv?: { total: number; byAgent: Record<string, number>; byAccount: AcctStat[]; byHour: number[] };
     };
 
-    // ── Brand filtering ────────────────────────────────────────
-    // Ytica data is authoritative (scraped daily at 6am).
-    // CDR is used for: real-time recent calls, data quality, and
-    // computing brand split ratios for blended agents (Wendy, Sara).
-    // filterByBrand now SPLITS blended agent call counts by brand
-    // instead of double-counting them in both JC and MSC views.
+    // ── Brand pipeline: Mixed-first, derive everything ──────────
+    // 1. Tag CDR calls with brand
+    // 2. Build brand summary (single pass)
+    // 3. deriveBrandView() produces complete PeriodData per brand
 
-    // Tag CDR calls with brand for split ratios and recent call filtering
     const todayPaired = raw._todayCalls || [];
     const taggedToday = resolveCallBrands(todayPaired);
-    const todaySplits = computeBlendedSplits(taggedToday);
+    const todaySummary = buildBrandSummary(taggedToday);
 
     const yesterdayPaired = raw._yesterdayCalls || [];
     const taggedYesterday = resolveCallBrands(yesterdayPaired);
-    const yesterdaySplits = computeBlendedSplits(taggedYesterday);
+    const yesterdaySummary = buildBrandSummary(taggedYesterday);
 
-    let filteredToday = filterByBrand(raw.today, brand, todaySplits);
-    let filteredYesterday = filterByBrand(raw.yesterday, brand, yesterdaySplits);
+    // Derive complete brand views — every metric split consistently
+    let derivedToday = deriveBrandView(raw.today, brand, todaySummary);
+    const derivedYesterday = deriveBrandView(raw.yesterday, brand, yesterdaySummary);
 
     // Data quality from CDR pairing (informational only)
     const dataQuality = buildDataQuality(taggedToday);
 
-    // Recent calls filtered by brand (CDR-based, for the call list only)
+    // Recent calls filtered by brand
     const brandTodayCalls = filterCallsByBrand(taggedToday, brand);
+    const brandRecentCalls = buildRecentCalls(brandTodayCalls);
 
     // MSC conversions from GHL (not Google Sheets)
     if (brand === 'msc') {
@@ -639,8 +579,8 @@ export async function GET(request: NextRequest) {
         const mscConv = await cached('msc-conv-today', 60_000, () =>
           fetchMscConversions(raw.date || todayMST()),
         );
-        filteredToday = {
-          ...filteredToday,
+        derivedToday = {
+          ...derivedToday,
           conversions: {
             total: mscConv.total,
             byAgent: Object.entries(mscConv.byAgent).map(([agent, count]) => ({ agent, count })),
@@ -653,62 +593,16 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Compute KPI cards — headline totals derived from Ytica teamStats
-    // so JC + MSC = Mixed exactly (proportional split from CDR brand distribution)
-    const todayProportion = computeBrandProportion(taggedToday);
-    const todayAgents = filteredToday.repActivity.agents;
-    const todayAgentSum = todayAgents.reduce((s, a) => s + a.calls, 0);
-    const brandAnswered = deriveBrandTotals(
-      brand,
-      filteredToday.teamStats?.totalCalls ?? null,
-      todayAgentSum,
-      todayProportion,
-    );
-    const brandMissed = filteredToday.missedCalls.total;
-    const brandTotal = brandAnswered + brandMissed;
-    const speedVals = todayAgents.filter(a => a.speedSec != null && a.speedSec! > 0).map(a => a.speedSec!);
-    const brandAvgSpeed = filteredToday.repActivity.avgSpeedSec ??
-      (speedVals.length > 0 ? Math.round((speedVals.reduce((s, v) => s + v, 0) / speedVals.length) * 10) / 10 : 0);
-    const brandFastest = speedVals.length > 0 ? Math.min(...speedVals) : 0;
-
-    // Filter recent calls by brand
-    const brandRecentCalls = buildRecentCalls(brandTodayCalls);
-
     // Strip internal fields from response
     const { _todayCalls, _yesterdayCalls, _schedule, _workerStats, _yesterdayWorkerStats, _todayConversions, _yesterdayConv, ...cleanRaw } = raw;
 
     const data = {
       ...cleanRaw,
       today: {
-        ...filteredToday,
-        totalCalls: brandTotal,
-        answeredCalls: brandAnswered,
-        answerRate: brandTotal > 0 ? Math.round((brandAnswered / brandTotal) * 100) : 0,
-        missedCallRate: brandTotal > 0 ? Math.round((brandMissed / brandTotal) * 1000) / 10 : 0,
-        teamAvgSpeed: brandAvgSpeed,
-        fastestPickup: brandFastest,
+        ...derivedToday,
         convPerHour: brand === 'mixed' ? undefined : raw.today.convPerHour,
       },
-      yesterday: (() => {
-        // Headline totals from Ytica teamStats with proportional brand split
-        const ydProportion = computeBrandProportion(taggedYesterday);
-        const ydAgents = filteredYesterday.repActivity.agents;
-        const ydAgentSum = ydAgents.reduce((s, a) => s + a.calls, 0);
-        const ydAnswered = deriveBrandTotals(
-          brand,
-          filteredYesterday.teamStats?.totalCalls ?? null,
-          ydAgentSum,
-          ydProportion,
-        );
-        const ydMissed = filteredYesterday.missedCalls?.total ?? 0;
-        const ydTotal = ydAnswered + ydMissed;
-        return {
-          ...filteredYesterday,
-          totalCalls: ydTotal,
-          answeredCalls: ydAnswered,
-          answerRate: ydTotal > 0 ? Math.round((ydAnswered / ydTotal) * 100) : 0,
-        };
-      })(),
+      yesterday: derivedYesterday,
       recentCalls: brandRecentCalls,
       dataQuality,
       brand,
