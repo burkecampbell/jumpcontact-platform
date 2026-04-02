@@ -7,6 +7,20 @@ import type { CallLeg, PairedCall } from './types';
 const PAIR_WINDOW_MS = 60_000;
 const PAGE_SIZE = 500;
 
+/** Convert "YYYY-MM-DD" to midnight Mountain Time expressed as a UTC Date.
+ *  Handles DST automatically — MST (UTC-7) → T07:00Z, MDT (UTC-6) → T06:00Z. */
+function mstMidnightUTC(dateStr: string): Date {
+  // Use noon to safely detect the MT offset for this date (avoids edge at midnight)
+  const probeUTC = new Date(`${dateStr}T12:00:00Z`);
+  const mtString = probeUTC.toLocaleString('en-US', { timeZone: TZ, hour12: false });
+  const mtParsed = new Date(mtString);
+  // offsetMs = how far MT is behind UTC (positive = behind)
+  const offsetMs = probeUTC.getTime() - mtParsed.getTime();
+  // Midnight MT in UTC = 00:00 local + offset
+  const midnightLocal = new Date(`${dateStr}T00:00:00Z`);
+  return new Date(midnightLocal.getTime() + offsetMs);
+}
+
 interface TwilioCallResource {
   sid: string;
   from: string;
@@ -24,9 +38,10 @@ export async function fetchCallLegs(date: string): Promise<CallLeg[]> {
   const sid = twilioAccountSid();
   const auth = twilioAuth();
 
-  // Mountain Time day boundaries in UTC (handles both MST −7 and MDT −6)
-  const mstStart = new Date(`${date}T07:00:00Z`);
-  const mstEnd   = new Date(`${nextDay(date)}T07:00:00Z`);
+  // Mountain Time day boundaries — compute actual UTC offset (handles DST automatically)
+  // MST = UTC-7, MDT = UTC-6. This detects which is active for the given date.
+  const mstStart = mstMidnightUTC(date);
+  const mstEnd   = mstMidnightUTC(nextDay(date));
 
   // Query Twilio with an extra day buffer so we don't lose legs that
   // fall after midnight UTC (= 6 PM MDT).  The local filter below

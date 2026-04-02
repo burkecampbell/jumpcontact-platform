@@ -147,22 +147,40 @@ export async function buildDailyAnalytics(date: string): Promise<DailyAnalyticsR
   };
 }
 
+/** Fetch timeout — prevents dashboard hang when Twilio is slow */
+function fetchWithTimeout(url: string, opts: RequestInit, timeoutMs = 8000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
+/** Detect Mountain Time UTC offset for a given date (handles DST). */
+function mtOffset(dateStr: string): string {
+  const probe = new Date(`${dateStr}T12:00:00Z`);
+  const mt = probe.toLocaleString('en-US', { timeZone: TZ, hour12: false, timeZoneName: 'shortOffset' });
+  // Extract offset like "GMT-6" or "GMT-7"
+  const match = mt.match(/GMT([+-]\d+)/);
+  const hours = match ? parseInt(match[1]) : -7;
+  return `${hours < 0 ? '-' : '+'}${String(Math.abs(hours)).padStart(2, '0')}:00`;
+}
+
 export async function fetchAllWorkerStats(dateStr: string, auth: string) {
   const result: Record<string, ActivityBreakdown & { avgSpeed: number; avgWrapUp: number }> = {};
+  const offset = mtOffset(dateStr);
   try {
     const url = `https://taskrouter.twilio.com/v1/Workspaces/${WORKSPACE_SID}/Workers?PageSize=100`;
-    const wRes = await fetch(url, { headers: { Authorization: auth } });
+    const wRes = await fetchWithTimeout(url, { headers: { Authorization: auth } });
     if (!wRes.ok) return result;
     const wJson = await wRes.json();
     const workers: { sid: string; friendly_name: string }[] = wJson.workers || [];
-    const start = `${dateStr}T00:00:00-07:00`;
+    const start = `${dateStr}T00:00:00${offset}`;
 
     await Promise.all(workers.map(async (w) => {
       const name = normalizeAgent(xName(w.friendly_name));
       try {
-        const end = `${dateStr}T23:59:59-07:00`;
+        const end = `${dateStr}T23:59:59${offset}`;
         const sUrl = `https://taskrouter.twilio.com/v1/Workspaces/${WORKSPACE_SID}/Workers/${w.sid}/Statistics?StartDate=${encodeURIComponent(start)}&EndDate=${encodeURIComponent(end)}`;
-        const r = await fetch(sUrl, { headers: { Authorization: auth } });
+        const r = await fetchWithTimeout(sUrl, { headers: { Authorization: auth } });
         if (!r.ok) return;
         const j = await r.json();
         const c = j.cumulative || {};

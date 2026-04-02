@@ -61,7 +61,10 @@ function b64url(str: string): string {
 
 export async function readSheet(sheetId: string, range: string): Promise<string[][]> {
   const token = await getAccessToken();
-  if (!token) return [];
+  if (!token) {
+    console.error(`[Sheets] No auth token — check GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_PRIVATE_KEY`);
+    return [];
+  }
 
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}`;
   const res = await fetch(url, {
@@ -69,7 +72,8 @@ export async function readSheet(sheetId: string, range: string): Promise<string[
   });
 
   if (!res.ok) {
-    console.error('Sheets fetch error:', res.status, await res.text());
+    const body = await res.text();
+    console.error(`[Sheets] ${res.status} reading ${range} from ${sheetId.slice(0, 8)}…: ${body.slice(0, 200)}`);
     return [];
   }
 

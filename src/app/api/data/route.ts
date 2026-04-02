@@ -293,21 +293,30 @@ async function buildPeriodData(
 
 // ── Add CDR-derived call fields to any period ─────────────────────
 
-function addPeriodCallFields(
+/** Add CDR-derived call stats to a period. Single-pass over calls array. */
+function addCallStats(
   period: PeriodData,
   calls: PairedCall[],
-): PeriodData {
+  opts?: { includeConvPerHour?: boolean },
+): PeriodData & { convPerHour?: number } {
+  // Single pass — no triple .filter()
+  let answered = 0, missedInbound = 0, totalInbound = 0;
+  for (const c of calls) {
+    if (c.status === 'completed') answered++;
+    if (c.direction === 'inbound') {
+      totalInbound++;
+      if (c.duration === 0) missedInbound++;
+    }
+  }
+
   const totalCalls = calls.length;
-  const answeredCalls = calls.filter(c => c.status === 'completed').length;
-  const answerRate = totalCalls > 0 ? Math.round((answeredCalls / totalCalls) * 100) : 0;
-  const missedInbound = calls.filter(c => c.direction === 'inbound' && c.duration === 0).length;
-  const totalInbound = calls.filter(c => c.direction === 'inbound').length;
+  const answerRate = totalCalls > 0 ? Math.round((answered / totalCalls) * 100) : 0;
   const missedCallRate = totalInbound > 0
     ? Math.round((missedInbound / totalInbound) * 1000) / 10
     : 0;
 
   const speedVals = period.repActivity.agents
-    .filter(a => a.speedSec !== null && a.speedSec !== undefined && a.speedSec > 0)
+    .filter(a => a.speedSec != null && a.speedSec > 0)
     .map(a => a.speedSec!);
   const teamAvgSpeed = period.repActivity.avgSpeedSec ?? (
     speedVals.length > 0
@@ -316,59 +325,25 @@ function addPeriodCallFields(
   );
   const fastestPickup = speedVals.length > 0 ? Math.min(...speedVals) : 0;
 
-  return {
+  const result: PeriodData & { convPerHour?: number } = {
     ...period,
     totalCalls,
-    answeredCalls,
+    answeredCalls: answered,
     answerRate,
     missedCallRate,
     teamAvgSpeed,
     fastestPickup,
   };
-}
 
-// ── Build today's extra fields ─────────────────────────────────────
+  if (opts?.includeConvPerHour) {
+    const now = mstNow();
+    const startOfDay = new Date(now);
+    startOfDay.setHours(7, 0, 0, 0);
+    const hoursElapsed = Math.max((now.getTime() - startOfDay.getTime()) / 3600000, 0.5);
+    result.convPerHour = Math.round((period.conversions.total / hoursElapsed) * 100) / 100;
+  }
 
-function addTodayFields(
-  period: PeriodData,
-  calls: PairedCall[],
-): DashboardData['today'] {
-  const totalCalls = calls.length;
-  const answeredCalls = calls.filter(c => c.status === 'completed').length;
-  const answerRate = totalCalls > 0 ? Math.round((answeredCalls / totalCalls) * 100) : 0;
-  const missedInbound = calls.filter(c => c.direction === 'inbound' && c.duration === 0).length;
-  const totalInbound = calls.filter(c => c.direction === 'inbound').length;
-  const missedCallRate = totalInbound > 0
-    ? Math.round((missedInbound / totalInbound) * 1000) / 10
-    : 0;
-
-  const speedVals = period.repActivity.agents
-    .filter(a => a.speedSec !== null && a.speedSec > 0)
-    .map(a => a.speedSec!);
-  const teamAvgSpeed = period.repActivity.avgSpeedSec ?? (
-    speedVals.length > 0
-      ? Math.round((speedVals.reduce((s, v) => s + v, 0) / speedVals.length) * 10) / 10
-      : 0
-  );
-  const fastestPickup = speedVals.length > 0 ? Math.min(...speedVals) : 0;
-
-  // convPerHour: team-level conversions per hour since ~7am MST
-  const now = mstNow();
-  const startOfDay = new Date(now);
-  startOfDay.setHours(7, 0, 0, 0);
-  const hoursElapsed = Math.max((now.getTime() - startOfDay.getTime()) / 3600000, 0.5);
-  const convPerHour = Math.round((period.conversions.total / hoursElapsed) * 100) / 100;
-
-  return {
-    ...period,
-    totalCalls,
-    answeredCalls,
-    answerRate,
-    missedCallRate,
-    teamAvgSpeed,
-    fastestPickup,
-    convPerHour,
-  };
+  return result;
 }
 
 // ── Build recentCalls (last 20 paired calls) ───────────────────────
@@ -605,6 +580,31 @@ export async function GET(request: NextRequest) {
       msc: { calls: mscView.answeredCalls ?? mscView.repActivity.agents.reduce((s, a) => s + a.calls, 0), avgSpeed: mscView.repActivity.avgSpeedSec },
     };
 
+    // ── Staleness detection ────────────────────────────────────
+    // Report data age so the frontend can warn when sources are stale
+    const yticaAge = raw.yesterday.teamStats
+      ? { source: 'ytica', fresh: true, note: 'Yesterday data from 6am dump' }
+      : { source: 'ytica', fresh: false, note: 'No Ytica teamStats for yesterday — using CDR agent sums' };
+    const cdrAge = { source: 'cdr', callCount: todayPaired.length, note: 'Real-time Twilio CDR' };
+
+    // ── Reconciliation ──────────────────────────────────────────
+    // Compare Ytica vs CDR vs agent sums — shows data health at a glance
+    const mixedView = brand === 'mixed' ? derivedToday : deriveBrandView(raw.today, 'mixed', todaySummary);
+    const reconciliation = {
+      yticaTeamTotal: raw.today.teamStats?.totalCalls ?? null,
+      cdrPairedTotal: todayPaired.length,
+      cdrAnswered: todaySummary.jc.answered + todaySummary.msc.answered + todaySummary.unknown.answered,
+      cdrMissed: todaySummary.jc.missed + todaySummary.msc.missed + todaySummary.unknown.missed,
+      agentSum: mixedView.repActivity.agents.reduce((s, a) => s + a.calls, 0),
+      headlineAnswered: mixedView.answeredCalls,
+      brandSplit: {
+        jcAnswered: jcView.answeredCalls,
+        mscAnswered: mscView.answeredCalls,
+        sum: (jcView.answeredCalls ?? 0) + (mscView.answeredCalls ?? 0),
+        matchesHeadline: (jcView.answeredCalls ?? 0) + (mscView.answeredCalls ?? 0) === mixedView.answeredCalls,
+      },
+    };
+
     const data = {
       ...cleanRaw,
       today: {
@@ -616,6 +616,7 @@ export async function GET(request: NextRequest) {
       dataQuality,
       brandBreakdown,
       brand,
+      _health: { staleness: { ytica: yticaAge, cdr: cdrAge }, reconciliation },
     };
 
     return NextResponse.json(data);
@@ -692,7 +693,7 @@ async function fetchDashboardData(): Promise<DashboardData> {
     todayYtica,
     todayTeamStats,
   );
-  const today = addTodayFields(todayPeriod, todayCalls);
+  const today = addCallStats(todayPeriod, todayCalls, { includeConvPerHour: true }) as DashboardData['today'];
 
   // ── Yesterday ──────────────────────────────────────────────────
   // Always fetch CDR legs + TaskRouter stats for yesterday so we get
@@ -712,7 +713,7 @@ async function fetchDashboardData(): Promise<DashboardData> {
     schedule, yesterdayYtica, yesterdayTeamStats,
   );
   // Add totalCalls, answeredCalls, answerRate, etc. — same as today
-  yesterday = addPeriodCallFields(yesterday, yesterdayCalls);
+  yesterday = addCallStats(yesterday, yesterdayCalls);
   // Brand filtering is now applied in the GET handler per ?brand= param
 
   // ── MTD ────────────────────────────────────────────────────────
