@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, Suspense } from 'react';
 import NavBar from './NavBar';
 import Card from './Card';
 import ErrorBoundary from './ErrorBoundary';
-import { C, GOAL, capitalize, computePace, agentColor, AGENT_SCHEDULE, fmtSpeed, fmtTalkTime } from '@/lib/constants';
+import { C, GOAL, capitalize, computePace, agentColor, AGENT_SCHEDULE, fmtSpeed, fmtTalkTime, EXCLUDED_AGENTS } from '@/lib/constants';
 import type { DashboardData, AcctStat, RepAgent } from '@/lib/getDashboard';
 import { Target, BarChart3, Trophy, Zap, Phone, Clock, Timer, Download, TrendingUp, Award, Star, ShieldCheck, Crosshair } from 'lucide-react';
 import { useBrand } from '@/hooks/useBrand';
@@ -273,13 +273,13 @@ function RacePageInner() {
   }
 
   // ── Today's Competitive Metrics ──────────────────────────────────────────
-  const todayAgents = data.today.repActivity.agents;
+  const todayAgents = data.today.repActivity.agents.filter(a => !EXCLUDED_AGENTS.includes(a.agent));
   // Build lookup for leaderboard (today's call data by agent)
   const todayByAgent: Record<string, RepAgent> = {};
   for (const a of todayAgents) todayByAgent[a.agent.toLowerCase()] = a;
 
   // Agent stats with projections
-  const agentStats = mtd.byAgent.map(a => {
+  const agentStats = mtd.byAgent.filter(a => !EXCLUDED_AGENTS.includes(a.agent)).map(a => {
     const dailyAvg = pace.dayOfMonth > 0 ? +(a.count / pace.dayOfMonth).toFixed(1) : 0;
     const projected = Math.round(dailyAvg * pace.daysInMonth);
     let bestDay = 0;
@@ -299,7 +299,7 @@ function RacePageInner() {
   // Build daily grid: days of month × agents
   const mtdDaily = mtd.mtdDaily ?? [];
   const dayNumbers = Array.from({ length: pace.dayOfMonth }, (_, i) => i + 1);
-  const agentNames = mtd.byAgent.map(a => a.agent.toLowerCase());
+  const agentNames = mtd.byAgent.filter(a => !EXCLUDED_AGENTS.includes(a.agent)).map(a => a.agent.toLowerCase());
 
   const topAccounts = mtd.byAccount || [];
 
