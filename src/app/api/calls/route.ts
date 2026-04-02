@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchCallLegs, pairCallLegs, todayMST } from '@/lib/twilio';
 import { ACTIVE_AGENTS, capitalize, normalizeAgent } from '@/lib/constants';
-import { parseBrand, isAgentForBrand, type Brand } from '@/lib/brand';
+import { parseBrand, isAgentForBrand, MSC_ONLY_AGENTS, JC_ONLY_AGENTS, type Brand } from '@/lib/brand';
 import { isMscPhone, getClientBrand } from '@/lib/clients';
 import { cached } from '@/lib/cache';
 import type { PairedCall } from '@/lib/types';
@@ -66,29 +66,42 @@ async function fetchDayPaired(date: string, today: string): Promise<PairedCall[]
 }
 
 /** Determine if a PairedCall belongs to the given brand.
- *  Source of truth: trunk phone number (PairedCall.to for inbound).
- *  Fallback: client name brand mapping, then agent brand membership. */
+ *
+ *  Priority order:
+ *  1. MSC-only / JC-only agent → definitive brand (overrides trunk)
+ *  2. Trunk phone number → brands map in clients.json
+ *  3. Client name → clientBrands map
+ *  4. Blended agent or no agent → fall through to trunk/client
+ *
+ *  An MSC-only agent's call is ALWAYS MSC, even if the trunk is a JC
+ *  number (cross-trunk pairing can assign different trunks). */
 function isCallForBrand(call: PairedCall, brand: Brand): boolean {
   if (brand === 'mixed') return true;
 
-  // 1. Trunk-based: the trunk is `to` for inbound, `from` for outbound
+  const agent = normalizeAgent(call.agent || '');
+
+  // 1. Definitive agent brand (MSC-only or JC-only agents are unambiguous)
+  if (agent) {
+    const lower = agent.toLowerCase();
+    if (MSC_ONLY_AGENTS.has(lower)) return brand === 'msc';
+    if (JC_ONLY_AGENTS.has(lower)) return brand === 'jc';
+    // Blended agent (wendy, sara) — fall through to trunk/client
+  }
+
+  // 2. Trunk-based: the trunk is `to` for inbound, `from` for outbound
   const trunk = call.direction === 'inbound' ? call.to : call.from;
   if (trunk?.startsWith('+')) {
     const trunkIsMsc = isMscPhone(trunk);
     return brand === 'msc' ? trunkIsMsc : !trunkIsMsc;
   }
 
-  // 2. Client name brand mapping
+  // 3. Client name brand mapping
   if (call.client) {
     const clientBrand = getClientBrand(call.client);
     if (clientBrand) return clientBrand === brand;
   }
 
-  // 3. Last resort: agent brand membership
-  const agent = normalizeAgent(call.agent || '');
-  if (agent) return isAgentForBrand(agent, brand);
-
-  // Unknown — include in JC by default
+  // 4. Unknown — include in JC by default
   return brand === 'jc';
 }
 
