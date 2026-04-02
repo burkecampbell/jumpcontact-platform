@@ -348,5 +348,10 @@ export interface DashboardData {
   weekend?: { friday: PeriodData; saturday: PeriodData; sunday: PeriodData };
   prevMonthChampions?: MonthChampions;
   dataQuality?: DataQuality;
+  brandBreakdown?: {
+    jc: { calls: number; avgSpeed: number | null };
+    msc: { calls: number; avgSpeed: number | null };
+  };
+  brand?: string;
   pulledAt: string;
 }

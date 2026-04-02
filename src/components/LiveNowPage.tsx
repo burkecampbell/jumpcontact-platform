@@ -130,7 +130,7 @@ function LiveNowPageInner() {
       <NavBar pulledAt={data.pulledAt} />
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Mixed: Cross-brand insights */}
-        {isMixed && <MixedInsights agents={agents} />}
+        {isMixed && data.brandBreakdown && <MixedInsights breakdown={data.brandBreakdown} />}
 
         {/* Pace Comparison Line (hidden in Mixed — conversions don't apply) */}
         {!isMixed && yesterdayConv > 0 && (
