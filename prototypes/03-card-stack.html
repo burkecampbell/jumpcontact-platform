@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JC Platform — Stacked Cards</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #0A0E1A;
+    --card: rgba(20,24,36,0.92);
+    --text: #f1f5f9;
+    --sub: #8B92A8;
+    --border: rgba(62,165,195,0.18);
+    --lime: #BCFD4C;
+    --cyan: #3EA5C3;
+    --pink: #E63888;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    user-select: none;
+    touch-action: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .header {
+    padding: 24px 0 8px;
+    text-align: center;
+    z-index: 10;
+  }
+
+  .header h1 {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--cyan);
+  }
+
+  .header p {
+    font-size: 11px;
+    color: var(--sub);
+    margin-top: 4px;
+  }
+
+  .stack-area {
+    flex: 1;
+    position: relative;
+    width: 100%;
+    max-width: 440px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .stack-card {
+    position: absolute;
+    width: 380px;
+    max-width: 90vw;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    padding: 28px;
+    backdrop-filter: blur(24px);
+    background: var(--card);
+    touch-action: none;
+    cursor: grab;
+    will-change: transform;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.35);
+    transition: box-shadow 0.3s;
+  }
+
+  .stack-card.dragging {
+    cursor: grabbing;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.6), 0 0 30px rgba(62,165,195,0.1);
+  }
+
+  .stack-card.dismissed {
+    pointer-events: none;
+  }
+
+  /* Agent card content */
+  .agent-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .agent-avatar {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: 800;
+    color: #0A0E1A;
+  }
+
+  .agent-info h2 {
+    font-size: 22px;
+    font-weight: 700;
+  }
+
+  .agent-info p {
+    font-size: 12px;
+    color: var(--sub);
+    margin-top: 2px;
+  }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .stat-box {
+    text-align: center;
+    padding: 12px 0;
+    background: rgba(139,146,168,0.05);
+    border-radius: 12px;
+    border: 1px solid rgba(139,146,168,0.06);
+  }
+
+  .stat-box-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 24px;
+    font-weight: 700;
+  }
+
+  .stat-box-label {
+    font-size: 10px;
+    color: var(--sub);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 4px;
+  }
+
+  .perf-bar {
+    height: 6px;
+    background: rgba(139,146,168,0.1);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+
+  .perf-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s;
+  }
+
+  .perf-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+  }
+
+  .perf-label {
+    font-size: 12px;
+    color: var(--sub);
+  }
+
+  .perf-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  /* Bottom counter */
+  .counter {
+    padding: 16px 0 28px;
+    text-align: center;
+    z-index: 10;
+  }
+
+  .counter-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--sub);
+  }
+
+  .dismiss-hint {
+    font-size: 11px;
+    color: var(--sub);
+    opacity: 0.5;
+    margin-top: 6px;
+  }
+
+  /* Swipe indicator overlays */
+  .swipe-indicator {
+    position: absolute;
+    top: 20px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    border-radius: 8px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s;
+  }
+
+  .swipe-left {
+    right: 20px;
+    background: rgba(230,56,136,0.15);
+    color: var(--pink);
+    border: 1px solid rgba(230,56,136,0.3);
+  }
+
+  .swipe-right {
+    left: 20px;
+    background: rgba(188,253,76,0.15);
+    color: var(--lime);
+    border: 1px solid rgba(188,253,76,0.3);
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Jump Contact</h1>
+  <p>Agent Performance Cards &bull; Apr 1, 2026</p>
+</div>
+
+<div class="stack-area" id="stackArea"></div>
+
+<div class="counter">
+  <div class="counter-text" id="counterText"></div>
+  <div class="dismiss-hint">Swipe right to approve &bull; Left to flag &bull; Or just flick around</div>
+</div>
+
+<script>
+// ── Agent Data ─────────────────────────────────────────────────
+const agents = [
+  { name: 'Wendy', color: '#e879f9', calls: 56, convs: 6, speed: 7, talk: 71.8, pickup: 40, grade: 'A+', wrapUp: 35 },
+  { name: 'Omar', color: '#38bdf8', calls: 56, convs: 5, speed: 10, talk: 83.2, pickup: 43.4, grade: 'A', wrapUp: 32 },
+  { name: 'Danny', color: '#fbbf24', calls: 38, convs: 5, speed: 6, talk: 56.4, pickup: 34.6, grade: 'A+', wrapUp: 20 },
+  { name: 'Burke', color: '#4ade80', calls: 55, convs: 4, speed: 7, talk: 54.9, pickup: 52.3, grade: 'A+', wrapUp: 54 },
+  { name: 'Ian', color: '#a78bfa', calls: 8, convs: 1, speed: 24, talk: 9.2, pickup: 70, grade: 'C', wrapUp: 42 },
+  { name: 'Chris', color: '#f87171', calls: 20, convs: 1, speed: 7, talk: 31.8, pickup: 37.8, grade: 'A+', wrapUp: 29 },
+];
+
+// ── Spring Physics ─────────────────────────────────────────────
+const MS = 4;
+function spring(pos, k = 290, b = 24) { return { pos, dest: pos, v: 0, k, b }; }
+function adv(s, dt) {
+  let n = Math.min(Math.floor(dt / MS), 200);
+  const t = MS / 1000;
+  for (let i = 0; i < n; i++) {
+    const f = -s.k * (s.pos - s.dest) - s.b * s.v;
+    s.v += f * t;
+    s.pos += s.v * t;
+  }
+}
+function rest(s) { return Math.abs(s.pos - s.dest) < 0.5 && Math.abs(s.v) < 0.05; }
+
+// ── Build Cards ────────────────────────────────────────────────
+const area = document.getElementById('stackArea');
+const counterEl = document.getElementById('counterText');
+const cardEls = [];
+let dismissed = 0;
+
+function speedColor(s) {
+  if (s < 8) return '#4ade80';
+  if (s < 12) return '#38bdf8';
+  if (s < 18) return '#fbbf24';
+  return '#f87171';
+}
+
+agents.forEach((agent, idx) => {
+  const card = document.createElement('div');
+  card.className = 'stack-card';
+  card.innerHTML = `
+    <div class="swipe-indicator swipe-right">Approved</div>
+    <div class="swipe-indicator swipe-left">Flagged</div>
+    <div class="agent-header">
+      <div class="agent-avatar" style="background:${agent.color}">${agent.name[0]}</div>
+      <div class="agent-info">
+        <h2>${agent.name}</h2>
+        <p>${agent.calls} calls &bull; ${agent.talk}min talk time</p>
+      </div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-box">
+        <div class="stat-box-value" style="color:var(--lime)">${agent.convs}</div>
+        <div class="stat-box-label">Conversions</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-value" style="color:${speedColor(agent.speed)}">${agent.speed}s</div>
+        <div class="stat-box-label">Speed ${agent.grade}</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-value" style="color:var(--cyan)">${agent.pickup}%</div>
+        <div class="stat-box-label">Pickup Rate</div>
+      </div>
+    </div>
+    <div class="perf-row">
+      <span class="perf-label">Wrap-up Time</span>
+      <span class="perf-value" style="color:${agent.wrapUp > 40 ? 'var(--pink)' : 'var(--lime)'}">${agent.wrapUp}s</span>
+    </div>
+    <div class="perf-bar">
+      <div class="perf-bar-fill" style="width:${Math.min(agent.wrapUp / 60 * 100, 100)}%;background:${agent.wrapUp > 40 ? 'var(--pink)' : 'var(--lime)'}"></div>
+    </div>
+    <div class="perf-row" style="margin-top:8px">
+      <span class="perf-label">Conv/Hour Rate</span>
+      <span class="perf-value" style="color:var(--cyan)">${(agent.convs / Math.max(agent.talk / 60, 0.5)).toFixed(2)}</span>
+    </div>
+    <div class="perf-bar">
+      <div class="perf-bar-fill" style="width:${Math.min((agent.convs / Math.max(agent.talk / 60, 0.5)) / 3 * 100, 100)}%;background:var(--cyan)"></div>
+    </div>
+  `;
+  area.appendChild(card);
+  cardEls.push(card);
+});
+
+function updateCounter() {
+  counterEl.textContent = `${dismissed} / ${agents.length} reviewed`;
+}
+updateCounter();
+
+// ── Stack positioning + drag ───────────────────────────────────
+function layoutStack() {
+  const visible = cardEls.filter(c => !c.classList.contains('dismissed'));
+  visible.forEach((card, i) => {
+    const fromTop = visible.length - 1 - i;
+    card.style.zIndex = i + 1;
+    if (!card._dragging) {
+      card._sx.dest = fromTop * 3;
+      card._sy.dest = fromTop * -6;
+      card._sScale.dest = 1 - fromTop * 0.03;
+      card._sRot.dest = 0;
+      card._sOpacity.dest = fromTop < 4 ? 1 : 0;
+    }
+  });
+}
+
+cardEls.forEach((card, idx) => {
+  const sx = spring(0, 200, 22);
+  const sy = spring(0, 200, 22);
+  const sRot = spring(0, 200, 22);
+  const sScale = spring(1, 180, 20);
+  const sOpacity = spring(1, 150, 18);
+  card._sx = sx; card._sy = sy; card._sRot = sRot;
+  card._sScale = sScale; card._sOpacity = sOpacity;
+  card._dragging = false;
+
+  let history = [];
+  let lastFrame = 0;
+  let running = false;
+
+  function startAnim() {
+    if (running) return;
+    running = true;
+    lastFrame = 0;
+    requestAnimationFrame(tick);
+  }
+
+  function tick(now) {
+    const dt = lastFrame ? now - lastFrame : 16;
+    lastFrame = now;
+    adv(sx, dt); adv(sy, dt); adv(sRot, dt); adv(sScale, dt); adv(sOpacity, dt);
+    card.style.transform = `translate3d(${sx.pos}px, ${sy.pos}px, 0) rotate(${sRot.pos}deg) scale(${sScale.pos})`;
+    card.style.opacity = Math.max(0, Math.min(1, sOpacity.pos));
+
+    // Swipe indicators
+    const leftInd = card.querySelector('.swipe-left');
+    const rightInd = card.querySelector('.swipe-right');
+    if (leftInd) leftInd.style.opacity = Math.min(1, Math.max(0, -sx.pos / 100));
+    if (rightInd) rightInd.style.opacity = Math.min(1, Math.max(0, sx.pos / 100));
+
+    // Check if dismissed (flung off screen)
+    if (card.classList.contains('dismissed') && rest(sx) && rest(sy) && rest(sOpacity)) {
+      card.style.display = 'none';
+      running = false;
+      return;
+    }
+
+    if (!rest(sx) || !rest(sy) || !rest(sRot) || !rest(sScale) || !rest(sOpacity) || card._dragging) {
+      requestAnimationFrame(tick);
+    } else {
+      running = false;
+    }
+  }
+
+  card.addEventListener('pointerdown', e => {
+    if (card.classList.contains('dismissed')) return;
+    e.preventDefault();
+    card.setPointerCapture(e.pointerId);
+    card._dragging = true;
+    card.classList.add('dragging');
+    card.style.zIndex = 100;
+    sx.v = 0; sy.v = 0; sRot.v = 0;
+    card._offsetX = e.clientX - sx.pos;
+    card._offsetY = e.clientY - sy.pos;
+    history = [{ x: e.clientX, y: e.clientY, t: performance.now() }];
+    sScale.dest = 1.06;
+    startAnim();
+  });
+
+  card.addEventListener('pointermove', e => {
+    if (!card._dragging) return;
+    sx.pos = e.clientX - card._offsetX;
+    sx.dest = sx.pos;
+    sy.pos = e.clientY - card._offsetY;
+    sy.dest = sy.pos;
+    // Tilt based on horizontal movement
+    sRot.pos = sx.pos * 0.06;
+    sRot.dest = sRot.pos;
+    const now = performance.now();
+    history.push({ x: e.clientX, y: e.clientY, t: now });
+    while (history.length > 1 && now - history[0].t > 100) history.shift();
+  });
+
+  card.addEventListener('pointerup', e => {
+    if (!card._dragging) return;
+    card._dragging = false;
+    card.classList.remove('dragging');
+
+    // Flick velocity
+    const now = performance.now();
+    let vx = 0, vy = 0;
+    if (history.length >= 2) {
+      const a = history[0], b = history[history.length - 1];
+      const dt = b.t - a.t;
+      if (dt > 0) { vx = (b.x - a.x) / dt * 1000; vy = (b.y - a.y) / dt * 1000; }
+    }
+
+    // Dismiss threshold: far enough or fast enough
+    const dist = Math.abs(sx.pos);
+    const speed = Math.abs(vx);
+    if (dist > 120 || speed > 800) {
+      // Fling off screen
+      const dir = sx.pos > 0 ? 1 : -1;
+      sx.v = vx + dir * 500;
+      sy.v = vy;
+      sx.dest = dir * window.innerWidth * 1.5;
+      sy.dest = sy.pos + vy * 0.3;
+      sRot.dest = dir * 30;
+      sOpacity.dest = 0;
+      sScale.dest = 0.8;
+      card.classList.add('dismissed');
+      dismissed++;
+      updateCounter();
+      setTimeout(layoutStack, 50);
+    } else {
+      // Spring back
+      sx.v = vx * 0.3;
+      sy.v = vy * 0.3;
+      sx.dest = 0;
+      sy.dest = 0;
+      sRot.dest = 0;
+      sScale.dest = 1;
+      layoutStack();
+    }
+    startAnim();
+  });
+
+  card._startAnim = startAnim;
+});
+
+layoutStack();
+// Kick initial animation
+cardEls.forEach(c => c._startAnim());
+</script>
+</body>
+</html>

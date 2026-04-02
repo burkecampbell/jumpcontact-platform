@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JC Platform — Draggable Canvas</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #0A0E1A;
+    --card: rgba(20,24,36,0.82);
+    --card-lift: rgba(20,24,36,0.95);
+    --text: #f1f5f9;
+    --sub: #8B92A8;
+    --border: rgba(62,165,195,0.18);
+    --lime: #BCFD4C;
+    --cyan: #3EA5C3;
+    --pink: #E63888;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    user-select: none;
+  }
+
+  /* Subtle grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(62,165,195,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(62,165,195,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  .canvas {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+  }
+
+  .card {
+    position: absolute;
+    touch-action: none;
+    cursor: grab;
+    will-change: transform;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    padding: 20px;
+    backdrop-filter: blur(20px);
+    background: var(--card);
+    transition: box-shadow 0.25s, border-color 0.25s, background 0.25s;
+  }
+
+  .card.dragging {
+    cursor: grabbing;
+    background: var(--card-lift);
+    border-color: rgba(62,165,195,0.35);
+    box-shadow: 0 24px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(62,165,195,0.15);
+  }
+
+  .card:not(.dragging) {
+    box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+  }
+
+  /* Card types */
+  .card-kpi {
+    width: 200px;
+  }
+
+  .card-agent {
+    width: 260px;
+  }
+
+  .card-chart {
+    width: 420px;
+    height: 220px;
+  }
+
+  .card-recent {
+    width: 380px;
+  }
+
+  .kpi-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 36px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .kpi-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--sub);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-top: 6px;
+  }
+
+  .kpi-delta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    margin-top: 8px;
+  }
+
+  .agent-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(139,146,168,0.08);
+  }
+
+  .agent-row:last-child { border: none; }
+
+  .agent-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .agent-row-name {
+    font-size: 14px;
+    font-weight: 600;
+    flex: 1;
+  }
+
+  .agent-row-stat {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--cyan);
+  }
+
+  .card-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--sub);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 12px;
+  }
+
+  /* Mini bar chart */
+  .bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 120px;
+    padding-top: 8px;
+  }
+
+  .bar {
+    flex: 1;
+    border-radius: 3px 3px 0 0;
+    background: var(--cyan);
+    opacity: 0.7;
+    min-height: 4px;
+    transition: opacity 0.2s;
+  }
+
+  .bar:hover { opacity: 1; }
+
+  .bar-label {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 6px;
+    font-size: 9px;
+    color: var(--sub);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .recent-row {
+    display: flex;
+    gap: 10px;
+    padding: 6px 0;
+    font-size: 12px;
+    border-bottom: 1px solid rgba(139,146,168,0.06);
+    align-items: center;
+  }
+
+  .recent-time {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--sub);
+    font-size: 11px;
+    width: 60px;
+    flex-shrink: 0;
+  }
+
+  .recent-agent {
+    font-weight: 600;
+    width: 55px;
+    flex-shrink: 0;
+  }
+
+  .recent-client {
+    color: var(--sub);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .recent-dur {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--cyan);
+    font-size: 11px;
+  }
+
+  .hint {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 12px;
+    color: var(--sub);
+    opacity: 0.6;
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  .reset-btn {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--sub);
+    background: rgba(139,146,168,0.08);
+    border: 1px solid rgba(139,146,168,0.15);
+    border-radius: 8px;
+    padding: 8px 16px;
+    cursor: pointer;
+    z-index: 100;
+    font-family: 'Inter', sans-serif;
+    transition: color 0.2s, border-color 0.2s;
+  }
+
+  .reset-btn:hover {
+    color: var(--text);
+    border-color: var(--cyan);
+  }
+</style>
+</head>
+<body>
+
+<button class="reset-btn" onclick="resetLayout()">Reset Layout</button>
+<div class="hint">Drag any card anywhere. Flick to throw. Build your own dashboard.</div>
+
+<div class="canvas" id="canvas">
+  <!-- KPI Cards -->
+  <div class="card card-kpi" data-home-x="40" data-home-y="40">
+    <div class="kpi-value" style="color: var(--lime)">22</div>
+    <div class="kpi-label">Conversions</div>
+    <div class="kpi-delta" style="color: var(--lime)">+5 vs yesterday</div>
+  </div>
+
+  <div class="card card-kpi" data-home-x="260" data-home-y="40">
+    <div class="kpi-value" style="color: var(--cyan)">265</div>
+    <div class="kpi-label">Calls Answered</div>
+    <div class="kpi-delta" style="color: var(--pink)">-37 vs yesterday</div>
+  </div>
+
+  <div class="card card-kpi" data-home-x="480" data-home-y="40">
+    <div class="kpi-value" style="color: var(--pink)">16</div>
+    <div class="kpi-label">Missed Calls</div>
+    <div class="kpi-delta" style="color: var(--lime)">-16 vs yesterday</div>
+  </div>
+
+  <div class="card card-kpi" data-home-x="700" data-home-y="40">
+    <div class="kpi-value" style="color: var(--text)">9.4s</div>
+    <div class="kpi-label">Avg Speed</div>
+    <div class="kpi-delta" style="color: var(--lime)">A grade</div>
+  </div>
+
+  <!-- Agent Ranking Card -->
+  <div class="card card-agent" data-home-x="40" data-home-y="200">
+    <div class="card-title">Agent Leaderboard</div>
+    <div class="agent-row">
+      <div class="agent-dot" style="background:#e879f9"></div>
+      <div class="agent-row-name">Wendy</div>
+      <div class="agent-row-stat">6 conv</div>
+    </div>
+    <div class="agent-row">
+      <div class="agent-dot" style="background:#38bdf8"></div>
+      <div class="agent-row-name">Omar</div>
+      <div class="agent-row-stat">5 conv</div>
+    </div>
+    <div class="agent-row">
+      <div class="agent-dot" style="background:#fbbf24"></div>
+      <div class="agent-row-name">Danny</div>
+      <div class="agent-row-stat">5 conv</div>
+    </div>
+    <div class="agent-row">
+      <div class="agent-dot" style="background:#4ade80"></div>
+      <div class="agent-row-name">Burke</div>
+      <div class="agent-row-stat">4 conv</div>
+    </div>
+    <div class="agent-row">
+      <div class="agent-dot" style="background:#a78bfa"></div>
+      <div class="agent-row-name">Ian</div>
+      <div class="agent-row-stat">1 conv</div>
+    </div>
+    <div class="agent-row">
+      <div class="agent-dot" style="background:#f87171"></div>
+      <div class="agent-row-name">Chris</div>
+      <div class="agent-row-stat">1 conv</div>
+    </div>
+  </div>
+
+  <!-- Hourly Chart -->
+  <div class="card card-chart" data-home-x="320" data-home-y="200">
+    <div class="card-title">Conversions by Hour</div>
+    <div class="bars" id="hourlyBars"></div>
+    <div class="bar-label">
+      <span>7am</span>
+      <span>12pm</span>
+      <span>5pm</span>
+    </div>
+  </div>
+
+  <!-- Recent Calls -->
+  <div class="card card-recent" data-home-x="40" data-home-y="500">
+    <div class="card-title">Recent Calls</div>
+    <div class="recent-row">
+      <div class="recent-time">8:25p</div>
+      <div class="recent-agent" style="color:#f87171">Chris</div>
+      <div class="recent-client">Plumber On Demand</div>
+      <div class="recent-dur">0:11</div>
+    </div>
+    <div class="recent-row">
+      <div class="recent-time">8:21p</div>
+      <div class="recent-agent" style="color:#e879f9">Wendy</div>
+      <div class="recent-client">Jacob J. Sapochnick</div>
+      <div class="recent-dur">2:57</div>
+    </div>
+    <div class="recent-row">
+      <div class="recent-time">7:40p</div>
+      <div class="recent-agent" style="color:#f87171">Chris</div>
+      <div class="recent-client">Brudner Law</div>
+      <div class="recent-dur">0:55</div>
+    </div>
+    <div class="recent-row">
+      <div class="recent-time">7:22p</div>
+      <div class="recent-agent" style="color:#f87171">Chris</div>
+      <div class="recent-client">Plumber On Demand</div>
+      <div class="recent-dur">2:53</div>
+    </div>
+    <div class="recent-row">
+      <div class="recent-time">7:00p</div>
+      <div class="recent-agent" style="color:#e879f9">Wendy</div>
+      <div class="recent-client">Dansel Restoration</div>
+      <div class="recent-dur">3:26</div>
+    </div>
+  </div>
+
+  <!-- Speed Card -->
+  <div class="card card-agent" data-home-x="760" data-home-y="200">
+    <div class="card-title">Speed by Agent</div>
+    <div class="agent-row">
+      <div class="agent-dot" style="background:#94a3b8"></div>
+      <div class="agent-row-name">Sara</div>
+      <div class="agent-row-stat" style="color:#4ade80">5s</div>
+    </div>
+    <div class="agent-row">
+      <div class="agent-dot" style="background:#fbbf24"></div>
+      <div class="agent-row-name">Danny</div>
+      <div class="agent-row-stat" style="color:#4ade80">6s</div>
+    </div>
+    <div class="agent-row">
+      <div class="agent-dot" style="background:#e879f9"></div>
+      <div class="agent-row-name">Wendy</div>
+      <div class="agent-row-stat" style="color:#4ade80">7s</div>
+    </div>
+    <div class="agent-row">
+      <div class="agent-dot" style="background:#4ade80"></div>
+      <div class="agent-row-name">Burke</div>
+      <div class="agent-row-stat" style="color:#4ade80">7s</div>
+    </div>
+    <div class="agent-row">
+      <div class="agent-dot" style="background:#38bdf8"></div>
+      <div class="agent-row-name">Omar</div>
+      <div class="agent-row-stat" style="color:#38bdf8">10s</div>
+    </div>
+    <div class="agent-row">
+      <div class="agent-dot" style="background:#a78bfa"></div>
+      <div class="agent-row-name">Ian</div>
+      <div class="agent-row-stat" style="color:#fbbf24">24s</div>
+    </div>
+  </div>
+
+  <!-- MTD Pace -->
+  <div class="card card-kpi" data-home-x="450" data-home-y="500" style="width: 280px;">
+    <div class="card-title">MTD Pace</div>
+    <div style="height:12px;background:rgba(139,146,168,0.1);border-radius:6px;overflow:hidden;margin-bottom:12px">
+      <div style="height:100%;width:2.4%;background:linear-gradient(90deg,var(--cyan),var(--lime));border-radius:6px;transition:width 1s"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between">
+      <div>
+        <div class="kpi-value" style="font-size:28px;color:var(--cyan)">22</div>
+        <div class="kpi-label">Actual</div>
+      </div>
+      <div style="text-align:right">
+        <div class="kpi-value" style="font-size:28px;color:var(--sub)">900</div>
+        <div class="kpi-label">Goal</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Spring Physics ─────────────────────────────────────────────
+const MS = 4;
+
+function spring(pos, k = 290, b = 24) {
+  return { pos, dest: pos, v: 0, k, b };
+}
+
+function advance(s, dt) {
+  let n = Math.min(Math.floor(dt / MS), 200);
+  const t = MS / 1000;
+  for (let i = 0; i < n; i++) {
+    const f = -s.k * (s.pos - s.dest) - s.b * s.v;
+    s.v += f * t;
+    s.pos += s.v * t;
+  }
+}
+
+function atRest(s) {
+  return Math.abs(s.pos - s.dest) < 0.3 && Math.abs(s.v) < 0.01;
+}
+
+// ── Hourly chart ───────────────────────────────────────────────
+const hourly = [0,1,3,0,1,2,3,2,1,3,2,3,0,0,1,0,0,0,0,0,0,0,0,0];
+const maxH = Math.max(...hourly, 1);
+const barsEl = document.getElementById('hourlyBars');
+hourly.forEach(v => {
+  const bar = document.createElement('div');
+  bar.className = 'bar';
+  bar.style.height = (v / maxH * 100) + '%';
+  if (v === 0) bar.style.opacity = '0.15';
+  barsEl.appendChild(bar);
+});
+
+// ── Draggable cards ────────────────────────────────────────────
+const cards = document.querySelectorAll('.card');
+let topZ = cards.length + 1;
+
+cards.forEach((card, idx) => {
+  const homeX = parseInt(card.dataset.homeX) || (40 + idx * 220);
+  const homeY = parseInt(card.dataset.homeY) || 40;
+
+  const sx = spring(homeX);
+  const sy = spring(homeY);
+  const sScale = spring(1, 180, 20);
+
+  let isDragging = false;
+  let offsetX = 0, offsetY = 0;
+  let history = [];
+  let lastFrame = 0;
+  let running = false;
+
+  // Initial position
+  card.style.transform = `translate3d(${homeX}px, ${homeY}px, 0) scale(1)`;
+  card._springs = { sx, sy, sScale, homeX, homeY };
+
+  function startAnim() {
+    if (running) return;
+    running = true;
+    lastFrame = 0;
+    requestAnimationFrame(tick);
+  }
+
+  function tick(now) {
+    const dt = lastFrame ? now - lastFrame : 16;
+    lastFrame = now;
+    advance(sx, dt);
+    advance(sy, dt);
+    advance(sScale, dt);
+    card.style.transform = `translate3d(${sx.pos}px, ${sy.pos}px, 0) scale(${sScale.pos})`;
+    if (!atRest(sx) || !atRest(sy) || !atRest(sScale) || isDragging) {
+      requestAnimationFrame(tick);
+    } else {
+      running = false;
+    }
+  }
+
+  card.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    card.setPointerCapture(e.pointerId);
+    isDragging = true;
+    card.classList.add('dragging');
+    card.style.zIndex = topZ++;
+    offsetX = e.clientX - sx.pos;
+    offsetY = e.clientY - sy.pos;
+    sx.v = 0; sy.v = 0;
+    history = [{ x: e.clientX, y: e.clientY, t: performance.now() }];
+    sScale.dest = 1.05;
+    startAnim();
+  });
+
+  card.addEventListener('pointermove', e => {
+    if (!isDragging) return;
+    sx.pos = e.clientX - offsetX;
+    sx.dest = sx.pos;
+    sy.pos = e.clientY - offsetY;
+    sy.dest = sy.pos;
+    const now = performance.now();
+    history.push({ x: e.clientX, y: e.clientY, t: now });
+    while (history.length > 1 && now - history[0].t > 100) history.shift();
+  });
+
+  card.addEventListener('pointerup', e => {
+    if (!isDragging) return;
+    isDragging = false;
+    card.classList.remove('dragging');
+
+    // Flick
+    const now = performance.now();
+    if (history.length >= 2) {
+      const a = history[0], b = history[history.length - 1];
+      const dt = b.t - a.t;
+      if (dt > 0) {
+        sx.v = (b.x - a.x) / dt * 1000;
+        sy.v = (b.y - a.y) / dt * 1000;
+      }
+    }
+
+    sx.dest = sx.pos;
+    sy.dest = sy.pos;
+    sScale.dest = 1;
+    startAnim();
+  });
+});
+
+// ── Reset layout ───────────────────────────────────────────────
+function resetLayout() {
+  cards.forEach(card => {
+    const s = card._springs;
+    s.sx.dest = s.homeX;
+    s.sy.dest = s.homeY;
+    s.sScale.dest = 1;
+    // Kick the animation
+    if (!card._running) {
+      card._running = true;
+      let lastFrame = 0;
+      function tick(now) {
+        const dt = lastFrame ? now - lastFrame : 16;
+        lastFrame = now;
+        advance(s.sx, dt);
+        advance(s.sy, dt);
+        advance(s.sScale, dt);
+        card.style.transform = `translate3d(${s.sx.pos}px, ${s.sy.pos}px, 0) scale(${s.sScale.pos})`;
+        if (!atRest(s.sx) || !atRest(s.sy) || !atRest(s.sScale)) {
+          requestAnimationFrame(tick);
+        } else {
+          card._running = false;
+        }
+      }
+      requestAnimationFrame(tick);
+    }
+  });
+}
+</script>
+</body>
+</html>

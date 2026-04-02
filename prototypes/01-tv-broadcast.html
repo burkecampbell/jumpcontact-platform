@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JC Platform — TV Broadcast Mode</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #0A0E1A;
+    --card: rgba(20,24,36,0.72);
+    --text: #f1f5f9;
+    --sub: #8B92A8;
+    --border: rgba(62,165,195,0.18);
+    --lime: #BCFD4C;
+    --cyan: #3EA5C3;
+    --pink: #E63888;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    user-select: none;
+    touch-action: none;
+  }
+
+  .viewport {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .track {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    display: flex;
+    will-change: transform;
+  }
+
+  .slide {
+    width: 100vw;
+    height: 100vh;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px;
+    position: relative;
+  }
+
+  .slide::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 30%, rgba(62,165,195,0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .kpi-hero {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: clamp(80px, 12vw, 180px);
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 16px;
+    background: linear-gradient(135deg, var(--lime) 0%, var(--cyan) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .kpi-label {
+    font-size: clamp(18px, 2.5vw, 32px);
+    font-weight: 500;
+    color: var(--sub);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 48px;
+  }
+
+  .kpi-delta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: clamp(14px, 1.5vw, 20px);
+    padding: 8px 20px;
+    border-radius: 100px;
+    background: rgba(188,253,76,0.1);
+    color: var(--lime);
+    border: 1px solid rgba(188,253,76,0.2);
+  }
+
+  .kpi-delta.negative {
+    background: rgba(230,56,136,0.1);
+    color: var(--pink);
+    border-color: rgba(230,56,136,0.2);
+  }
+
+  /* Agent ranking slide */
+  .agent-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    width: 100%;
+    max-width: 1200px;
+  }
+
+  .agent-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    backdrop-filter: blur(20px);
+    transition: transform 0.3s, box-shadow 0.3s;
+  }
+
+  .agent-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+  }
+
+  .agent-name {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .agent-stat {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--cyan);
+  }
+
+  .agent-stat-label {
+    font-size: 12px;
+    color: var(--sub);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* Dots nav */
+  .dots {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 12px;
+    z-index: 100;
+  }
+
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgba(139,146,168,0.3);
+    cursor: pointer;
+    transition: background 0.3s, transform 0.3s;
+  }
+
+  .dot.active {
+    background: var(--cyan);
+    transform: scale(1.3);
+  }
+
+  /* Progress bar */
+  .progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--cyan), var(--lime));
+    z-index: 100;
+    transition: width 0.1s;
+  }
+
+  .brand-badge {
+    position: fixed;
+    top: 24px;
+    left: 24px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    padding: 6px 14px;
+    border: 1px solid rgba(62,165,195,0.3);
+    border-radius: 6px;
+    background: rgba(62,165,195,0.08);
+    z-index: 100;
+  }
+
+  .time-badge {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--sub);
+    z-index: 100;
+  }
+
+  .slide-title {
+    font-size: clamp(14px, 1.8vw, 22px);
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 32px;
+    text-align: center;
+  }
+
+  .mini-stats {
+    display: flex;
+    gap: 40px;
+    margin-top: 32px;
+  }
+
+  .mini-stat {
+    text-align: center;
+  }
+
+  .mini-stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .mini-stat-label {
+    font-size: 11px;
+    color: var(--sub);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 4px;
+  }
+</style>
+</head>
+<body>
+
+<div class="brand-badge">Jump Contact</div>
+<div class="time-badge" id="clock"></div>
+<div class="progress" id="progress"></div>
+
+<div class="viewport" id="viewport">
+  <div class="track" id="track">
+    <!-- Slide 1: Conversions Hero -->
+    <div class="slide">
+      <div class="kpi-hero" id="convHero">22</div>
+      <div class="kpi-label">Conversions Today</div>
+      <div class="kpi-delta">+5 vs yesterday at this time</div>
+      <div class="mini-stats">
+        <div class="mini-stat">
+          <div class="mini-stat-value">1.54</div>
+          <div class="mini-stat-label">Conv/Hour</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-value">900</div>
+          <div class="mini-stat-label">Monthly Goal</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-value">660</div>
+          <div class="mini-stat-label">Projected</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 2: Calls Hero -->
+    <div class="slide">
+      <div class="kpi-hero">281</div>
+      <div class="kpi-label">Total Calls</div>
+      <div class="kpi-delta negative">-44 vs yesterday</div>
+      <div class="mini-stats">
+        <div class="mini-stat">
+          <div class="mini-stat-value">265</div>
+          <div class="mini-stat-label">Answered</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-value">94%</div>
+          <div class="mini-stat-label">Answer Rate</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-value">16</div>
+          <div class="mini-stat-label">Missed</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 3: Speed Hero -->
+    <div class="slide">
+      <div class="kpi-hero" style="font-size: clamp(60px, 10vw, 140px)">9.4s</div>
+      <div class="kpi-label">Average Pickup Speed</div>
+      <div class="kpi-delta">A grade &mdash; within 10s target</div>
+      <div class="mini-stats">
+        <div class="mini-stat">
+          <div class="mini-stat-value">5s</div>
+          <div class="mini-stat-label">Fastest</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-value">24s</div>
+          <div class="mini-stat-label">Slowest</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-value">6</div>
+          <div class="mini-stat-label">Agents Active</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 4: Agent Rankings -->
+    <div class="slide" style="justify-content: flex-start; padding-top: 80px;">
+      <div class="slide-title">Agent Leaderboard</div>
+      <div class="agent-grid">
+        <div class="agent-card">
+          <div class="agent-name" style="color: #e879f9">Wendy</div>
+          <div class="agent-stat">6</div>
+          <div class="agent-stat-label">Conversions &bull; 56 calls &bull; 7s speed</div>
+        </div>
+        <div class="agent-card">
+          <div class="agent-name" style="color: #38bdf8">Omar</div>
+          <div class="agent-stat">5</div>
+          <div class="agent-stat-label">Conversions &bull; 56 calls &bull; 10s speed</div>
+        </div>
+        <div class="agent-card">
+          <div class="agent-name" style="color: #4ade80">Burke</div>
+          <div class="agent-stat">4</div>
+          <div class="agent-stat-label">Conversions &bull; 55 calls &bull; 7s speed</div>
+        </div>
+        <div class="agent-card">
+          <div class="agent-name" style="color: #a78bfa">Ian</div>
+          <div class="agent-stat">1</div>
+          <div class="agent-stat-label">Conversions &bull; 8 calls &bull; 24s speed</div>
+        </div>
+        <div class="agent-card">
+          <div class="agent-name" style="color: #f87171">Chris</div>
+          <div class="agent-stat">1</div>
+          <div class="agent-stat-label">Conversions &bull; 20 calls &bull; 7s speed</div>
+        </div>
+        <div class="agent-card">
+          <div class="agent-name" style="color: #fbbf24">Danny</div>
+          <div class="agent-stat">5</div>
+          <div class="agent-stat-label">Conversions &bull; 38 calls &bull; 6s speed</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 5: MTD Pace -->
+    <div class="slide">
+      <div class="kpi-hero" style="font-size: clamp(50px, 8vw, 120px)">22 / 900</div>
+      <div class="kpi-label">Month-to-Date Pace</div>
+      <div class="kpi-delta negative">Projected 660 &mdash; 240 below goal</div>
+      <div class="mini-stats">
+        <div class="mini-stat">
+          <div class="mini-stat-value">30.3</div>
+          <div class="mini-stat-label">Required/Day</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-value">29</div>
+          <div class="mini-stat-label">Days Left</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-value">Apr 1</div>
+          <div class="mini-stat-label">Day 1 of 30</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="dots" id="dots"></div>
+
+<script>
+// ── Spring Physics (from chenglou) ─────────────────────────────
+const MS_PER_STEP = 4;
+
+function spring(pos, k = 120, b = 18) {
+  return { pos, dest: pos, v: 0, k, b };
+}
+
+function springAdvance(s, dt) {
+  let steps = Math.min(Math.floor(dt / MS_PER_STEP), 200);
+  const t = MS_PER_STEP / 1000;
+  for (let i = 0; i < steps; i++) {
+    const Fs = -s.k * (s.pos - s.dest);
+    const Fd = -s.b * s.v;
+    s.v += (Fs + Fd) * t;
+    s.pos += s.v * t;
+  }
+}
+
+function springAtRest(s) {
+  return Math.abs(s.pos - s.dest) < 0.5 && Math.abs(s.v) < 0.01;
+}
+
+// ── State ──────────────────────────────────────────────────────
+const track = document.getElementById('track');
+const viewport = document.getElementById('viewport');
+const dotsEl = document.getElementById('dots');
+const progressEl = document.getElementById('progress');
+const clockEl = document.getElementById('clock');
+
+const slides = track.children;
+const total = slides.length;
+let current = 0;
+let dragging = false;
+let dragStartX = 0;
+let dragStartPos = 0;
+let pointerHistory = [];
+
+const sx = spring(0, 120, 18);
+let lastFrame = 0;
+let animating = false;
+let autoTimer = null;
+const AUTO_MS = 8000;
+
+// Build dots
+for (let i = 0; i < total; i++) {
+  const dot = document.createElement('div');
+  dot.className = 'dot' + (i === 0 ? ' active' : '');
+  dot.onclick = () => goTo(i);
+  dotsEl.appendChild(dot);
+}
+
+function updateDots() {
+  [...dotsEl.children].forEach((d, i) => d.classList.toggle('active', i === current));
+  progressEl.style.width = ((current + 1) / total * 100) + '%';
+}
+
+function goTo(idx) {
+  current = Math.max(0, Math.min(total - 1, idx));
+  sx.dest = -current * window.innerWidth;
+  startAnim();
+  updateDots();
+  resetAuto();
+}
+
+function startAnim() {
+  if (animating) return;
+  animating = true;
+  lastFrame = 0;
+  requestAnimationFrame(animate);
+}
+
+function animate(now) {
+  const dt = lastFrame ? now - lastFrame : 16;
+  lastFrame = now;
+  springAdvance(sx, dt);
+  track.style.transform = `translate3d(${sx.pos}px, 0, 0)`;
+  if (!springAtRest(sx) || dragging) {
+    requestAnimationFrame(animate);
+  } else {
+    sx.pos = sx.dest;
+    track.style.transform = `translate3d(${sx.pos}px, 0, 0)`;
+    animating = false;
+  }
+}
+
+// ── Drag ───────────────────────────────────────────────────────
+viewport.addEventListener('pointerdown', e => {
+  dragging = true;
+  dragStartX = e.clientX;
+  dragStartPos = sx.pos;
+  sx.v = 0;
+  pointerHistory = [{ x: e.clientX, time: performance.now() }];
+  viewport.setPointerCapture(e.pointerId);
+  clearAuto();
+});
+
+viewport.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  const dx = e.clientX - dragStartX;
+  sx.pos = dragStartPos + dx;
+  sx.dest = sx.pos;
+  track.style.transform = `translate3d(${sx.pos}px, 0, 0)`;
+  const now = performance.now();
+  pointerHistory.push({ x: e.clientX, time: now });
+  while (pointerHistory.length > 1 && now - pointerHistory[0].time > 100) pointerHistory.shift();
+});
+
+viewport.addEventListener('pointerup', e => {
+  if (!dragging) return;
+  dragging = false;
+
+  // Flick velocity
+  const now = performance.now();
+  const hist = pointerHistory;
+  if (hist.length >= 2) {
+    const oldest = hist[0];
+    const newest = hist[hist.length - 1];
+    const dt = newest.time - oldest.time;
+    if (dt > 0) {
+      sx.v = ((newest.x - oldest.x) / dt) * 1000;
+    }
+  }
+
+  // Snap to nearest slide, biased by velocity
+  const w = window.innerWidth;
+  const projected = sx.pos + sx.v * 0.3;
+  const nearest = Math.round(-projected / w);
+  current = Math.max(0, Math.min(total - 1, nearest));
+  sx.dest = -current * w;
+  startAnim();
+  updateDots();
+  resetAuto();
+});
+
+// ── Keyboard ───────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); goTo(current + 1); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); goTo(current - 1); }
+});
+
+// ── Auto-advance ───────────────────────────────────────────────
+function resetAuto() {
+  clearAuto();
+  autoTimer = setTimeout(() => goTo((current + 1) % total), AUTO_MS);
+}
+function clearAuto() {
+  if (autoTimer) clearTimeout(autoTimer);
+}
+
+// ── Clock ──────────────────────────────────────────────────────
+function updateClock() {
+  clockEl.textContent = new Date().toLocaleTimeString('en-US', {
+    timeZone: 'America/Edmonton', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true
+  });
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Resize ─────────────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  sx.pos = -current * window.innerWidth;
+  sx.dest = sx.pos;
+  sx.v = 0;
+  track.style.transform = `translate3d(${sx.pos}px, 0, 0)`;
+});
+
+// Start
+resetAuto();
+</script>
+</body>
+</html>
