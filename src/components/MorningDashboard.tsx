@@ -11,8 +11,8 @@ type LayoutMode = 'auto' | 'tv' | 'mobile';
 // Scale targets per mode (multiplier applied to all sizes)
 const SCALE_TARGETS: Record<LayoutMode, number> = {
   mobile: 1,
-  auto: 1.1,
-  tv: 1.5,
+  auto: 1.2,
+  tv: 2.0,
 };
 const MAX_WIDTH_TARGETS: Record<LayoutMode, number> = {
   mobile: 640,
@@ -21,8 +21,8 @@ const MAX_WIDTH_TARGETS: Record<LayoutMode, number> = {
 };
 const PADDING_TARGETS: Record<LayoutMode, number> = {
   mobile: 28,
-  auto: 40,
-  tv: 80,
+  auto: 48,
+  tv: 120,
 };
 
 // ── Theme (light, newspaper feel) ──────────────────────────────────
