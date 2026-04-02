@@ -38,6 +38,8 @@ import type {
   AgentStat,
   AcctStat,
   PairedCall,
+  MonthChampions,
+  MonthChampion,
 } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -692,6 +694,86 @@ async function fetchDashboardData(): Promise<DashboardData> {
   // ── Schedule ───────────────────────────────────────────────────
   const scheduleData = buildScheduleData(schedule);
 
+  // ── Previous Month Champions (day 1-3 of new month) ───────────
+  let prevMonthChampions: MonthChampions | undefined;
+  if (now.getDate() <= 3) {
+    try {
+      const prevMonth = now.getMonth(); // 0-based, so current getMonth() is actually prev month's 1-based
+      const prevYear = prevMonth === 0 ? year - 1 : year;
+      const prevMonthNum = prevMonth === 0 ? 12 : prevMonth;
+      const prevDim = daysInMonth(prevYear, prevMonthNum);
+
+      const prevDates: string[] = [];
+      for (let d = 1; d <= prevDim; d++) {
+        prevDates.push(`${prevYear}-${String(prevMonthNum).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
+      }
+
+      const prevConvs = await cached('prev-month-convs', 3_600_000, () =>
+        fetchConversionsForDates(prevDates),
+      );
+
+      // Aggregate per agent
+      const agentTotals: Record<string, number> = {};
+      const agentBestDay: Record<string, number> = {};
+      for (const [, entry] of prevConvs) {
+        for (const [agent, count] of Object.entries(entry.byAgent)) {
+          const name = normalizeAgent(agent);
+          if (!name) continue;
+          agentTotals[name] = (agentTotals[name] || 0) + count;
+          agentBestDay[name] = Math.max(agentBestDay[name] || 0, count);
+        }
+      }
+
+      // Use yesterday's rep activity for calls/speed/talk (it's the last day of prev month)
+      const agents = yesterday.repActivity.agents;
+      // For month-level calls/speed/talk we use the MTD data from yesterday
+      // which was the last day — but MTD resets on day 1. So use yesterday's agents.
+
+      function topTwo(arr: [string, number][]): MonthChampion {
+        const sorted = arr.sort((a, b) => b[1] - a[1]);
+        return {
+          agent: sorted[0]?.[0] || '',
+          value: sorted[0]?.[1] || 0,
+          runnerUp: sorted[1]?.[0],
+          runnerUpValue: sorted[1]?.[1],
+        };
+      }
+
+      function topTwoMin(arr: [string, number][]): MonthChampion {
+        const sorted = arr.filter(([, v]) => v > 0).sort((a, b) => a[1] - b[1]);
+        return {
+          agent: sorted[0]?.[0] || '',
+          value: sorted[0]?.[1] || 0,
+          runnerUp: sorted[1]?.[0],
+          runnerUpValue: sorted[1]?.[1],
+        };
+      }
+
+      const monthName = new Date(prevYear, prevMonthNum - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+      prevMonthChampions = {
+        month: monthName,
+        mostConversions: topTwo(Object.entries(agentTotals)),
+        mostCalls: topTwo(agents.map(a => [a.agent, a.calls] as [string, number])),
+        fastestSpeed: topTwoMin(
+          agents.filter(a => a.speedSec != null && a.speedSec > 0).map(a => [a.agent, a.speedSec!] as [string, number]),
+        ),
+        mostTalkTime: topTwo(agents.map(a => [a.agent, a.talkMin] as [string, number])),
+        bestConvRate: topTwo(
+          agents
+            .filter(a => a.calls >= 10)
+            .map(a => {
+              const convs = agentTotals[a.agent.toLowerCase()] || agentTotals[a.agent] || 0;
+              const rate = a.calls > 0 ? Math.round((convs / a.calls) * 1000) / 10 : 0;
+              return [a.agent, rate] as [string, number];
+            }),
+        ),
+      };
+    } catch (err) {
+      console.warn('[API /data] prev month champions failed:', err instanceof Error ? err.message : err);
+    }
+  }
+
   // ── Assemble ───────────────────────────────────────────────────
   const pulledAt = new Date().toISOString();
 
@@ -707,6 +789,7 @@ async function fetchDashboardData(): Promise<DashboardData> {
     lastWeek,
     schedule: scheduleData,
     recentCalls,
+    prevMonthChampions,
     pulledAt,
   };
 

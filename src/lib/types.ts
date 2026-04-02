@@ -250,6 +250,22 @@ export interface YtdData {
   onTrack: boolean;
 }
 
+export interface MonthChampion {
+  agent: string;
+  value: number;
+  runnerUp?: string;
+  runnerUpValue?: number;
+}
+
+export interface MonthChampions {
+  month: string;         // "March 2026"
+  mostConversions: MonthChampion;
+  mostCalls: MonthChampion;
+  fastestSpeed: MonthChampion;
+  mostTalkTime: MonthChampion;
+  bestConvRate: MonthChampion;
+}
+
 export interface DashboardData {
   today: PeriodData & {
     totalCalls: number;
@@ -271,5 +287,6 @@ export interface DashboardData {
   schedule: ScheduleData | null;
   recentCalls: RawCall[];
   weekend?: { friday: PeriodData; saturday: PeriodData; sunday: PeriodData };
+  prevMonthChampions?: MonthChampions;
   pulledAt: string;
 }
