@@ -10,7 +10,7 @@ import {
   fetchYticaTeamStats,
 } from '@/lib/sheets';
 import { blendYticaIntoPerioData, filterByBrand } from '@/lib/blender';
-import { parseBrand } from '@/lib/brand';
+import { parseBrand, MSC_ONLY_AGENTS, JC_ONLY_AGENTS, type Brand } from '@/lib/brand';
 import {
   ACTIVE_AGENTS,
   OUTBOUND_AGENTS,
@@ -21,7 +21,7 @@ import {
   isOnShift,
 } from '@/lib/constants';
 import { cached } from '@/lib/cache';
-import { resolveClient } from '@/lib/clients';
+import { resolveClient, isMscPhone, getClientBrand } from '@/lib/clients';
 import { twilioAuth, WORKSPACE_SID } from '@/lib/auth/twilio';
 import { fetchAllWorkerStats } from '@/lib/daily-analytics';
 import { fetchMscConversions } from '@/lib/ops-center';
@@ -508,6 +508,23 @@ export async function GET(request: NextRequest) {
       : raw.today.teamAvgSpeed;
     const brandFastest = speedVals.length > 0 ? Math.min(...speedVals) : raw.today.fastestPickup;
 
+    // Filter recentCalls by brand (same logic as /api/calls)
+    const brandRecentCalls = brand === 'mixed'
+      ? raw.recentCalls
+      : raw.recentCalls.filter(call => {
+          const agent = normalizeAgent(call.agent || '');
+          if (agent) {
+            const lower = agent.toLowerCase();
+            if (MSC_ONLY_AGENTS.has(lower)) return brand === 'msc';
+            if (JC_ONLY_AGENTS.has(lower)) return brand === 'jc';
+          }
+          if (call.account) {
+            const cb = getClientBrand(call.account);
+            if (cb) return cb === brand;
+          }
+          return brand === 'jc';
+        });
+
     const data = {
       ...raw,
       today: {
@@ -521,6 +538,7 @@ export async function GET(request: NextRequest) {
         convPerHour: brand === 'mixed' ? undefined : raw.today.convPerHour,
       },
       yesterday: filteredYesterday,
+      recentCalls: brandRecentCalls,
       brand,
     };
 
