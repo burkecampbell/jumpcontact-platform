@@ -1,5 +1,5 @@
 import forge from 'node-forge';
-import { normalizeAgent, TZ, CONVERSIONS_SHEET_ID, YTICA_SHEET_ID } from './constants';
+import { normalizeAgent, TZ, CONVERSIONS_SHEET_ID, YTICA_SHEET_ID, SCHEDULE_SHEET_ID } from './constants';
 import type { ScheduleEntry } from './types';
 
 // ── Auth ─────────────────────────────────────────────────────────────
@@ -247,7 +247,6 @@ export async function fetchYTD(year: number): Promise<{
 
 // ── Schedule ────────────────────────────────────────────────────────
 
-const SCHEDULE_SHEET_ID = process.env.SCHEDULE_SHEET_ID || 'YOUR_SHEET_ID';
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 import scheduleJson from '../data/schedule-fallback.json';
@@ -350,8 +349,8 @@ const JUMP_AGENTS = new Set([
   'omar', 'burke', 'ian', 'danny', 'chris', 'george', 'william',
   // MSC agents
   'anthony', 'richard', 'francis', 'natalie', 'rebecca', 'sofia', 'desi', 'sue',
-  // Blended
-  'wendy', 'sara',
+  // Blended (work both JC and MSC)
+  'wendy', 'sara', 'jose',
 ]);
 
 export interface YticaAgent {

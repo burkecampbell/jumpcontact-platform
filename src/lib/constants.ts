@@ -62,7 +62,7 @@ export const AGENT_COLORS: Record<string, string> = {
 // ── Sheet IDs ───────────────────────────────────────────────────────
 export const CONVERSIONS_SHEET_ID = process.env.CONVERSIONS_SHEET_ID || 'YOUR_SHEET_ID';
 export const MISSED_CALLS_SHEET_ID = process.env.MISSED_CALLS_SHEET_ID || 'YOUR_SHEET_ID';
-export const SCHEDULE_SHEET_ID = process.env.SCHEDULE_SHEET_ID || '';
+export const SCHEDULE_SHEET_ID = process.env.SCHEDULE_SHEET_ID || 'YOUR_SHEET_ID';
 export const YTICA_SHEET_ID = process.env.YTICA_SHEET_ID || 'YOUR_SHEET_ID';
 export const GOAL = 900;
 export const DAILY_GOAL = 30;
@@ -135,11 +135,11 @@ export function speedGrade(sec: number | null): { grade: string; color: string; 
 
 export function fmtSpeed(sec: number | null): string {
   if (sec === null) return '—';
-  if (sec < 60) {
-    const rounded = Math.round(sec * 10) / 10;
+  const rounded = Math.round(sec * 10) / 10;
+  if (rounded < 60) {
     return `${rounded % 1 === 0 ? rounded.toFixed(0) : rounded.toFixed(1)}s`;
   }
-  return `${Math.floor(sec / 60)}m ${Math.round(sec % 60)}s`;
+  return `${Math.floor(rounded / 60)}m ${Math.round(rounded % 60)}s`;
 }
 
 export function fmtDuration(sec: number): string {

@@ -46,10 +46,13 @@ export default clerkMiddleware(async (auth, req) => {
   // CORS preflight
   if (req.method === 'OPTIONS' && req.nextUrl.pathname.startsWith('/api/')) {
     const origin = getCorsOrigin(req);
+    if (!origin) {
+      return new NextResponse(null, { status: 204 });
+    }
     return new NextResponse(null, {
       status: 204,
       headers: {
-        'Access-Control-Allow-Origin': origin || '',
+        'Access-Control-Allow-Origin': origin,
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         'Access-Control-Max-Age': '86400',

@@ -571,17 +571,24 @@ export async function GET(request: NextRequest) {
           hourly: jcConv.byHour,
         },
       };
-    } else if (brand === 'msc' && mscConv) {
-      // MSC view: only GHL conversions
-      derivedToday = {
-        ...derivedToday,
-        conversions: {
-          total: mscConv.total,
-          byAgent: Object.entries(mscConv.byAgent).map(([agent, count]) => ({ agent, count })),
-          byAccount: mscConv.byAccount,
-          hourly: mscConv.byHour,
-        },
-      };
+    } else if (brand === 'msc') {
+      // MSC view: GHL conversions only. If GHL unavailable, show 0 (not JC's data).
+      if (mscConv) {
+        derivedToday = {
+          ...derivedToday,
+          conversions: {
+            total: mscConv.total,
+            byAgent: Object.entries(mscConv.byAgent).map(([agent, count]) => ({ agent, count })),
+            byAccount: mscConv.byAccount,
+            hourly: mscConv.byHour,
+          },
+        };
+      } else {
+        derivedToday = {
+          ...derivedToday,
+          conversions: { total: 0, byAgent: [], byAccount: [], hourly: new Array(24).fill(0) },
+        };
+      }
     }
     // Mixed: derivedToday already has merged conversions from buildPeriodData(todayConvMerged)
 
