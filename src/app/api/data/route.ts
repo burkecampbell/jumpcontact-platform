@@ -351,7 +351,7 @@ function addCallStats(
 
 function buildRecentCalls(calls: PairedCall[]): RawCall[] {
   return calls
-    .filter(c => c.agent && c.client && c.from) // Matched agent, known client, and caller phone
+    .filter(c => c.from || c.to) // Any call with a phone number (don't require agent or client)
     .slice(0, 20)
     .map(c => ({
       time: c.time,
