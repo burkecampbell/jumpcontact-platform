@@ -351,12 +351,17 @@ function addCallStats(
 
 function buildRecentCalls(calls: PairedCall[]): RawCall[] {
   return calls
-    .filter(c => c.from || c.to) // Any call with a phone number (don't require agent or client)
+    .filter(c => {
+      // Show paired inbound calls (have agent + caller phone)
+      // and outbound calls. Skip raw unpaired legs and duplicates.
+      const hasPhone = c.from?.startsWith('+') || c.to?.startsWith('+');
+      return hasPhone;
+    })
     .slice(0, 20)
     .map(c => ({
       time: c.time,
       agent: c.agent,
-      phone: c.direction === 'inbound' ? c.from : c.to,
+      phone: c.from?.startsWith('+') ? c.from : c.to?.startsWith('+') ? c.to : '',
       duration: c.duration,
       direction: c.direction,
       callSid: c.id,
