@@ -356,8 +356,8 @@ function RacePageInner() {
       case 'bestDay': va = a.bestDay; vb = b.bestDay; break;
       case 'calls': va = todayA?.calls ?? 0; vb = todayB?.calls ?? 0; break;
       case 'speed': va = todayA?.speedSec ?? 999; vb = todayB?.speedSec ?? 999; break;
-      case 'pickup': va = todayA?.pickupRate ?? -1; vb = todayB?.pickupRate ?? -1; break;
-      case 'yield': va = todayA?.trueYield ?? -1; vb = todayB?.trueYield ?? -1; break;
+      case 'pickup': va = todayA?.wrapUpSec ?? 999; vb = todayB?.wrapUpSec ?? 999; break;
+      case 'yield': va = todayA?.calls && todayA.talkMin ? todayA.talkMin / todayA.calls : -1; vb = todayB?.calls && todayB.talkMin ? todayB.talkMin / todayB.calls : -1; break;
     }
     // For speed, lower is better — ascending by default
     if (sortKey === 'speed') return sortAsc ? vb - va : va - vb;
@@ -513,8 +513,8 @@ function RacePageInner() {
                   <th className="px-1 py-2" style={{ borderLeft: `1px solid ${C.border}` }} />
                   <SortTH k="calls" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Calls</SortTH>
                   <SortTH k="speed" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Speed</SortTH>
-                  <SortTH k="pickup" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Pickup</SortTH>
-                  <SortTH k="yield" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Yield</SortTH>
+                  <SortTH k="pickup" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Wrap</SortTH>
+                  <SortTH k="yield" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Talk/Call</SortTH>
                 </tr>
               </thead>
               <tbody>
@@ -547,11 +547,11 @@ function RacePageInner() {
                     <td className="px-3 py-2.5 text-right">
                       <SpeedBadge sec={today?.speedSec ?? null} />
                     </td>
-                    <TD mono right color={today?.pickupRate != null && today.pickupRate >= 80 ? '#4ade80' : today?.pickupRate != null && today.pickupRate >= 60 ? '#fbbf24' : C.sub}>
-                      {today?.pickupRate != null ? `${today.pickupRate}%` : '—'}
+                    <TD mono right color={today?.wrapUpSec != null ? C.text : C.sub}>
+                      {today?.wrapUpSec != null ? `${today.wrapUpSec}s` : '—'}
                     </TD>
-                    <TD mono right color={today?.trueYield != null && today.trueYield > 0 ? C.lime : C.sub}>
-                      {today?.trueYield != null ? `${today.trueYield}%` : '—'}
+                    <TD mono right color={today?.calls && today.calls > 0 ? C.text : C.sub}>
+                      {today?.calls && today.talkMin ? `${(today.talkMin / today.calls).toFixed(1)}m` : '—'}
                     </TD>
                   </tr>
                   );

@@ -217,7 +217,8 @@ export const JC_KEYWORDS = [
 
 export function parseShiftRange(shiftStr: string): { start: number; end: number } | null {
   if (!shiftStr || /off|n\/a|-$/i.test(shiftStr.trim())) return null;
-  const m = shiftStr.trim().match(/^(\d+(?::\d+)?)([ap])m?[-–](\d+(?::\d+)?)([ap])m?$/i);
+  // Handle formats: "7a-6p", "12a - 7am", "8a-1p", "3p-12a"
+  const m = shiftStr.trim().match(/^(\d+(?::\d+)?)\s*([ap])m?\s*[-–]\s*(\d+(?::\d+)?)\s*([ap])m?$/i);
   if (!m) return null;
   const toH = (t: string, ampm: string) => {
     const [h, min = '0'] = t.split(':');
@@ -233,10 +234,20 @@ export function isOnShift(schedule: Record<string, string>, nowMST: Date): boole
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const dayKey = days[nowMST.getDay()];
   const shift = schedule[dayKey] || schedule[dayKey.toLowerCase()] || '';
-  const range = parseShiftRange(shift);
-  if (!range) return false;
+  // Handle comma-separated shifts: "8a-1p, 4p-9p"
+  const segments = shift.split(',').map(s => s.trim());
   const nowH = nowMST.getHours() + nowMST.getMinutes() / 60;
-  return nowH >= range.start && nowH < range.end;
+  for (const seg of segments) {
+    const range = parseShiftRange(seg);
+    if (!range) continue;
+    if (range.end < range.start) {
+      // Overnight shift (e.g., 3p-12a = 15-24)
+      if (nowH >= range.start || nowH < range.end) return true;
+    } else {
+      if (nowH >= range.start && nowH < range.end) return true;
+    }
+  }
+  return false;
 }
 
 export function isMonday(): boolean {

@@ -290,7 +290,7 @@ function parseShiftHours(shift: string): number {
   const segments = shift.split(',').map(s => s.trim());
   let total = 0;
   for (const seg of segments) {
-    const match = seg.match(/(\d{1,2})(a|p)?-(\d{1,2})(a|p)?/i);
+    const match = seg.match(/(\d{1,2})\s*(a|p)m?\s*[-–]\s*(\d{1,2})\s*(a|p)m?/i);
     if (!match) continue;
     let start = parseInt(match[1]);
     const startP = (match[2] || '').toLowerCase();
