@@ -1,6 +1,6 @@
 'use client';
 
-import { C, agentColor, isIbrahim } from '@/lib/constants';
+import { C, agentColor, isIbrahim, fmtSpeed, fmtTalkTime } from '@/lib/constants';
 import type { PeriodData } from '@/lib/types';
 import Card from '../Card';
 import Hero from './Hero';
@@ -80,8 +80,8 @@ export default function StepConversions({ period, label }: { period: PeriodData;
                 <TH right>Rate</TH>
                 <TH right>Conv/Hr</TH>
                 <TH right>Pickup</TH>
-                <TH right>Decline</TH>
-                <TH right>Ghost</TH>
+                <TH right>Speed</TH>
+                <TH right>Talk</TH>
               </tr>
             </thead>
             <tbody>
@@ -91,8 +91,8 @@ export default function StepConversions({ period, label }: { period: PeriodData;
                 const rate = calls > 0 ? ((a.count / calls) * 100).toFixed(1) : '—';
                 const convPerHr = rep?.convsPerHour != null ? rep.convsPerHour.toFixed(1) : '—';
                 const pickup = rep?.pickupRate;
-                const decline = rep?.declineRate;
-                const ghost = rep?.ghostRate;
+                const speed = rep?.speedSec ?? null;
+                const talk = rep?.talkMin ?? 0;
                 return (
                   <tr key={a.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
                     <TD color={i < 3 ? C.cyan : C.sub}><span className="font-bold">{i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}</span></TD>
@@ -113,11 +113,11 @@ export default function StepConversions({ period, label }: { period: PeriodData;
                     <TD mono right color={pickup != null && pickup >= 80 ? '#4ade80' : pickup != null && pickup >= 60 ? '#fbbf24' : C.sub}>
                       {pickup != null ? `${pickup}%` : '—'}
                     </TD>
-                    <TD mono right color={decline != null && decline > 10 ? '#f87171' : C.sub}>
-                      {decline != null ? `${decline}%` : '—'}
+                    <TD mono right color={speed !== null && speed <= 8 ? '#4ade80' : speed !== null && speed <= 15 ? C.cyan : C.sub}>
+                      {fmtSpeed(speed)}
                     </TD>
-                    <TD mono right color={ghost != null && ghost > 10 ? '#f87171' : C.sub}>
-                      {ghost != null ? `${ghost}%` : '—'}
+                    <TD mono right color={C.sub}>
+                      {fmtTalkTime(talk)}
                     </TD>
                   </tr>
                 );

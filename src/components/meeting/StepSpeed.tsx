@@ -31,7 +31,7 @@ export default function StepSpeed({ period, label }: { period: PeriodData; label
     <div>
       <div className="text-center mb-1 text-[13px] font-semibold uppercase tracking-wider" style={{ color: C.sub }}>{label}</div>
       {avgSec !== null ? (
-        <Hero value={Math.round(avgSec)} sub="avg seconds to answer" />
+        <Hero value={Math.round(avgSec * 10) / 10} sub="avg seconds to answer" />
       ) : (
         <div className="text-center py-7 pb-5">
           <div className="font-mono font-extralight text-[88px] leading-none" style={{ color: C.sub }}>—</div>

@@ -137,7 +137,7 @@ export function fmtSpeed(sec: number | null): string {
   if (sec === null) return '—';
   const rounded = Math.round(sec * 10) / 10;
   if (rounded < 60) {
-    return `${rounded % 1 === 0 ? rounded.toFixed(0) : rounded.toFixed(1)}s`;
+    return `${rounded.toFixed(1)}s`;
   }
   return `${Math.floor(rounded / 60)}m ${Math.round(rounded % 60)}s`;
 }
