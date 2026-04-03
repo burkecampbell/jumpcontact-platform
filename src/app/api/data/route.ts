@@ -285,8 +285,14 @@ async function buildPeriodData(
     conversionRate,
   };
 
-  // Blend Ytica data if available
-  period = blendYticaIntoPerioData(period, ytica);
+  // Blend Ytica data — but NOT for today.
+  // Ytica emails arrive at 6am with YESTERDAY's data, but the Apps Script
+  // labels them with today's date. Blending today would overwrite real-time
+  // CDR data with yesterday's stale numbers.
+  const todayStr_ = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Edmonton' });
+  if (dateStr !== todayStr_) {
+    period = blendYticaIntoPerioData(period, ytica);
+  }
   // Brand filtering is now applied in the GET handler per ?brand= param
 
   return period;
