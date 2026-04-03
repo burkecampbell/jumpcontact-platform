@@ -175,7 +175,7 @@ function buildRepActivity(
   const speedValues: number[] = [];
 
   for (const [agent, data] of agentMap) {
-    const avgSpeed = data.ringCount > 0 ? Math.round((data.ringSum / data.ringCount) * 10) / 10 : null;
+    const avgSpeed = data.ringCount > 0 ? Math.round((data.ringSum / data.ringCount) * 100) / 100 : null;
     const ws = workerStats[agent];
     const wrapUp = ws ? ws.avgWrapUp : null;
     const hrsSched = getScheduledHours(schedule, agent, dateObj);

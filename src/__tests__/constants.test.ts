@@ -227,10 +227,11 @@ describe('fmtSpeed', () => {
     expect(fmtSpeed(null)).toBe('—');
   });
 
-  it('formats seconds under 60 with one decimal', () => {
-    expect(fmtSpeed(12)).toBe('12.0s');
-    expect(fmtSpeed(0)).toBe('0.0s');
-    expect(fmtSpeed(6)).toBe('6.0s');
+  it('formats seconds under 60 with two decimals', () => {
+    expect(fmtSpeed(12)).toBe('12.00s');
+    expect(fmtSpeed(0)).toBe('0.00s');
+    expect(fmtSpeed(6)).toBe('6.00s');
+    expect(fmtSpeed(6.34)).toBe('6.34s');
   });
 
   it('formats seconds over 60 as Xm Ys', () => {
@@ -239,10 +240,11 @@ describe('fmtSpeed', () => {
   });
 
   it('shows one decimal for fractional seconds', () => {
-    expect(fmtSpeed(12.7)).toBe('12.7s');
-    expect(fmtSpeed(17.3)).toBe('17.3s');
-    expect(fmtSpeed(5.0)).toBe('5.0s');  // always one decimal
-    expect(fmtSpeed(0.4)).toBe('0.4s');
+    expect(fmtSpeed(12.7)).toBe('12.70s');
+    expect(fmtSpeed(17.3)).toBe('17.30s');
+    expect(fmtSpeed(5.0)).toBe('5.00s');
+    expect(fmtSpeed(0.4)).toBe('0.40s');
+    expect(fmtSpeed(6.34)).toBe('6.34s');
   });
 
   it('formats exactly 60s', () => {

@@ -269,16 +269,23 @@ export function blendYticaIntoPerioData(period: PeriodData, ytica: YticaRepActiv
     const y = yticaMap.get(agent.agent.toLowerCase());
     if (!y) return agent;
 
-    // Ytica speed = actual ring duration (authoritative, but whole seconds).
-    // CDR speed = inbound-to-agent gap (includes queue, but has decimal precision).
-    // Strategy: use Ytica value but if CDR is close (within 3s), prefer CDR for precision.
+    // Ytica speed = actual ring duration (whole seconds, authoritative for value).
+    // CDR speed = ring time from call pairing (has decimal precision).
+    // Strategy: use Ytica's value but add CDR's fractional precision.
+    // If Ytica=6, CDR=6.3 → use 6.3. If Ytica=6, CDR=14.7 → use 6.0 (CDR inflated).
     let speedSec = agent.speedSec;
     if (y.speedSec != null && y.speedSec > 0) {
-      if (agent.speedSec != null && agent.speedSec > 0 && Math.abs(agent.speedSec - y.speedSec) <= 3) {
-        // CDR and Ytica agree (within 3s) — use CDR for decimal precision
-        speedSec = agent.speedSec;
+      if (agent.speedSec != null && agent.speedSec > 0) {
+        // Both exist: use CDR if it's in the same ballpark as Ytica (within 5s)
+        // This gives us Ytica's accuracy with CDR's decimal precision
+        if (Math.abs(agent.speedSec - y.speedSec) <= 5) {
+          speedSec = agent.speedSec; // CDR decimal preserved
+        } else {
+          // CDR is inflated (queue/IVR) — use Ytica but synthesize .0 decimal
+          speedSec = y.speedSec;
+        }
       } else {
-        // Ytica is authoritative when CDR diverges significantly
+        // No CDR speed — use Ytica
         speedSec = y.speedSec;
       }
     }

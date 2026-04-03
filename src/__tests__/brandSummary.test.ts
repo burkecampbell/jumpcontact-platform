@@ -362,7 +362,19 @@ describe('blendYticaIntoPerioData', () => {
     };
     const result = blendYticaIntoPerioData(period, ytica);
     const omar = result.repActivity.agents.find(a => a.agent === 'omar')!;
-    expect(omar.speedSec).toBe(5); // Ytica wins — measures actual ring, not queue+IVR
+    expect(omar.speedSec).toBe(5); // Ytica wins — CDR diverged too much (16 vs 5)
+  });
+
+  it('preserves CDR decimal precision when close to Ytica (within 5s)', () => {
+    const period = makePeriod([makeAgent('omar', { speedSec: 6.3 })]);
+    const ytica: YticaRepActivity = {
+      agents: [{ agent: 'omar', calls: 10, talkMin: 30, speedSec: 6, wrapUpSec: 15, avgHandlingMin: null, inboundConversations: 0, holdTimeSec: null }],
+      avgSpeedSec: 6,
+      source: 'ytica',
+    };
+    const result = blendYticaIntoPerioData(period, ytica);
+    const omar = result.repActivity.agents.find(a => a.agent === 'omar')!;
+    expect(omar.speedSec).toBe(6.3); // CDR decimal preserved — Ytica=6, CDR=6.3, diff=0.3
   });
 
   it('adds ytica-only agents to the blended list', () => {
