@@ -47,4 +47,8 @@ next-env.d.ts
 /.clerk/
 
 # Large generated files
-scripts/output/recording-map-full.ts
+scripts/output/
+prototypes/
+
+# Keep .env.example committed (force-added)
+!.env.example
