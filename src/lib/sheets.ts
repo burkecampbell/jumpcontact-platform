@@ -334,9 +334,7 @@ function parseFlexDate(s: string): Date | null {
     const year = y < 100 ? 2000 + y : y;
     if (a > 12) return new Date(`${year}-${String(b).padStart(2, '0')}-${String(a).padStart(2, '0')}T${timePart}`);
     if (b > 12) return new Date(`${year}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}T${timePart}`);
-    if (year >= 2026) {
-      return new Date(`${year}-${String(b).padStart(2, '0')}-${String(a).padStart(2, '0')}T${timePart}`);
-    }
+    // US format: M/D/Y — a=month, b=day (all years)
     return new Date(`${year}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}T${timePart}`);
   }
   return null;
