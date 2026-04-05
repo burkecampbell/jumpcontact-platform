@@ -102,22 +102,17 @@ export async function fetchConversions(dateStr: string): Promise<{
     const rows = await readSheet(CONVERSIONS_SHEET_ID, 'A:E');
     if (rows.length <= 1) return empty();
 
-    // Diagnostic: log last 5 raw timestamps so we can see what the sheet contains
-    const lastRows = rows.slice(-5);
-    console.log(`[Conversions] Sheet has ${rows.length} rows. Looking for date: ${dateStr}. Last 5 raw timestamps:`, lastRows.map(r => r[0]));
-
     const [yr, mo, dy] = dateStr.split('-').map(Number);
 
-    let skippedNull = 0, skippedParse = 0, skippedDate = 0;
     const parsed: ConversionRow[] = [];
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
-      if (!row[0]) { skippedNull++; continue; }
+      if (!row[0]) continue;
       const ts = parseFlexDate(row[0]);
-      if (!ts) { skippedParse++; continue; }
+      if (!ts) continue;
 
       const mst = new Date(ts.toLocaleString('en-US', { timeZone: TZ }));
-      if (mst.getFullYear() !== yr || mst.getMonth() + 1 !== mo || mst.getDate() !== dy) { skippedDate++; continue; }
+      if (mst.getFullYear() !== yr || mst.getMonth() + 1 !== mo || mst.getDate() !== dy) continue;
 
       const agent = normalizeAgent(row[4] || row[3] || '');
       const account = (row[2] || '').trim();
@@ -154,7 +149,6 @@ export async function fetchConversions(dateStr: string): Promise<{
       .map(([account, count]) => ({ account, count }))
       .sort((a, b) => b.count - a.count);
 
-    console.log(`[Conversions] Result: ${parsed.length} matched, ${skippedNull} null, ${skippedParse} unparseable, ${skippedDate} wrong date`);
     return { total: parsed.length, byAgent: agentMap, byAccount, byHour: hourly, firstConvByAgent, lastConvByAgent };
   } catch (err) {
     console.error('Conversions fetch error:', err);
@@ -340,8 +334,17 @@ function parseFlexDate(s: string): Date | null {
     const year = y < 100 ? 2000 + y : y;
     if (a > 12) return new Date(`${year}-${String(b).padStart(2, '0')}-${String(a).padStart(2, '0')}T${timePart}`);
     if (b > 12) return new Date(`${year}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}T${timePart}`);
-    // US format: M/D/Y — a=month, b=day (all years)
-    return new Date(`${year}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}T${timePart}`);
+    if (a === b) return new Date(`${year}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}T${timePart}`);
+    // Ambiguous: both a and b are ≤ 12 and different.
+    // The conversions sheet has TWO data sources writing different formats
+    // (M/D/Y and D/M/Y). Pick the interpretation closest to today that
+    // isn't in the future.
+    const mdy = new Date(`${year}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}T${timePart}`);
+    const dmy = new Date(`${year}-${String(b).padStart(2, '0')}-${String(a).padStart(2, '0')}T${timePart}`);
+    const now = Date.now();
+    const mdyDist = mdy.getTime() <= now ? now - mdy.getTime() : Infinity;
+    const dmyDist = dmy.getTime() <= now ? now - dmy.getTime() : Infinity;
+    return mdyDist <= dmyDist ? mdy : dmy;
   }
   return null;
 }
