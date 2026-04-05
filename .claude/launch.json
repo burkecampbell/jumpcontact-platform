@@ -6,7 +6,7 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 3003,
-      "cwd": "App Builder/PLATFORM/tools/jumpcontact-platform"
+      "cwd": "jumpcontact-platform"
     }
   ]
 }

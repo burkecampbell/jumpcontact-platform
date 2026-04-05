@@ -1,0 +1,29 @@
+'use client';
+
+import { EXCLUDED_AGENTS } from '@/lib/constants';
+import type { DashboardData } from '@/lib/types';
+import { Num, Label, AgentBar } from './primitives';
+import { G } from './theme';
+
+function fmtMin(m: number) {
+  return m >= 60 ? `${Math.floor(m / 60)}h ${Math.round(m % 60)}m` : `${Math.round(m)}m`;
+}
+
+export function StepTalk({ data }: { data: DashboardData }) {
+  const agents = data.yesterday.repActivity.agents
+    .filter(a => !EXCLUDED_AGENTS.includes(a.agent))
+    .sort((a, b) => b.talkMin - a.talkMin);
+  return (
+    <div>
+      <div style={{ marginBottom: G(24) }}>
+        <Label>Total team talk time</Label>
+        <div style={{ marginTop: G(8) }}>
+          <Num>{fmtMin(agents.reduce((s, a) => s + a.talkMin, 0))}</Num>
+        </div>
+      </div>
+      {agents.map((a, i) => (
+        <AgentBar key={a.agent} rank={i} name={a.agent} value={fmtMin(a.talkMin)} max={agents[0]?.talkMin || 1} />
+      ))}
+    </div>
+  );
+}
