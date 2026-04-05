@@ -102,17 +102,22 @@ export async function fetchConversions(dateStr: string): Promise<{
     const rows = await readSheet(CONVERSIONS_SHEET_ID, 'A:E');
     if (rows.length <= 1) return empty();
 
+    // Diagnostic: log last 5 raw timestamps so we can see what the sheet contains
+    const lastRows = rows.slice(-5);
+    console.log(`[Conversions] Sheet has ${rows.length} rows. Looking for date: ${dateStr}. Last 5 raw timestamps:`, lastRows.map(r => r[0]));
+
     const [yr, mo, dy] = dateStr.split('-').map(Number);
 
+    let skippedNull = 0, skippedParse = 0, skippedDate = 0;
     const parsed: ConversionRow[] = [];
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
-      if (!row[0]) continue;
+      if (!row[0]) { skippedNull++; continue; }
       const ts = parseFlexDate(row[0]);
-      if (!ts) continue;
+      if (!ts) { skippedParse++; continue; }
 
       const mst = new Date(ts.toLocaleString('en-US', { timeZone: TZ }));
-      if (mst.getFullYear() !== yr || mst.getMonth() + 1 !== mo || mst.getDate() !== dy) continue;
+      if (mst.getFullYear() !== yr || mst.getMonth() + 1 !== mo || mst.getDate() !== dy) { skippedDate++; continue; }
 
       const agent = normalizeAgent(row[4] || row[3] || '');
       const account = (row[2] || '').trim();
@@ -149,6 +154,7 @@ export async function fetchConversions(dateStr: string): Promise<{
       .map(([account, count]) => ({ account, count }))
       .sort((a, b) => b.count - a.count);
 
+    console.log(`[Conversions] Result: ${parsed.length} matched, ${skippedNull} null, ${skippedParse} unparseable, ${skippedDate} wrong date`);
     return { total: parsed.length, byAgent: agentMap, byAccount, byHour: hourly, firstConvByAgent, lastConvByAgent };
   } catch (err) {
     console.error('Conversions fetch error:', err);
