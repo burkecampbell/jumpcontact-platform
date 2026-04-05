@@ -430,6 +430,76 @@ export async function fetchYticaRepActivity(dateStr: string): Promise<YticaRepAc
   }
 }
 
+// ── Ytica MTD Activity (aggregate per agent for the month) ─────────
+
+export interface YticaMtdAgent {
+  agent: string;
+  totalCalls: number;
+  totalTalkMin: number;
+  avgSpeedSec: number | null;
+  avgWrapUpSec: number | null;
+}
+
+/**
+ * Aggregate Ytica daily rows for the current month into per-agent totals.
+ * Speed and wrap-up are call-weighted averages across days.
+ * @param monthPrefix e.g. "2026-04"
+ */
+export async function fetchYticaMtdActivity(monthPrefix: string): Promise<YticaMtdAgent[]> {
+  try {
+    const rows = await readSheet(YTICA_SHEET_ID, 'Sheet1!A:I');
+    if (rows.length < 2) return [];
+
+    const monthRows = rows.slice(1).filter(row => (row[0] || '').trim().startsWith(monthPrefix));
+    if (monthRows.length === 0) return [];
+
+    const agentMap = new Map<string, {
+      calls: number; talkMin: number;
+      speedSum: number; speedCount: number;
+      wrapSum: number; wrapCount: number;
+    }>();
+
+    for (const row of monthRows) {
+      const agent = normalizeAgent((row[1] || '').trim());
+      if (!agent || !JUMP_AGENTS.has(agent)) continue;
+
+      const calls = parseInt(row[6]) || 0;
+      const talkMin = parseTimeMins(row[2]);
+      const speedSec = parseTimeSec(row[5]);
+      const wrapUpSec = parseTimeSec(row[7]);
+
+      const entry = agentMap.get(agent) || { calls: 0, talkMin: 0, speedSum: 0, speedCount: 0, wrapSum: 0, wrapCount: 0 };
+      entry.calls += calls;
+      entry.talkMin += talkMin;
+      if (speedSec !== null && calls > 0) {
+        entry.speedSum += speedSec * calls;
+        entry.speedCount += calls;
+      }
+      if (wrapUpSec !== null && calls > 0) {
+        entry.wrapSum += wrapUpSec * calls;
+        entry.wrapCount += calls;
+      }
+      agentMap.set(agent, entry);
+    }
+
+    const result: YticaMtdAgent[] = [];
+    for (const [agent, d] of agentMap) {
+      result.push({
+        agent,
+        totalCalls: d.calls,
+        totalTalkMin: Math.round(d.talkMin * 10) / 10,
+        avgSpeedSec: d.speedCount > 0 ? Math.round((d.speedSum / d.speedCount) * 10) / 10 : null,
+        avgWrapUpSec: d.wrapCount > 0 ? Math.round((d.wrapSum / d.wrapCount) * 10) / 10 : null,
+      });
+    }
+
+    return result.sort((a, b) => b.totalCalls - a.totalCalls);
+  } catch (e) {
+    console.warn('Ytica MTD Activity fetch failed:', (e as Error).message);
+    return [];
+  }
+}
+
 export interface YticaTeamStats {
   totalCalls: number;
   inbound: number;

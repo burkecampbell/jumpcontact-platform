@@ -18,4 +18,5 @@ export type {
   MtdData,
   RepActivity,
   ScheduleData,
+  YticaMtdAgent,
 } from './types';

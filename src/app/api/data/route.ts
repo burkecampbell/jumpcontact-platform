@@ -8,6 +8,7 @@ import {
   getScheduledHours,
   fetchYticaRepActivity,
   fetchYticaTeamStats,
+  fetchYticaMtdActivity,
 } from '@/lib/sheets';
 import { blendYticaIntoPerioData, buildBrandSummary, deriveBrandView } from '@/lib/blender';
 import { parseBrand, MSC_ONLY_AGENTS, JC_ONLY_AGENTS, BLENDED_AGENTS, type Brand } from '@/lib/brand';
@@ -695,6 +696,8 @@ async function fetchDashboardData(): Promise<DashboardData> {
   const allHistDates = [...new Set([...mtdDates, ...trend7dDates, ...thisWeekDates, ...lastWeekDates, yesterdayStr])];
 
   // ── Parallel fetch: today + historical ─────────────────────────
+  const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
+
   const [
     todayLegs,
     todayConversions,
@@ -709,6 +712,7 @@ async function fetchDashboardData(): Promise<DashboardData> {
     mscConvToday,
     mscConvYesterday,
     mscConvHist,
+    mtdYtica,
   ] = await Promise.all([
     cached('today-legs', 30_000, () => fetchCallLegs(todayStr)),
     cached('today-conv', 30_000, () => fetchConversions(todayStr)),
@@ -725,6 +729,7 @@ async function fetchDashboardData(): Promise<DashboardData> {
     cached('msc-conv-hist', 3_600_000, () =>
       fetchMscConversionsRange(allHistDates[0], allHistDates[allHistDates.length - 1]).catch(() => [] as MscConversions[]),
     ),
+    cached('mtd-ytica', 30_000, () => fetchYticaMtdActivity(monthPrefix)),
   ]);
 
   // ── Merge MSC (GHL) conversions into JC (Sheets) conversions ──
@@ -951,6 +956,7 @@ async function fetchDashboardData(): Promise<DashboardData> {
     schedule: scheduleData,
     recentCalls,
     prevMonthChampions,
+    mtdRepActivity: mtdYtica,
     pulledAt,
     // Internal: used by GET handler for brand-specific rebuilds
     _todayCalls: todayCalls,

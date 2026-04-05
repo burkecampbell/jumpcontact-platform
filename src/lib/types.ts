@@ -325,6 +325,14 @@ export interface MonthChampions {
   bestConvRate: MonthChampion;
 }
 
+export interface YticaMtdAgent {
+  agent: string;
+  totalCalls: number;
+  totalTalkMin: number;
+  avgSpeedSec: number | null;
+  avgWrapUpSec: number | null;
+}
+
 export interface DashboardData {
   today: PeriodData & {
     totalCalls: number;
@@ -352,6 +360,7 @@ export interface DashboardData {
     jc: { calls: number; avgSpeed: number | null };
     msc: { calls: number; avgSpeed: number | null };
   };
+  mtdRepActivity?: YticaMtdAgent[];
   brand?: string;
   pulledAt: string;
 }

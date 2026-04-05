@@ -6,7 +6,7 @@ import HealthBanner from './HealthBanner';
 import Card from './Card';
 import ErrorBoundary from './ErrorBoundary';
 import { C, GOAL, capitalize, computePace, agentColor, AGENT_SCHEDULE, fmtSpeed, fmtTalkTime, EXCLUDED_AGENTS } from '@/lib/constants';
-import type { DashboardData, AcctStat, RepAgent } from '@/lib/getDashboard';
+import type { DashboardData, AcctStat, YticaMtdAgent } from '@/lib/getDashboard';
 import { Target, BarChart3, Trophy, Zap, Phone, Clock, Timer, Download, TrendingUp, Award, Star, ShieldCheck, Crosshair, ChevronUp, ChevronDown } from 'lucide-react';
 import { useBrand } from '@/hooks/useBrand';
 import { isAgentForBrand } from '@/lib/brand';
@@ -15,7 +15,7 @@ import { isAgentForBrand } from '@/lib/brand';
 
 async function downloadClientReport(
   accounts: AcctStat[],
-  agents: { agent: string; count: number; dailyAvg: number; convPerHr: number | null; projected: number; bestDay: number; pickupRate?: number; trueYield?: number }[],
+  agents: { agent: string; count: number; dailyAvg: number; convPerHr: number | null; projected: number; bestDay: number; mtdCalls: number; convRate: number | null }[],
   totalConversions: number,
   pulledAt: string,
 ) {
@@ -36,7 +36,7 @@ async function downloadClientReport(
 
   // Agent summary
   rows.push(['AGENT LEADERBOARD']);
-  rows.push(['#', 'Agent', 'Conversions', 'Avg/Day', 'Conv/Hr', 'Projected', 'Best Day', 'Pickup %', 'True Yield %']);
+  rows.push(['#', 'Agent', 'Conversions', 'Avg/Day', 'Conv/Hr', 'Projected', 'Best Day', 'Calls', 'Conv %']);
   agents.forEach((a, i) => {
     rows.push([
       i + 1,
@@ -46,8 +46,8 @@ async function downloadClientReport(
       a.convPerHr !== null ? a.convPerHr : '',
       a.projected,
       a.bestDay,
-      a.pickupRate != null ? `${a.pickupRate}%` : '',
-      a.trueYield != null ? `${a.trueYield}%` : '',
+      a.mtdCalls,
+      a.convRate != null ? `${a.convRate}%` : '',
     ]);
   });
 
@@ -186,7 +186,7 @@ function SpeedBadge({ sec }: { sec: number | null }) {
 
 // ── Main Component ──────────────────────────────────────────────────────────
 
-type RaceSortKey = 'mtd' | 'avgDay' | 'convHr' | 'projected' | 'bestDay' | 'calls' | 'speed' | 'pickup' | 'yield';
+type RaceSortKey = 'mtd' | 'avgDay' | 'convHr' | 'projected' | 'bestDay' | 'calls' | 'speed' | 'wrap' | 'talkPerCall' | 'convRate';
 
 function RacePageInner() {
   const { brand } = useBrand();
@@ -300,11 +300,11 @@ function RacePageInner() {
     mtdHoursMap[agent] = total;
   }
 
-  // ── Today's Competitive Metrics ──────────────────────────────────────────
-  const todayAgents = data.today.repActivity.agents.filter(a => !EXCLUDED_AGENTS.includes(a.agent));
-  // Build lookup for leaderboard (today's call data by agent)
-  const todayByAgent: Record<string, RepAgent> = {};
-  for (const a of todayAgents) todayByAgent[a.agent.toLowerCase()] = a;
+  // ── MTD Ytica lookup (monthly call/speed/wrap/talk per agent) ────────────
+  const mtdYticaByAgent: Record<string, YticaMtdAgent> = {};
+  for (const a of (data.mtdRepActivity || [])) {
+    mtdYticaByAgent[a.agent.toLowerCase()] = a;
+  }
 
   // Agent stats with projections — start from MTD conversions
   const mtdAgentStats = mtd.byAgent.filter(a => !EXCLUDED_AGENTS.includes(a.agent) && isAgentForBrand(a.agent, brand)).map(a => {
@@ -318,22 +318,27 @@ function RacePageInner() {
     }
     const mtdHours = mtdHoursMap[a.agent.toLowerCase()] ?? 0;
     const convPerHr = mtdHours > 0 ? +(a.count / mtdHours).toFixed(2) : null;
-    const todayRep = todayAgents.find(r => r.agent.toLowerCase() === a.agent.toLowerCase());
-    const pickupRate = todayRep?.pickupRate;
-    const trueYield = todayRep?.trueYield;
-    return { ...a, dailyAvg, projected, bestDay, mtdHours, convPerHr, pickupRate, trueYield };
+    const ytica = mtdYticaByAgent[a.agent.toLowerCase()];
+    const mtdCalls = ytica?.totalCalls ?? 0;
+    const mtdSpeedSec = ytica?.avgSpeedSec ?? null;
+    const mtdWrapUpSec = ytica?.avgWrapUpSec ?? null;
+    const mtdTalkMin = ytica?.totalTalkMin ?? 0;
+    const mtdTalkPerCall = mtdCalls > 0 ? +(mtdTalkMin / mtdCalls).toFixed(1) : null;
+    const convRate = mtdCalls > 0 ? Math.round((a.count / mtdCalls) * 1000) / 10 : null;
+    return { ...a, dailyAvg, projected, bestDay, mtdHours, convPerHr, mtdCalls, mtdSpeedSec, mtdWrapUpSec, mtdTalkPerCall, convRate };
   });
 
-  // Add agents who have calls today but 0 MTD conversions (e.g., MSC agents
-  // whose GHL conversions aren't flowing yet, or new agents)
+  // Add agents who have Ytica MTD calls but 0 MTD conversions
   const mtdAgentNames = new Set(mtdAgentStats.map(a => a.agent.toLowerCase()));
-  for (const rep of todayAgents) {
-    if (mtdAgentNames.has(rep.agent.toLowerCase())) continue;
-    if (!isAgentForBrand(rep.agent, brand)) continue;
+  for (const yAgent of (data.mtdRepActivity || [])) {
+    if (mtdAgentNames.has(yAgent.agent.toLowerCase())) continue;
+    if (!isAgentForBrand(yAgent.agent, brand)) continue;
     mtdAgentStats.push({
-      agent: rep.agent, count: 0, dailyAvg: 0, projected: 0, bestDay: 0,
-      mtdHours: mtdHoursMap[rep.agent.toLowerCase()] ?? 0, convPerHr: null,
-      pickupRate: rep.pickupRate, trueYield: rep.trueYield,
+      agent: yAgent.agent, count: 0, dailyAvg: 0, projected: 0, bestDay: 0,
+      mtdHours: mtdHoursMap[yAgent.agent.toLowerCase()] ?? 0, convPerHr: null,
+      mtdCalls: yAgent.totalCalls, mtdSpeedSec: yAgent.avgSpeedSec, mtdWrapUpSec: yAgent.avgWrapUpSec,
+      mtdTalkPerCall: yAgent.totalCalls > 0 ? +(yAgent.totalTalkMin / yAgent.totalCalls).toFixed(1) : null,
+      convRate: null,
     });
   }
   const agentStats = mtdAgentStats;
@@ -345,8 +350,6 @@ function RacePageInner() {
 
   // Sort agents by selected column
   const sortedAgents = [...agentStats].sort((a, b) => {
-    const todayA = todayByAgent[a.agent.toLowerCase()];
-    const todayB = todayByAgent[b.agent.toLowerCase()];
     let va = 0, vb = 0;
     switch (sortKey) {
       case 'mtd': va = a.count; vb = b.count; break;
@@ -354,13 +357,14 @@ function RacePageInner() {
       case 'convHr': va = a.convPerHr ?? -1; vb = b.convPerHr ?? -1; break;
       case 'projected': va = a.projected; vb = b.projected; break;
       case 'bestDay': va = a.bestDay; vb = b.bestDay; break;
-      case 'calls': va = todayA?.calls ?? 0; vb = todayB?.calls ?? 0; break;
-      case 'speed': va = todayA?.speedSec ?? 999; vb = todayB?.speedSec ?? 999; break;
-      case 'pickup': va = todayA?.wrapUpSec ?? 999; vb = todayB?.wrapUpSec ?? 999; break;
-      case 'yield': va = todayA?.calls && todayA.talkMin ? todayA.talkMin / todayA.calls : -1; vb = todayB?.calls && todayB.talkMin ? todayB.talkMin / todayB.calls : -1; break;
+      case 'calls': va = a.mtdCalls; vb = b.mtdCalls; break;
+      case 'speed': va = a.mtdSpeedSec ?? 999; vb = b.mtdSpeedSec ?? 999; break;
+      case 'wrap': va = a.mtdWrapUpSec ?? 999; vb = b.mtdWrapUpSec ?? 999; break;
+      case 'talkPerCall': va = a.mtdTalkPerCall ?? -1; vb = b.mtdTalkPerCall ?? -1; break;
+      case 'convRate': va = a.convRate ?? -1; vb = b.convRate ?? -1; break;
     }
-    // For speed, lower is better — ascending by default
-    if (sortKey === 'speed') return sortAsc ? vb - va : va - vb;
+    // For speed and wrap, lower is better
+    if (sortKey === 'speed' || sortKey === 'wrap') return sortAsc ? vb - va : va - vb;
     return sortAsc ? va - vb : vb - va;
   });
 
@@ -461,28 +465,28 @@ function RacePageInner() {
               ) : null;
             })()}
             {(() => {
-              const byPickup = todayAgents.filter(a => a.pickupRate != null && a.pickupRate! > 0).sort((a, b) => b.pickupRate! - a.pickupRate!);
+              const byPickup = agentStats.filter(a => a.convRate != null && a.convRate! > 0).sort((a, b) => b.convRate! - a.convRate!);
               return byPickup.length > 0 ? (
                 <AwardCard
                   icon={<ShieldCheck size={14} style={{ color: '#4ade80' }} />}
                   title="Best Pickup Rate"
                   winner={byPickup[0].agent}
-                  value={`${byPickup[0].pickupRate}%`}
+                  value={`${byPickup[0].convRate}%`}
                   runnerUp={byPickup[1]?.agent}
-                  runnerValue={byPickup[1] ? `${byPickup[1].pickupRate}%` : undefined}
+                  runnerValue={byPickup[1] ? `${byPickup[1].convRate}%` : undefined}
                 />
               ) : null;
             })()}
             {(() => {
-              const byYield = todayAgents.filter(a => a.trueYield != null && a.trueYield! > 0).sort((a, b) => b.trueYield! - a.trueYield!);
-              return byYield.length > 0 ? (
+              const bySpeed = agentStats.filter(a => a.mtdSpeedSec != null && a.mtdSpeedSec! > 0).sort((a, b) => a.mtdSpeedSec! - b.mtdSpeedSec!);
+              return bySpeed.length > 0 ? (
                 <AwardCard
                   icon={<Crosshair size={14} style={{ color: '#a78bfa' }} />}
-                  title="Best True Yield"
-                  winner={byYield[0].agent}
-                  value={`${byYield[0].trueYield}%`}
-                  runnerUp={byYield[1]?.agent}
-                  runnerValue={byYield[1] ? `${byYield[1].trueYield}%` : undefined}
+                  title="Fastest Avg Speed"
+                  winner={bySpeed[0].agent}
+                  value={fmtSpeed(bySpeed[0].mtdSpeedSec!)}
+                  runnerUp={bySpeed[1]?.agent}
+                  runnerValue={bySpeed[1] ? fmtSpeed(bySpeed[1].mtdSpeedSec!) : undefined}
                 />
               ) : null;
             })()}
@@ -497,7 +501,7 @@ function RacePageInner() {
           <div className="flex items-center gap-2 px-4 pt-4 pb-2">
             <BarChart3 size={16} style={{ color: C.cyan }} />
             <h2 className="text-sm font-semibold" style={{ color: C.text }}>Agent Leaderboard</h2>
-            <span className="text-xs ml-auto" style={{ color: C.sub }}>MTD + Today&apos;s performance</span>
+            <span className="text-xs ml-auto" style={{ color: C.sub }}>Month to Date</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -510,16 +514,15 @@ function RacePageInner() {
                   <SortTH k="convHr" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Conv/Hr</SortTH>
                   <SortTH k="projected" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Projected</SortTH>
                   <SortTH k="bestDay" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Best Day</SortTH>
-                  <th className="px-1 py-2" style={{ borderLeft: `1px solid ${C.border}` }} />
                   <SortTH k="calls" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Calls</SortTH>
                   <SortTH k="speed" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Speed</SortTH>
-                  <SortTH k="pickup" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Wrap</SortTH>
-                  <SortTH k="yield" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Talk/Call</SortTH>
+                  <SortTH k="wrap" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Wrap</SortTH>
+                  <SortTH k="talkPerCall" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Talk/Call</SortTH>
+                  <SortTH k="convRate" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Pickup %</SortTH>
                 </tr>
               </thead>
               <tbody>
                 {sortedAgents.map((a, i) => {
-                  const today = todayByAgent[a.agent.toLowerCase()];
                   return (
                   <tr key={a.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
                     <TD color={i < 3 ? C.cyan : C.sub}>
@@ -540,24 +543,26 @@ function RacePageInner() {
                       {a.projected}
                     </TD>
                     <TD mono right color={C.sub}>{a.bestDay || '—'}</TD>
-                    <td style={{ borderLeft: `1px solid ${C.border}` }} />
-                    <TD mono right color={today?.calls ? C.text : C.sub}>
-                      {today?.calls ?? 0}
+                    <TD mono right color={a.mtdCalls > 0 ? C.text : C.sub}>
+                      {a.mtdCalls}
                     </TD>
                     <td className="px-3 py-2.5 text-right">
-                      <SpeedBadge sec={today?.speedSec ?? null} />
+                      <SpeedBadge sec={a.mtdSpeedSec} />
                     </td>
-                    <TD mono right color={today?.wrapUpSec != null ? C.text : C.sub}>
-                      {today?.wrapUpSec != null ? `${today.wrapUpSec}s` : '—'}
+                    <TD mono right color={a.mtdWrapUpSec != null ? C.text : C.sub}>
+                      {a.mtdWrapUpSec != null ? `${a.mtdWrapUpSec}s` : '—'}
                     </TD>
-                    <TD mono right color={today?.calls && today.calls > 0 ? C.text : C.sub}>
-                      {today?.calls && today.talkMin ? `${(today.talkMin / today.calls).toFixed(1)}m` : '—'}
+                    <TD mono right color={a.mtdTalkPerCall != null ? C.text : C.sub}>
+                      {a.mtdTalkPerCall != null ? `${a.mtdTalkPerCall}m` : '—'}
+                    </TD>
+                    <TD mono right color={a.convRate != null && a.convRate > 0 ? C.lime : C.sub}>
+                      {a.convRate != null ? `${a.convRate}%` : '—'}
                     </TD>
                   </tr>
                   );
                 })}
                 {mtd.byAgent.length === 0 && (
-                  <tr><td colSpan={12} className="text-center text-sm py-5" style={{ color: C.sub }}>No conversion data yet</td></tr>
+                  <tr><td colSpan={13} className="text-center text-sm py-5" style={{ color: C.sub }}>No conversion data yet</td></tr>
                 )}
               </tbody>
             </table>
