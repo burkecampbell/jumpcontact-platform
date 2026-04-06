@@ -99,6 +99,74 @@ function MeetingPageInner() {
     setTimeout(() => setSlackCopied(false), 2500);
   }, [data]);
 
+  // ── Download conversions report as CSV ────────────────────────────
+  const downloadReport = useCallback(() => {
+    if (!data) return;
+    const mtd = data.mtd;
+    const byAccount = mtd.byAccount ?? [];
+    const agents = mtd.byAgent.map(a => a.agent);
+    const cap = (s: string) => s.replace(/\b\w/g, c => c.toUpperCase());
+    const esc = (v: string | number) => {
+      const s = String(v);
+      return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const dom = mtd.dayOfMonth || 1;
+    const dim = mtd.daysInMonth || 30;
+    const dateStr = data.date || new Date().toISOString().slice(0, 10);
+    const monthName = new Date(dateStr + 'T12:00:00').toLocaleString('en-US', { month: 'long', timeZone: 'America/Edmonton' });
+    const year = new Date(dateStr + 'T12:00:00').getFullYear();
+    const rows: string[] = [];
+
+    // Header
+    rows.push('JUMP CONTACT');
+    rows.push('Conversions Report');
+    rows.push(`${monthName} ${year}`);
+    rows.push('');
+    rows.push(`Total Conversions,,${mtd.total},,Total Clients,,${byAccount.length}`);
+    rows.push('');
+
+    // AGENT LEADERBOARD
+    rows.push('AGENT LEADERBOARD');
+    rows.push('#,Agent,Conversions,Avg/Day,Conv/Hr,Projected,Best Day,Calls,Conv %');
+    mtd.byAgent.forEach((a, i) => {
+      const daily = a.daily || {};
+      const avg = (a.count / Math.max(dom, 1)).toFixed(1);
+      const projected = Math.round(a.count / Math.max(dom, 1) * dim);
+      const best = Object.values(daily).length > 0 ? Math.max(...Object.values(daily)) : 0;
+      // Find calls from mtdRepActivity
+      const rep = (data.mtdRepActivity || []).find(r => r.agent === a.agent);
+      const calls = rep?.totalCalls ?? '';
+      const convPct = rep && rep.totalCalls > 0 ? ((a.count / rep.totalCalls) * 100).toFixed(1) + '%' : '';
+      rows.push(`${i + 1},${cap(a.agent)},${a.count},${avg},,${projected},${best},${calls},${convPct}`);
+    });
+    rows.push('');
+    rows.push('');
+
+    // CONVERSIONS PER CLIENT with agent columns
+    rows.push('CONVERSIONS PER CLIENT');
+    rows.push(['#', 'Client', 'Conversions', '% of Total', ...agents.map(a => cap(a))].join(','));
+    byAccount.forEach((acct, i) => {
+      const bd = acct.agentBreakdown || {};
+      const pct = mtd.total > 0 ? ((acct.count / mtd.total) * 100).toFixed(1) + '%' : '0%';
+      const agentVals = agents.map(a => (bd[a] || 0) > 0 ? bd[a] : '');
+      rows.push([i + 1, esc(cap(acct.account)), acct.count, pct, ...agentVals].join(','));
+    });
+    // Totals row
+    const agentTotals = agents.map(a =>
+      byAccount.reduce((s, ac) => s + ((ac.agentBreakdown || {})[a] || 0), 0)
+    );
+    rows.push(['', 'TOTAL', mtd.total, '100%', ...agentTotals].join(','));
+
+    // Download
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `JC-Conversions-${monthName}-${year}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, [data]);
+
   if (loading || !data) {
     return (
       <>
@@ -186,6 +254,18 @@ function MeetingPageInner() {
             </button>
           ))}
           <div className="absolute right-0 flex items-center gap-1.5">
+            <button
+              onClick={downloadReport}
+              className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border-none cursor-pointer transition-colors"
+              style={{
+                background: 'rgba(139,146,168,0.1)',
+                color: C.sub,
+                border: '1px solid transparent',
+              }}
+              title="Download MTD conversions report (CSV)"
+            >
+              📥 Report
+            </button>
             <button
               onClick={copySlack}
               className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border-none cursor-pointer transition-colors"
