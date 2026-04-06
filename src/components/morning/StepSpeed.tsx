@@ -5,24 +5,104 @@ import type { DashboardData } from '@/lib/types';
 import { Num, Label, Pill } from './primitives';
 import { T, Z, G } from './theme';
 
+/**
+ * Speed step — prefers Ytica agent-ring-to-pickup speed over CDR ring time.
+ *
+ * CDR speedSec includes IVR + queue + agent ring (inflated, 10-15s typical).
+ * Ytica avgSpeedSec is agent-only pickup time (realistic, 6-9s typical).
+ *
+ * Priority: yesterday's Ytica blended speed → MTD Ytica avg → CDR fallback.
+ */
 export function StepSpeed({ data }: { data: DashboardData }) {
+  // Build a Ytica MTD speed lookup: agent → avgSpeedSec
+  const yticaMtd: Record<string, number> = {};
+  for (const y of data.mtdRepActivity ?? []) {
+    if (y.avgSpeedSec != null && y.avgSpeedSec > 0) {
+      yticaMtd[y.agent.toLowerCase()] = y.avgSpeedSec;
+    }
+  }
+
+  // For each agent, pick best available speed:
+  // 1. If yesterday's speedSec looks like Ytica-blended (< 10s), use it
+  // 2. Else use Ytica MTD average
+  // 3. Else fall back to CDR speed
   const agents = data.yesterday.repActivity.agents
-    .filter(a => !EXCLUDED_AGENTS.includes(a.agent) && a.speedSec != null && a.speedSec > 0)
-    .sort((a, b) => a.speedSec! - b.speedSec!);
-  const hitting = agents.filter(a => a.speedSec! < 10).length;
-  const avg = agents.length > 0 ? agents.reduce((s, a) => s + a.speedSec!, 0) / agents.length : 0;
+    .filter(a => !EXCLUDED_AGENTS.includes(a.agent))
+    .map(a => {
+      const cdrSpeed = a.speedSec;
+      const yticaSpeed = yticaMtd[a.agent.toLowerCase()];
+      // Prefer Ytica MTD when CDR looks inflated (>10s) and Ytica is available
+      let bestSpeed: number | null = cdrSpeed;
+      if (cdrSpeed != null && cdrSpeed > 10 && yticaSpeed != null) {
+        bestSpeed = yticaSpeed;
+      } else if (cdrSpeed == null && yticaSpeed != null) {
+        bestSpeed = yticaSpeed;
+      }
+      return { ...a, displaySpeed: bestSpeed, source: bestSpeed === yticaSpeed ? 'mtd' : 'yesterday' };
+    })
+    .filter(a => a.displaySpeed != null && a.displaySpeed > 0)
+    .sort((a, b) => a.displaySpeed! - b.displaySpeed!);
+
+  const hitting = agents.filter(a => a.displaySpeed! < 10).length;
+  const avg = agents.length > 0
+    ? agents.reduce((s, a) => s + a.displaySpeed!, 0) / agents.length
+    : 0;
+  const usingMtd = agents.some(a => a.source === 'mtd');
   const b = Z('badge');
+
   return (
     <div>
       <div style={{ marginBottom: G(24) }}>
-        <Label>Speed</Label>
+        <Label>Speed{usingMtd ? ' (MTD avg)' : ''}</Label>
         <div style={{ marginTop: G(8), display: 'flex', alignItems: 'baseline', gap: G(16), flexWrap: 'wrap' }}>
           <Num>{avg.toFixed(1)}s</Num>
-          <Pill color={T.positive}>{hitting}/{agents.length} under 10s</Pill>
+          <Pill color={hitting === agents.length ? T.positive : hitting > 0 ? T.caution : T.negative}>
+            {hitting}/{agents.length} under 10s
+          </Pill>
         </div>
       </div>
+      {/* Speed metrics explainer */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: G(12),
+        marginBottom: G(20), padding: `${G(12)}px 0`,
+        borderBottom: `1px solid ${T.border}`,
+      }}>
+        {(() => {
+          // Compute team-level numbers for each metric
+          const cdrAgents = data.yesterday.repActivity.agents.filter(a => !EXCLUDED_AGENTS.includes(a.agent) && a.speedSec != null && a.speedSec > 0);
+          const cdrAvg = cdrAgents.length > 0 ? cdrAgents.reduce((s, a) => s + a.speedSec!, 0) / cdrAgents.length : null;
+
+          const yticaAgents = (data.mtdRepActivity ?? []).filter(y => !EXCLUDED_AGENTS.includes(y.agent) && y.avgSpeedSec != null && y.avgSpeedSec > 0);
+          const yticaAvg = yticaAgents.length > 0 ? yticaAgents.reduce((s, y) => s + y.avgSpeedSec!, 0) / yticaAgents.length : null;
+
+          const teamAvg = data.yesterday.teamAvgSpeed ?? null;
+
+          const metrics = [
+            { label: 'Ring to Pickup', value: yticaAvg, desc: 'Agent hears ring \u2192 picks up', source: 'Ytica MTD' },
+            { label: 'Total Wait', value: cdrAvg, desc: 'Caller dials \u2192 agent answers', source: 'CDR yesterday' },
+            { label: 'Team Avg', value: teamAvg, desc: 'Blended team speed', source: 'API' },
+          ];
+          return metrics.map(m => (
+            <div key={m.label} style={{ textAlign: 'center' }}>
+              <div style={{
+                fontFamily: "'JetBrains Mono',monospace", fontSize: Z('agentValue'),
+                fontWeight: 700, color: m.value != null && m.value < 10 ? T.positive : m.value != null && m.value < 14 ? T.caution : T.inkMuted,
+              }}>
+                {m.value != null ? `${m.value.toFixed(1)}s` : '\u2014'}
+              </div>
+              <div style={{ fontSize: Z('label'), fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: T.inkSoft, marginTop: G(2) }}>
+                {m.label}
+              </div>
+              <div style={{ fontSize: Z('label') * 0.9, color: T.inkFaint, marginTop: G(1) }}>
+                {m.desc}
+              </div>
+            </div>
+          ));
+        })()}
+      </div>
+
       {agents.map((a, i) => {
-        const s = a.speedSec!;
+        const s = a.displaySpeed!;
         const c = s < 10 ? T.positive : s < 14 ? T.caution : T.negative;
         const { letter } = speedGrade(s);
         return (
