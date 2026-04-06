@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, Suspense, useMemo } from 'react';
 import NavBar from '../NavBar';
 import HealthBanner from '../HealthBanner';
 import ErrorBoundary from '../ErrorBoundary';
-import { C, isMonday } from '@/lib/constants';
+import { C, isMonday, GOAL, fmtSpeed, computePace, capitalize } from '@/lib/constants';
 import type { DashboardData, PeriodData } from '@/lib/types';
 import { aggregateDays } from './aggregateDays';
 import StepCalls from './StepCalls';
@@ -28,6 +28,7 @@ function MeetingPageInner() {
   const [step, setStep] = useState(0);
   const [autoPlay, setAutoPlay] = useState(false);
   const [activeDay, setActiveDay] = useState<'today' | 'yesterday' | 'friday' | 'weekend'>(isMonday() ? 'friday' : 'yesterday');
+  const [slackCopied, setSlackCopied] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -112,6 +113,39 @@ function MeetingPageInner() {
     periodLabel = activeDay.toUpperCase();
   }
 
+  // ── Slack quick-copy ──────────────────────────────────────────────
+  const copySlack = useCallback(async () => {
+    if (!data) return;
+    const dot = (l: string, v: string, w = 28) => `${l} ${'.'.repeat(Math.max(w - l.length - v.length, 2))} ${v}`;
+    const medal = ['🥇', '🥈', '🥉'];
+    const monday = isMonday();
+    const pLbl = monday ? 'Weekend' : 'Yesterday';
+    const p = data.yesterday;
+    const { projected, pacePercent } = computePace(data.mtd.total, data.pulledAt);
+    const paceEmoji = pacePercent >= 100 ? '🟢' : pacePercent >= 80 ? '🟡' : '🔴';
+    const agentLines = p.conversions.byAgent.slice(0, 5)
+      .map((a, i) => `${medal[i] || `${i + 1}.`} ${dot(capitalize(a.agent), `*${a.count}*`)}`).join('\n');
+    const acctLines = p.conversions.byAccount.slice(0, 5)
+      .map((a, i) => `${i + 1}. ${dot(a.account, `${a.count}`)}`).join('\n');
+    const speedAgents = [...p.repActivity.agents].filter(a => a.speedSec != null)
+      .sort((a, b) => (a.speedSec ?? Infinity) - (b.speedSec ?? Infinity)).slice(0, 3);
+    const speedLines = speedAgents.length
+      ? speedAgents.map((a, i) => `${medal[i] || `${i + 1}.`} ${dot(capitalize(a.agent), `*${fmtSpeed(a.speedSec)}*`)}`).join('\n')
+      : 'No speed data yet';
+    const avgLine = p.repActivity.avgSpeedSec != null ? `\n${dot('Team Average', `*${fmtSpeed(p.repActivity.avgSpeedSec)}*`)}` : '';
+    const mtdDaily = data.mtd.mtdDaily ?? [];
+    const wtd = mtdDaily.length > 0 ? mtdDaily.slice(-7).reduce((s, d) => s + d.total, 0) : 0;
+    const wtdLine = wtd > 0 ? `\n${dot('Week-to-Date', `*${wtd}*`)}` : '';
+    const t = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Edmonton' });
+    const CLOSING = ["Let's close strong today! 💪", "Make today count! 🔥", "Every call is an opportunity! 📞", "Let's hit our targets! 🎯", "Time to lock in! 🔒", "Stay hungry, stay sharp! ⚡", "Greatness is a choice — choose it today! 🏆"];
+
+    const msg = `🌅 *JUMP CONTACT — MORNING REPORT*\n📅 ${data.date}\n\n━━━━━━━━━━━━━━━━━━━━━\n📊 *CONVERSIONS*\n━━━━━━━━━━━━━━━━━━━━━\n${dot(pLbl, `*${p.conversions.total}*`)}${wtdLine}\n${dot('MTD Total', `*${data.mtd.total}* / ${GOAL}`)}\n${dot('Projected', `*${projected}* ${paceEmoji} (${pacePercent}%)`)}\n\n━━━━━━━━━━━━━━━━━━━━━\n🏆 *AGENT RANKINGS — ${pLbl}*\n━━━━━━━━━━━━━━━━━━━━━\n${agentLines || 'No data yet'}\n\n━━━━━━━━━━━━━━━━━━━━━\n📋 *TOP ACCOUNTS — ${pLbl}*\n━━━━━━━━━━━━━━━━━━━━━\n${acctLines || 'No data yet'}\n\n━━━━━━━━━━━━━━━━━━━━━\n⚡ *SPEED TO LEAD — ${pLbl}*\n━━━━━━━━━━━━━━━━━━━━━\n${speedLines}${avgLine}\n\n━━━━━━━━━━━━━━━━━━━━━\n📞 *MISSED CALLS*  ${p.missedCalls.total}\n━━━━━━━━━━━━━━━━━━━━━\n\n${CLOSING[new Date().getDay() % CLOSING.length]}\n_Generated ${t} MST_`;
+
+    await navigator.clipboard.writeText(msg);
+    setSlackCopied(true);
+    setTimeout(() => setSlackCopied(false), 2500);
+  }, [data]);
+
   // Map step index to the right component (Mixed skips conversions/MTD)
   const currentLabel = stepLabels[step];
 
@@ -151,18 +185,32 @@ function MeetingPageInner() {
               {day.charAt(0).toUpperCase() + day.slice(1)}
             </button>
           ))}
-          <button
-            onClick={() => setAutoPlay(p => !p)}
-            className="absolute right-0 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border-none cursor-pointer transition-colors"
-            style={{
-              background: autoPlay ? C.cyan + '22' : 'rgba(139,146,168,0.1)',
-              color: autoPlay ? C.cyan : C.sub,
-              border: `1px solid ${autoPlay ? C.cyan + '44' : 'transparent'}`,
-            }}
-            title={autoPlay ? 'Pause auto-advance (Space)' : 'Resume auto-advance (Space)'}
-          >
-            {autoPlay ? '\u25AE\u25AE Auto' : '\u25B6 Auto'}
-          </button>
+          <div className="absolute right-0 flex items-center gap-1.5">
+            <button
+              onClick={copySlack}
+              className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border-none cursor-pointer transition-colors"
+              style={{
+                background: slackCopied ? '#22c55e22' : 'rgba(139,146,168,0.1)',
+                color: slackCopied ? '#22c55e' : C.sub,
+                border: `1px solid ${slackCopied ? '#22c55e44' : 'transparent'}`,
+              }}
+              title="Copy Slack morning report to clipboard"
+            >
+              {slackCopied ? '✓ Copied' : '📋 Slack'}
+            </button>
+            <button
+              onClick={() => setAutoPlay(p => !p)}
+              className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border-none cursor-pointer transition-colors"
+              style={{
+                background: autoPlay ? C.cyan + '22' : 'rgba(139,146,168,0.1)',
+                color: autoPlay ? C.cyan : C.sub,
+                border: `1px solid ${autoPlay ? C.cyan + '44' : 'transparent'}`,
+              }}
+              title={autoPlay ? 'Pause auto-advance (Space)' : 'Resume auto-advance (Space)'}
+            >
+              {autoPlay ? '\u25AE\u25AE Auto' : '\u25B6 Auto'}
+            </button>
+          </div>
         </div>
 
         {/* Step Tabs */}
