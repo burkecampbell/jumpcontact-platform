@@ -163,11 +163,11 @@ export async function GET(request: NextRequest) {
       to = date;
     }
 
-    // Cap at 31 days to prevent abuse
+    // Cap at 90 days to prevent abuse
     const dates = dateRange(from, to);
-    if (dates.length > 31) {
+    if (dates.length > 90) {
       return NextResponse.json(
-        { error: 'Date range cannot exceed 31 days' },
+        { error: 'Date range cannot exceed 90 days' },
         { status: 400 },
       );
     }

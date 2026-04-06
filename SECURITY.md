@@ -1,3 +1,7 @@
+---
+tags: [ghl, google-sheets, jump-contact, platform, twilio, type/credentials, type/integration, type/tool, vercel]
+---
+
 # Security Policy
 
 ## Reporting Vulnerabilities

@@ -1,3 +1,7 @@
+---
+tags: [client/msc, ghl, google-sheets, jump-contact, platform, twilio, type/credentials, type/integration, type/spec, type/strategy, type/tool, vercel]
+---
+
 # JumpContact Platform — AI Context
 
 > **Read this file first.** It gives Claude everything needed to add features, fix bugs, or extend the platform without re-discovering the codebase.

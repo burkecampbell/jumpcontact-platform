@@ -1,3 +1,7 @@
+---
+tags: [client/msc, google-sheets, jump-contact, platform, type/credentials, type/integration, type/spec, type/tool, vercel]
+---
+
 # Contributing
 
 ## Development Setup

@@ -446,7 +446,7 @@ export async function fetchYticaRepActivity(dateStr: string): Promise<YticaRepAc
         agent,
         calls: parseInt(row[6]) || 0,           // G: Call Conversations
         talkMin: +parseTimeMins(row[2]).toFixed(1), // C: Total Talk Time
-        speedSec: parseTimeSec(row[5]),           // F: Avg Speed to Answer
+        speedSec: parseTimeSec(row[3]),           // D: Avg Ring Time (agent pickup speed)
         wrapUpSec: parseTimeSec(row[7]),           // H: Avg Wrap Up Time
         avgHandlingMin: null,
         inboundConversations: 0,

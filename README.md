@@ -1,3 +1,7 @@
+---
+tags: [aws, client/msc, ghl, google-sheets, jump-contact, platform, twilio, type/credentials, type/integration, type/spec, type/tool, vercel]
+---
+
 # JumpContact Platform
 
 Real-time operations intelligence for Jump Contact (24/7 virtual receptionist) and Med Spa Communications. Built for investor-grade data integrity.

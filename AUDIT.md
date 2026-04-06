@@ -1,3 +1,7 @@
+---
+tags: [client/msc, ghl, jump-contact, platform, twilio, type/credentials, type/integration, type/tool, vercel]
+---
+
 # Codebase Audit Prompt
 
 > Paste this into a new Claude Code session to run a full audit against the known issues list.

@@ -1,3 +1,7 @@
+---
+tags: [ghl, google-sheets, jump-contact, platform, twilio, type/credentials, type/integration, type/tool, vercel]
+---
+
 # API Reference
 
 All endpoints are served from the Vercel deployment. Base URL: `https://jump-contact-dashboard-burke-5005s-projects.vercel.app`

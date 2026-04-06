@@ -32,59 +32,37 @@ function fmtTimeXLS(iso: string): string {
 
 import { shareRecording, buildPlayerUrl } from '@/lib/recording-utils';
 
-async function downloadReport(calls: RawCall[], filename: string, date: string) {
-  const XLSX = await import('xlsx');
-  const reportDate = new Date(date + 'T12:00:00').toLocaleDateString('en-US', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-  });
+async function downloadReport(calls: RawCall[], filename: string, _date: string) {
+  const ExcelJS = await import('exceljs');
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Jump Contact';
+  wb.created = new Date();
+
+  // ── JC Document Standards — Light theme ──
+  const JC_TEAL = '3BA5B5';
+  const JC_DARK = '2C3E50';
+  const JC_TEXT = '1A1A1A';
+  const JC_LABEL = '495057';
+  const JC_BG_GRAY = 'F8F9FA';
+  const JC_BORDER = 'DEE2E6';
+  const JC_GREEN = '27AE60';
+  const JC_BLUE = '2980B9';
+  const JC_RED = 'C0392B';
+  const WHITE = 'FFFFFF';
+  const STRIPE_LIGHT = 'F8F9FA';
+  const STRIPE_WHITE = 'FFFFFF';
+
+  const thin = (color: string) => ({ style: 'thin' as const, color: { argb: color } });
+  const docBorder = { bottom: thin(JC_BORDER), right: thin(JC_BORDER), left: thin(JC_BORDER), top: thin(JC_BORDER) };
+
+  // ── Aggregate stats ──
   const totalCalls = calls.length;
   const totalDurSec = calls.reduce((s, c) => s + c.duration, 0);
   const inbound = calls.filter(c => c.direction === 'inbound').length;
   const outbound = totalCalls - inbound;
   const withRec = calls.filter(c => c.recordingUrl).length;
 
-  // Build rows array
-  const rows: (string | number)[][] = [];
-
-  // Header section
-  rows.push(['JUMP CONTACT', '', '', '', '', '', '']);
-  rows.push(['Call Detail Report', '', '', '', '', '', '']);
-  rows.push([reportDate, '', '', '', '', '', '']);
-  rows.push([]);
-  // Summary row
-  rows.push([
-    'Total Calls', totalCalls,
-    'Inbound', inbound,
-    'Outbound', outbound,
-    'Talk Time',
-  ]);
-  rows.push([
-    'Recordings', withRec,
-    '', '',
-    '', '',
-    fmtDur(totalDurSec),
-  ]);
-  rows.push([]);
-  // Column headers
-  const headerRow = 7; // 0-indexed
-  rows.push(['Time', 'Agent', 'Client', 'Phone', 'Duration', 'Direction', 'Recording URL']);
-
-  // Data rows
-  for (const c of calls) {
-    rows.push([
-      fmtTimeXLS(c.time),
-      capitalize(c.agent),
-      c.account || '',
-      formatPhone(c.phone),
-      fmtDur(c.duration),
-      capitalize(c.direction),
-      buildPlayerUrl(c),
-    ]);
-  }
-
-  // Agent summary section
-  rows.push([]);
-  rows.push(['Agent Summary', '', '', '', '', '', '']);
+  // ── Agent breakdown ──
   const agentMap = new Map<string, { calls: number; durSec: number; inbound: number; outbound: number }>();
   for (const c of calls) {
     const name = capitalize(c.agent) || 'Unassigned';
@@ -94,41 +72,221 @@ async function downloadReport(calls: RawCall[], filename: string, date: string) 
     if (c.direction === 'inbound') prev.inbound += 1; else prev.outbound += 1;
     agentMap.set(name, prev);
   }
-  rows.push(['Agent', 'Calls', 'Inbound', 'Outbound', 'Talk Time', '', '']);
-  for (const [name, stats] of agentMap) {
-    rows.push([name, stats.calls, stats.inbound, stats.outbound, fmtDur(stats.durSec), '', '']);
+
+  // =====================================================================
+  //  SHEET 1: Call Detail — JC Document Standards (light, professional)
+  // =====================================================================
+  const ws = wb.addWorksheet('Call Detail', {
+    views: [{ state: 'frozen', ySplit: 8 }],
+    properties: { tabColor: { argb: JC_TEAL } },
+  });
+
+  ws.columns = [
+    { width: 24 },  // A: Time
+    { width: 14 },  // B: Agent
+    { width: 28 },  // C: Client
+    { width: 18 },  // D: Phone
+    { width: 12 },  // E: Duration
+    { width: 12 },  // F: Direction
+    { width: 18 },  // G: Recording
+  ];
+
+  // ── Branded header (teal bar) ──
+  ws.mergeCells('A1:G1');
+  const titleCell = ws.getCell('A1');
+  titleCell.value = 'JUMP CONTACT';
+  titleCell.font = { name: 'Arial', size: 20, bold: true, color: { argb: WHITE } };
+  titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: JC_DARK } };
+  titleCell.alignment = { vertical: 'middle' };
+  titleCell.border = { bottom: { style: 'medium', color: { argb: JC_TEAL } } };
+  ws.getRow(1).height = 36;
+
+  ws.mergeCells('A2:G2');
+  const subtitleCell = ws.getCell('A2');
+  subtitleCell.value = 'Call Detail Report';
+  subtitleCell.font = { name: 'Arial', size: 12, bold: true, color: { argb: JC_DARK } };
+  subtitleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: WHITE } };
+
+  ws.mergeCells('A3:G3');
+  const dateCell = ws.getCell('A3');
+  const fromDate = calls.length > 0 ? new Date(calls[calls.length - 1].time) : new Date();
+  const toDate = calls.length > 0 ? new Date(calls[0].time) : new Date();
+  const dateOpts: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/Edmonton' };
+  dateCell.value = fromDate.toLocaleDateString('en-US', dateOpts) + ' — ' + toDate.toLocaleDateString('en-US', dateOpts);
+  dateCell.font = { name: 'Arial', size: 10, italic: true, color: { argb: JC_LABEL } };
+  dateCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: WHITE } };
+
+  // ── Summary info box (rows 5-6, gray background per doc standards) ──
+  const infoFill = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: JC_BG_GRAY } };
+  const labelFont = { name: 'Arial', size: 11, bold: true, color: { argb: JC_LABEL } };
+  const valueFont = { name: 'Arial', size: 13, bold: true, color: { argb: JC_TEXT } };
+
+  for (let c = 1; c <= 7; c++) {
+    ws.getRow(5).getCell(c).fill = infoFill;
+    ws.getRow(5).getCell(c).border = { top: thin(JC_BORDER), bottom: thin(JC_BORDER) };
+    ws.getRow(6).getCell(c).fill = infoFill;
+    ws.getRow(6).getCell(c).border = { bottom: thin(JC_BORDER) };
   }
 
-  // Create workbook
-  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws.getCell('A5').value = 'Total Calls'; ws.getCell('A5').font = labelFont;
+  ws.getCell('B5').value = totalCalls; ws.getCell('B5').font = valueFont;
+  ws.getCell('C5').value = 'Inbound'; ws.getCell('C5').font = labelFont;
+  ws.getCell('D5').value = inbound; ws.getCell('D5').font = { ...valueFont, color: { argb: JC_GREEN } };
+  ws.getCell('E5').value = 'Outbound'; ws.getCell('E5').font = labelFont;
+  ws.getCell('F5').value = outbound; ws.getCell('F5').font = { ...valueFont, color: { argb: JC_BLUE } };
+  ws.getCell('G5').value = 'Talk Time'; ws.getCell('G5').font = labelFont;
+  ws.getCell('A6').value = 'Recordings'; ws.getCell('A6').font = labelFont;
+  ws.getCell('B6').value = withRec; ws.getCell('B6').font = valueFont;
+  ws.getCell('G6').value = fmtDur(totalDurSec); ws.getCell('G6').font = valueFont;
 
-  // Column widths
-  ws['!cols'] = [
-    { wch: 24 }, // Time
-    { wch: 14 }, // Agent
-    { wch: 30 }, // Client
-    { wch: 18 }, // Phone
-    { wch: 12 }, // Duration
-    { wch: 12 }, // Direction
-    { wch: 55 }, // Recording URL
+  // ── Column headers (row 8) — teal underline per doc standards ──
+  const headers = ['Time', 'Agent', 'Client', 'Phone', 'Duration', 'Direction', 'Recording'];
+  const headerRowXLS = ws.getRow(8);
+  headers.forEach((h, i) => {
+    const cell = headerRowXLS.getCell(i + 1);
+    cell.value = h.toUpperCase();
+    cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: JC_DARK } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: WHITE } };
+    cell.border = { bottom: { style: 'medium', color: { argb: JC_TEAL } } };
+    cell.alignment = { vertical: 'middle' };
+  });
+  headerRowXLS.height = 22;
+
+  // Auto-filter
+  ws.autoFilter = { from: { row: 8, column: 1 }, to: { row: 8 + calls.length, column: 7 } };
+
+  // ── Data rows — alternating white/gray stripes ──
+  calls.forEach((c, i) => {
+    const row = ws.getRow(9 + i);
+    const isEven = i % 2 === 0;
+    const bg = isEven ? STRIPE_WHITE : STRIPE_LIGHT;
+    const fillStyle = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: bg } };
+    const baseFont = { name: 'Arial', size: 11, color: { argb: JC_TEXT } };
+
+    row.getCell(1).value = fmtTimeXLS(c.time);
+    row.getCell(1).font = { ...baseFont, size: 10, color: { argb: JC_LABEL } };
+
+    row.getCell(2).value = capitalize(c.agent) || '';
+    row.getCell(2).font = { ...baseFont, bold: !!c.agent };
+
+    row.getCell(3).value = c.account || '';
+    row.getCell(3).font = c.account ? baseFont : { ...baseFont, color: { argb: 'AAAAAA' } };
+
+    row.getCell(4).value = formatPhone(c.phone);
+    row.getCell(4).font = { ...baseFont, size: 10 };
+
+    row.getCell(5).value = fmtDur(c.duration);
+    row.getCell(5).font = baseFont;
+    row.getCell(5).alignment = { horizontal: 'right' };
+
+    const isInbound = c.direction === 'inbound';
+    row.getCell(6).value = isInbound ? 'Inbound' : 'Outbound';
+    row.getCell(6).font = { ...baseFont, size: 10, color: { argb: isInbound ? JC_GREEN : JC_BLUE } };
+
+    // Recording hyperlink — teal per brand
+    const url = buildPlayerUrl(c);
+    if (url) {
+      row.getCell(7).value = { text: '▶ Play', hyperlink: url };
+      row.getCell(7).font = { name: 'Arial', size: 10, color: { argb: JC_TEAL }, underline: true };
+    } else {
+      row.getCell(7).value = '—';
+      row.getCell(7).font = { ...baseFont, color: { argb: 'CCCCCC' } };
+    }
+
+    for (let col = 1; col <= 7; col++) {
+      row.getCell(col).fill = fillStyle;
+      row.getCell(col).border = docBorder;
+    }
+    row.height = 19;
+  });
+
+  // =====================================================================
+  //  SHEET 2: Agent Summary — JC Document Standards
+  // =====================================================================
+  const ws2 = wb.addWorksheet('Agent Summary', {
+    properties: { tabColor: { argb: JC_GREEN } },
+  });
+
+  ws2.columns = [
+    { width: 5 },   // #
+    { width: 16 },  // Agent
+    { width: 12 },  // Calls
+    { width: 12 },  // Inbound
+    { width: 12 },  // Outbound
+    { width: 14 },  // Talk Time
+    { width: 14 },  // Avg Duration
+    { width: 12 },  // % of Total
   ];
 
-  // Merge header cells for branding
-  ws['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }, // JUMP CONTACT
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } }, // Call Detail Report
-    { s: { r: 2, c: 0 }, e: { r: 2, c: 6 } }, // Date
-  ];
+  // Header — dark bar with white text
+  ws2.mergeCells('A1:H1');
+  ws2.getCell('A1').value = 'AGENT PERFORMANCE SUMMARY';
+  ws2.getCell('A1').font = { name: 'Arial', size: 14, bold: true, color: { argb: WHITE } };
+  ws2.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: JC_DARK } };
+  ws2.getCell('A1').border = { bottom: { style: 'medium', color: { argb: JC_TEAL } } };
+  ws2.getRow(1).height = 30;
 
-  // Agent summary header merge
-  const summaryHeaderRow = headerRow + 1 + calls.length + 1;
-  ws['!merges'].push(
-    { s: { r: summaryHeaderRow, c: 0 }, e: { r: summaryHeaderRow, c: 6 } },
-  );
+  // Column headers — teal underline
+  const agentHeaders = ['#', 'AGENT', 'CALLS', 'INBOUND', 'OUTBOUND', 'TALK TIME', 'AVG DURATION', '% OF TOTAL'];
+  const agentHeaderRow = ws2.getRow(3);
+  agentHeaders.forEach((h, i) => {
+    const cell = agentHeaderRow.getCell(i + 1);
+    cell.value = h;
+    cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: JC_DARK } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: WHITE } };
+    cell.border = { bottom: { style: 'medium', color: { argb: JC_TEAL } } };
+    if (i >= 2) cell.alignment = { horizontal: 'right' };
+  });
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Call Detail');
-  XLSX.writeFile(wb, filename);
+  const sortedAgents = [...agentMap.entries()].sort((a, b) => b[1].calls - a[1].calls);
+  sortedAgents.forEach(([name, stats], i) => {
+    const row = ws2.getRow(4 + i);
+    const isEven = i % 2 === 0;
+    const bg = isEven ? STRIPE_WHITE : STRIPE_LIGHT;
+    const fillStyle = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: bg } };
+    const baseFont = { name: 'Arial', size: 11, color: { argb: JC_TEXT } };
+
+    row.getCell(1).value = i < 3 ? ['🥇', '🥈', '🥉'][i] : String(i + 1);
+    row.getCell(1).font = baseFont;
+    row.getCell(2).value = name;
+    row.getCell(2).font = { ...baseFont, bold: true };
+    row.getCell(3).value = stats.calls;
+    row.getCell(3).font = { ...baseFont, bold: true, size: 13 };
+    row.getCell(3).alignment = { horizontal: 'right' };
+    row.getCell(4).value = stats.inbound;
+    row.getCell(4).font = { ...baseFont, color: { argb: JC_GREEN } };
+    row.getCell(4).alignment = { horizontal: 'right' };
+    row.getCell(5).value = stats.outbound;
+    row.getCell(5).font = { ...baseFont, color: { argb: JC_BLUE } };
+    row.getCell(5).alignment = { horizontal: 'right' };
+    row.getCell(6).value = fmtDur(stats.durSec);
+    row.getCell(6).font = baseFont;
+    row.getCell(6).alignment = { horizontal: 'right' };
+    const avgSec = stats.calls > 0 ? Math.round(stats.durSec / stats.calls) : 0;
+    row.getCell(7).value = fmtDur(avgSec);
+    row.getCell(7).font = { ...baseFont, color: { argb: JC_LABEL } };
+    row.getCell(7).alignment = { horizontal: 'right' };
+    const pct = totalCalls > 0 ? ((stats.calls / totalCalls) * 100).toFixed(1) + '%' : '0%';
+    row.getCell(8).value = pct;
+    row.getCell(8).font = { ...baseFont, color: { argb: JC_LABEL } };
+    row.getCell(8).alignment = { horizontal: 'right' };
+
+    for (let col = 1; col <= 8; col++) {
+      row.getCell(col).fill = fillStyle;
+      row.getCell(col).border = docBorder;
+    }
+    row.height = 22;
+  });
+
+  // ── Save ──
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ── Filter Dropdown ──────────────────────────────────────────────────────────
@@ -208,22 +366,36 @@ function CallsPageInner() {
   const [dirFilter, setDirFilter] = useState<'all' | 'inbound' | 'outbound'>('all');
   const [selectedSids, setSelectedSids] = useState<Set<string>>(new Set());
 
-  const fetchData = useCallback(async (range: DateRange) => {
-    setLoading(true);
+  const INITIAL_LOAD = 200;
+  const LOAD_MORE_SIZE = 50;
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const fetchData = useCallback(async (range: DateRange, offset = 0, append = false) => {
+    if (!append) setLoading(true);
+    else setLoadingMore(true);
     try {
       const isSingleDay = range.from === range.to;
       const brandParam = `&brand=${brand}`;
-      const url = isSingleDay
-        ? `/api/calls?date=${range.from}&limit=2000${brandParam}`
-        : `/api/calls?from=${range.from}&to=${range.to}&limit=2000${brandParam}`;
+      const base = isSingleDay
+        ? `/api/calls?date=${range.from}`
+        : `/api/calls?from=${range.from}&to=${range.to}`;
+      const pageSize = offset === 0 ? INITIAL_LOAD : LOAD_MORE_SIZE;
+      const url = `${base}&limit=${pageSize}&offset=${offset}${brandParam}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setData(await res.json());
+      const json = await res.json();
+      if (append) {
+        // Append new calls to existing data using functional update
+        setData(prev => prev ? { ...json, calls: [...prev.calls, ...json.calls] } : json);
+      } else {
+        setData(json);
+      }
       setError(null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Fetch failed');
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   }, [brand]);
 
@@ -257,11 +429,45 @@ function CallsPageInner() {
     });
   }, [data, agentFilter, clientFilter, dirFilter]);
 
-  const handleDownload = () => {
-    if (!filtered.length) return;
-    const subject = agentFilter !== 'all' ? agentFilter : 'all-agents';
-    const dateLabel = dateRange.from === dateRange.to ? dateRange.from : `${dateRange.from}_to_${dateRange.to}`;
-    downloadReport(filtered, `JC_Call-Report_${dateLabel}_${subject}.xlsx`, dateRange.from);
+  const [exporting, setExporting] = useState(false);
+
+  const handleDownload = async () => {
+    if (!data) return;
+    setExporting(true);
+    try {
+      // Fetch ALL calls for the full date range (not just what's loaded)
+      const isSingleDay = dateRange.from === dateRange.to;
+      const brandParam = `&brand=${brand}`;
+      const base = isSingleDay
+        ? `/api/calls?date=${dateRange.from}`
+        : `/api/calls?from=${dateRange.from}&to=${dateRange.to}`;
+
+      let allCalls: RawCall[] = [];
+      let offset = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const res = await fetch(`${base}&limit=2000&offset=${offset}${brandParam}`);
+        if (!res.ok) break;
+        const json = await res.json();
+        allCalls = [...allCalls, ...(json.calls || [])];
+        hasMore = json.hasMore;
+        offset += 2000;
+      }
+
+      // Apply filters
+      const exportCalls = allCalls.filter(c => {
+        if (agentFilter !== 'all' && c.agent.toLowerCase() !== agentFilter) return false;
+        if (clientFilter !== 'all' && (c.account || '') !== clientFilter) return false;
+        if (dirFilter !== 'all' && c.direction !== dirFilter) return false;
+        return true;
+      });
+
+      const subject = agentFilter !== 'all' ? agentFilter : 'all-agents';
+      const dateLabel = dateRange.from === dateRange.to ? dateRange.from : `${dateRange.from}_to_${dateRange.to}`;
+      downloadReport(exportCalls, `JC_Call-Report_${dateLabel}_${subject}.xlsx`, dateRange.from);
+    } finally {
+      setExporting(false);
+    }
   };
 
   // Selection helpers
@@ -395,7 +601,7 @@ function CallsPageInner() {
               </span>
             )}
             <span className="text-xs font-mono" style={{ color: C.sub }}>
-              {filtered.length} / {totalCalls} calls
+              {filtered.length} / {data?.total?.toLocaleString() || totalCalls} calls
             </span>
             {selectedSids.size > 0 && (
               <button
@@ -413,16 +619,17 @@ function CallsPageInner() {
             )}
             <button
               onClick={handleDownload}
-              disabled={!filtered.length}
+              disabled={!filtered.length || exporting}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
               style={{
                 background: filtered.length ? C.lime + '18' : 'transparent',
                 color: filtered.length ? C.lime : C.sub,
                 border: `1px solid ${filtered.length ? C.lime + '44' : C.border}`,
+                opacity: exporting ? 0.6 : 1,
               }}
             >
               <Download size={13} />
-              Export Report
+              {exporting ? 'Exporting...' : 'Export All Calls'}
             </button>
           </div>
         </div>
@@ -520,6 +727,41 @@ function CallsPageInner() {
               </tbody>
             </table>
           </div>
+          {/* Load More / Total count */}
+          {data && data.total > data.calls.length && (
+            <div className="flex items-center justify-center gap-3 py-4 border-t" style={{ borderColor: C.border }}>
+              <span className="text-xs font-mono" style={{ color: C.sub }}>
+                Showing {data.calls.length.toLocaleString()} of {data.total.toLocaleString()} calls
+              </span>
+              <button
+                onClick={() => fetchData(dateRange, data.calls.length, true)}
+                disabled={loadingMore}
+                className="px-4 py-1.5 rounded-lg text-xs font-semibold border-none cursor-pointer transition-colors"
+                style={{
+                  background: C.cyan,
+                  color: '#0A0E1A',
+                  opacity: loadingMore ? 0.6 : 1,
+                }}
+              >
+                {loadingMore ? 'Loading...' : `Load ${Math.min(LOAD_MORE_SIZE, data.total - data.calls.length).toLocaleString()} more`}
+              </button>
+              <span className="text-[10px]" style={{ color: C.sub }}>or</span>
+              <button
+                onClick={handleDownload}
+                disabled={exporting}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border-none cursor-pointer transition-colors"
+                style={{
+                  background: C.lime + '18',
+                  color: C.lime,
+                  border: `1px solid ${C.lime}44`,
+                  opacity: exporting ? 0.6 : 1,
+                }}
+              >
+                <Download size={13} />
+                {exporting ? 'Exporting...' : `Export all ${data.total.toLocaleString()} to spreadsheet`}
+              </button>
+            </div>
+          )}
         </Card>
       </div>
       </ErrorBoundary>

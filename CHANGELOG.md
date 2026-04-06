@@ -1,3 +1,7 @@
+---
+tags: [aws, client/msc, ghl, google-sheets, jump-contact, platform, twilio, type/credentials, type/integration, type/spec, type/tool, vercel]
+---
+
 # Changelog
 
 All notable changes to the JumpContact Platform.

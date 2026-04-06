@@ -1,3 +1,7 @@
+---
+tags: [client/msc, ghl, google-sheets, jump-contact, platform, twilio, type/integration, type/spec, type/tool]
+---
+
 # Pickup Prompt — Brand Pipeline Rework
 
 Read CLAUDE.md at C:\App Builder\PLATFORM\tools\jumpcontact-platform\CLAUDE.md first.

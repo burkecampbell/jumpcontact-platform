@@ -1,3 +1,7 @@
+---
+tags: [google-sheets, jump-contact, platform, twilio, type/credentials, type/integration, type/tool, vercel]
+---
+
 # Disaster Recovery — JumpContact Platform
 
 > If your machine dies, follow this to get back to full operations.

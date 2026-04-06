@@ -1,3 +1,7 @@
+---
+tags: [client/msc, ghl, google-sheets, jump-contact, platform, twilio, type/integration, type/spec, type/strategy, type/tool, vercel]
+---
+
 # Architecture
 
 ## System Overview
