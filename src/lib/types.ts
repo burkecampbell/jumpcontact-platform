@@ -361,6 +361,7 @@ export interface DashboardData {
     msc: { calls: number; avgSpeed: number | null };
   };
   mtdRepActivity?: YticaMtdAgent[];
+  clientSpeed?: { account: string; avgSpeed: number; calls: number }[];
   brand?: string;
   pulledAt: string;
 }

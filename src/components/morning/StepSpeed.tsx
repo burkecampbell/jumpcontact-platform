@@ -124,6 +124,34 @@ export function StepSpeed({ data }: { data: DashboardData }) {
           </div>
         );
       })}
+
+      {/* Per-client wait time */}
+      {data.clientSpeed && data.clientSpeed.length > 0 && (
+        <>
+          <div style={{ height: 1, background: T.border, margin: `${G(20)}px 0` }} />
+          <Label>Client wait time (caller dials &rarr; agent answers)</Label>
+          <div style={{ marginTop: G(10) }}>
+            {data.clientSpeed.map(cs => {
+              const c = cs.avgSpeed < 10 ? T.positive : cs.avgSpeed < 15 ? T.caution : T.negative;
+              return (
+                <div key={cs.account} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: `${G(8)}px 0`, borderBottom: `1px solid ${T.border}`,
+                }}>
+                  <span style={{ fontSize: Z('body'), color: T.inkSoft, flex: 1 }}>{cs.account}</span>
+                  <span style={{ fontSize: Z('label'), color: T.inkFaint, marginRight: G(12) }}>
+                    {cs.calls} call{cs.calls !== 1 ? 's' : ''}
+                  </span>
+                  <span style={{
+                    fontFamily: "'JetBrains Mono',monospace", fontSize: Z('agentValue') * 0.85,
+                    fontWeight: 700, color: c, minWidth: G(50), textAlign: 'right',
+                  }}>{cs.avgSpeed.toFixed(1)}s</span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -996,6 +996,22 @@ async function fetchDashboardData(): Promise<DashboardData> {
     }
   }
 
+  // ── Per-client speed (CDR total wait) ──────────────────────────
+  // How long each client's callers wait before reaching an agent.
+  // Computed from yesterday's paired calls with valid ring times.
+  const clientSpeedMap: Record<string, { ringSum: number; count: number }> = {};
+  for (const c of yesterdayCalls) {
+    if (c.client && c.ringTime > 0 && c.ringTime < 120 && c.status === 'completed' && c.direction === 'inbound') {
+      const key = c.client.toLowerCase();
+      if (!clientSpeedMap[key]) clientSpeedMap[key] = { ringSum: 0, count: 0 };
+      clientSpeedMap[key].ringSum += c.ringTime;
+      clientSpeedMap[key].count++;
+    }
+  }
+  const clientSpeed = Object.entries(clientSpeedMap)
+    .map(([account, { ringSum, count }]) => ({ account, avgSpeed: Math.round((ringSum / count) * 10) / 10, calls: count }))
+    .sort((a, b) => b.avgSpeed - a.avgSpeed); // worst first
+
   // ── Assemble ───────────────────────────────────────────────────
   const pulledAt = new Date().toISOString();
 
@@ -1013,6 +1029,7 @@ async function fetchDashboardData(): Promise<DashboardData> {
     recentCalls,
     prevMonthChampions,
     mtdRepActivity: mtdYtica,
+    clientSpeed,
     pulledAt,
     // Internal: used by GET handler for brand-specific rebuilds
     _todayCalls: todayCalls,
