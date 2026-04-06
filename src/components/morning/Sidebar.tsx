@@ -19,21 +19,56 @@ interface Props {
 export function Sidebar({ steps, current, onSelect, autoPlay, onToggleAutoPlay }: Props) {
   const mode = getMode();
 
-  // ── TV mode: minimal dots on left edge ───────────────────────────
+  // ── TV mode: large tactile nav on left edge ──────────────────────
   if (mode === 'tv') {
+    const dotSize = 28;
+    const activeDotSize = 36;
     return (
       <div style={{
-        position: 'fixed', left: G(12), top: '50%', transform: 'translateY(-50%)',
-        display: 'flex', flexDirection: 'column', gap: G(8), zIndex: 60,
+        position: 'fixed', left: 24, top: '50%', transform: 'translateY(-50%)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        gap: 12, zIndex: 60,
+        background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(12px)',
+        borderRadius: 24, padding: '20px 14px',
+        border: `1px solid rgba(255,255,255,0.08)`,
       }}>
-        {steps.map((s, i) => (
-          <div key={s.key} onClick={() => onSelect(i)} style={{
-            width: Z('dot') * 1.5, height: Z('dot') * 1.5, borderRadius: '50%',
-            cursor: 'pointer', transition: 'all 0.2s',
-            background: i === current ? T.ink : T.border,
-            opacity: i === current ? 1 : 0.5,
-          }} />
-        ))}
+        {steps.map((s, i) => {
+          const active = i === current;
+          const size = active ? activeDotSize : dotSize;
+          return (
+            <button key={s.key} onClick={() => onSelect(i)} title={s.label} style={{
+              width: size, height: size, borderRadius: size / 2,
+              cursor: 'pointer', transition: 'all 0.25s ease',
+              background: active ? T.ink : 'rgba(28,25,23,0.25)',
+              color: active ? '#fff' : T.inkFaint,
+              border: active ? 'none' : `2px solid ${T.border}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: active ? 16 : 13, fontWeight: 700,
+              fontFamily: "'JetBrains Mono',monospace",
+              transform: active ? 'scale(1)' : 'scale(0.9)',
+              boxShadow: active ? '0 2px 12px rgba(0,0,0,0.3)' : 'none',
+              padding: 0,
+            }}>
+              {s.num}
+            </button>
+          );
+        })}
+
+        {/* Divider */}
+        <div style={{ width: 24, height: 1, background: T.border, margin: '4px 0' }} />
+
+        {/* Pause / Play button */}
+        <button onClick={onToggleAutoPlay} title={autoPlay ? 'Pause carousel (P)' : 'Play carousel (P)'} style={{
+          width: 40, height: 40, borderRadius: 20,
+          cursor: 'pointer', transition: 'all 0.2s',
+          background: autoPlay ? T.ink : 'rgba(28,25,23,0.25)',
+          color: autoPlay ? '#fff' : T.inkMuted,
+          border: `2px solid ${autoPlay ? T.ink : T.border}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 18, fontFamily: 'inherit', padding: 0,
+        }}>
+          {autoPlay ? '\u25AE\u25AE' : '\u25B6'}
+        </button>
       </div>
     );
   }
