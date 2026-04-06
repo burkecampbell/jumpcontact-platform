@@ -108,6 +108,12 @@ export default function MorningDashboard() {
     ? new Date(data.pulledAt).toLocaleTimeString('en-US', { timeZone: 'America/Edmonton', hour: 'numeric', minute: '2-digit', hour12: true })
     : '';
 
+  // Must call ALL hooks before any early return (Rules of Hooks)
+  const weekendPeriod = useMemo(() => {
+    if (!data?.weekend) return null;
+    return aggregateDays([data.weekend.friday, data.weekend.saturday, data.weekend.sunday]);
+  }, [data?.weekend]);
+
   // ── Loading state ────────────────────────────────────────────────
   if (loading || !data) {
     return (
@@ -122,10 +128,6 @@ export default function MorningDashboard() {
   // ── Resolve period data for current context ──────────────────────
   const yesterdayPeriod = data!.yesterday;
   const fridayPeriod = data!.weekend?.friday;
-  const weekendPeriod = useMemo(() => {
-    if (!data?.weekend) return null;
-    return aggregateDays([data.weekend.friday, data.weekend.saturday, data.weekend.sunday]);
-  }, [data?.weekend]);
 
   // ── Render step content ──────────────────────────────────────────
   function renderStep() {
