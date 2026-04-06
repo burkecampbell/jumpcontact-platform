@@ -27,7 +27,7 @@ function MeetingPageInner() {
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState(0);
   const [autoPlay, setAutoPlay] = useState(true);
-  const [activeDay, setActiveDay] = useState<'today' | 'yesterday' | 'friday' | 'weekend'>('yesterday');
+  const [activeDay, setActiveDay] = useState<'today' | 'yesterday' | 'friday' | 'weekend'>(isMonday() ? 'friday' : 'yesterday');
 
   const fetchData = useCallback(async () => {
     try {
@@ -137,7 +137,7 @@ function MeetingPageInner() {
       <div className="max-w-4xl mx-auto px-4 py-6">
         {/* Day Tabs + Auto-play */}
         <div className="flex items-center justify-center gap-2 mb-4 relative">
-          {['today', 'yesterday', ...(monday ? ['friday', 'weekend'] : [])].map(day => (
+          {[...(monday ? ['friday', 'weekend'] : []), 'yesterday', 'today'].map(day => (
             <button
               key={day}
               onClick={() => setActiveDay(day as typeof activeDay)}
