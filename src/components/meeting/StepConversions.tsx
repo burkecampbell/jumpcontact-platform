@@ -12,6 +12,14 @@ export default function StepConversions({ period, label, data }: { period: Perio
   const convAgents = period.conversions.byAgent;
   const convAccounts = period.conversions.byAccount;
   const repAgents = period.repActivity.agents;
+
+  // Build Ytica MTD pickup speed lookup (same logic as StepSpeed)
+  const yticaMtd: Record<string, number> = {};
+  for (const y of data.mtdRepActivity ?? []) {
+    if (y.avgSpeedSec != null && y.avgSpeedSec > 0) {
+      yticaMtd[y.agent.toLowerCase()] = y.avgSpeedSec;
+    }
+  }
   const callouts = generateCallouts(period, data).slice(0, 4);
   const convRate = period.conversionRate;
 
@@ -88,7 +96,7 @@ export default function StepConversions({ period, label, data }: { period: Perio
                 <TH right>Calls</TH>
                 <TH right>Rate</TH>
                 <TH right>Conv/Hr</TH>
-                <TH right>Speed</TH>
+                <TH right>Pickup</TH>
                 <TH right>Talk</TH>
               </tr>
             </thead>
@@ -98,7 +106,12 @@ export default function StepConversions({ period, label, data }: { period: Perio
                 const calls = rep?.calls ?? 0;
                 const rate = calls > 0 ? ((a.count / calls) * 100).toFixed(1) : '—';
                 const convPerHr = rep?.convsPerHour != null ? rep.convsPerHour.toFixed(1) : '—';
-                const speed = rep?.speedSec ?? null;
+                // Pickup speed: prefer Ytica MTD when CDR is inflated (>10s)
+                const cdrSpeed = rep?.speedSec ?? null;
+                const yticaSpeed = yticaMtd[a.agent.toLowerCase()] ?? null;
+                const speed = (cdrSpeed != null && cdrSpeed > 10 && yticaSpeed != null) ? yticaSpeed
+                  : (cdrSpeed == null && yticaSpeed != null) ? yticaSpeed
+                  : cdrSpeed;
                 const talk = rep?.talkMin ?? 0;
                 return (
                   <tr key={a.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>

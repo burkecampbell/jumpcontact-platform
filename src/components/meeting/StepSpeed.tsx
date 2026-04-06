@@ -66,7 +66,7 @@ export default function StepSpeed({ period, label, data }: { period: PeriodData;
     <div>
       <div className="text-center mb-1 text-[13px] font-semibold uppercase tracking-wider" style={{ color: C.sub }}>{label}</div>
       {avgSec !== null ? (
-        <Hero value={Math.round(avgSec * 10) / 10} sub="avg seconds to answer" />
+        <Hero value={Math.round(avgSec * 10) / 10} sub="avg pickup speed" />
       ) : (
         <div className="text-center py-7 pb-5">
           <div className="font-mono font-extralight text-[88px] leading-none" style={{ color: C.sub }}>—</div>
@@ -126,7 +126,7 @@ export default function StepSpeed({ period, label, data }: { period: PeriodData;
       {/* Agent Table */}
       <Card padding={false}>
         <div className="px-4 pt-3 pb-1 text-xs font-bold uppercase tracking-wider" style={{ color: C.sub }}>
-          Agent Speed{hasPickup ? ' & Pickup' : ''}
+          Agent Pickup Speed{hasPickup ? ' & Rate' : ''}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -134,7 +134,7 @@ export default function StepSpeed({ period, label, data }: { period: PeriodData;
               <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                 <TH>#</TH>
                 <TH>Agent</TH>
-                <TH right>Speed</TH>
+                <TH right>Pickup</TH>
                 <TH right>Grade</TH>
                 {hasPickup && <TH right>Pickup %</TH>}
                 {hasPickup && <TH right>Caught</TH>}
