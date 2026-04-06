@@ -63,7 +63,7 @@ export function StepSpeed({ data }: { data: DashboardData }) {
       </div>
       {/* Speed metrics explainer */}
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: G(12),
+        display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: G(12),
         marginBottom: G(20), padding: `${G(12)}px 0`,
         borderBottom: `1px solid ${T.border}`,
       }}>
@@ -75,12 +75,9 @@ export function StepSpeed({ data }: { data: DashboardData }) {
           const yticaAgents = (data.mtdRepActivity ?? []).filter(y => !EXCLUDED_AGENTS.includes(y.agent) && y.avgSpeedSec != null && y.avgSpeedSec > 0);
           const yticaAvg = yticaAgents.length > 0 ? yticaAgents.reduce((s, y) => s + y.avgSpeedSec!, 0) / yticaAgents.length : null;
 
-          const teamAvg = data.yesterday.teamAvgSpeed ?? null;
-
           const metrics = [
             { label: 'Ring to Pickup', value: yticaAvg, desc: 'Agent hears ring \u2192 picks up', source: 'Ytica MTD' },
             { label: 'Total Wait', value: cdrAvg, desc: 'Caller dials \u2192 agent answers', source: 'CDR yesterday' },
-            { label: 'Team Avg', value: teamAvg, desc: 'Blended team speed', source: 'API' },
           ];
           return metrics.map(m => (
             <div key={m.label} style={{ textAlign: 'center' }}>
