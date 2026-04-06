@@ -1,6 +1,6 @@
 'use client';
 
-import { C, fmtSpeed, fmtTalkTime, speedGrade, agentColor, isJCAgent } from '@/lib/constants';
+import { C, fmtSpeed, fmtTalkTime, speedGrade, agentColor } from '@/lib/constants';
 import type { DashboardData, PeriodData } from '@/lib/types';
 import Card from '../Card';
 import Hero from './Hero';
@@ -18,7 +18,6 @@ export default function StepSpeed({ period, label, data }: { period: PeriodData;
 
   // For each agent, pick best speed: Ytica when CDR looks inflated (>10s)
   const agents = period.repActivity.agents
-    .filter(a => isJCAgent(a.agent))
     .map(a => {
       const cdrSpeed = a.speedSec;
       const yticaSpeed = yticaMtd[a.agent.toLowerCase()];

@@ -1,6 +1,6 @@
 'use client';
 
-import { C, agentColor, fmtSpeed, fmtTalkTime, isJCAgent } from '@/lib/constants';
+import { C, agentColor, fmtSpeed, fmtTalkTime } from '@/lib/constants';
 import type { PeriodData, DashboardData } from '@/lib/types';
 import Card from '../Card';
 import Hero from './Hero';
@@ -9,9 +9,9 @@ import { generateCallouts } from './callouts';
 
 /** Step 3: Conversions — agent breakdown, top accounts with top agent, hourly chart */
 export default function StepConversions({ period, label, data }: { period: PeriodData; label: string; data: DashboardData }) {
-  const convAgents = period.conversions.byAgent.filter(a => isJCAgent(a.agent));
+  const convAgents = period.conversions.byAgent;
   const convAccounts = period.conversions.byAccount;
-  const repAgents = period.repActivity.agents.filter(a => isJCAgent(a.agent));
+  const repAgents = period.repActivity.agents;
   const callouts = generateCallouts(period, data).slice(0, 4);
   const convRate = period.conversionRate;
 

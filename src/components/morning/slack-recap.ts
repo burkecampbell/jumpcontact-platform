@@ -2,7 +2,7 @@
  * Pure function — builds the Slack recap text from dashboard data.
  * On Monday, includes Friday + Weekend sections. Otherwise just yesterday.
  */
-import { capitalize, isJCAgent, isMonday } from '@/lib/constants';
+import { capitalize, isMonday } from '@/lib/constants';
 import type { DashboardData, PeriodData } from '@/lib/types';
 import { aggregateDays } from '@/components/meeting/aggregateDays';
 
@@ -16,7 +16,7 @@ function dayName(d: string) {
 
 /** Build a recap section from any PeriodData */
 function buildPeriodSection(period: PeriodData, heading: string): string {
-  const agents = period.repActivity.agents.filter(a => isJCAgent(a.agent));
+  const agents = period.repActivity.agents;
   const convByAgent: Record<string, number> = {};
   for (const a of period.conversions.byAgent) convByAgent[a.agent.toLowerCase()] = a.count;
   const dot = (n: string) => '\u00b7'.repeat(Math.max(12 - n.length, 1));
@@ -49,7 +49,6 @@ export function buildSlackRecap(data: DashboardData, baseUrl?: string): string {
 
   // MTD section
   const mtdR = data.mtd.byAgent
-    .filter(a => isJCAgent(a.agent))
     .sort((a, b) => b.count - a.count)
     .map((a, i) => `${i + 1}. ${capitalize(a.agent)} ${dot(a.agent)} ${a.count}`).join('\n');
   const mtdBlock = `\uD83C\uDFC6  MTD (day ${data.mtd.dayOfMonth})\n${mtdR}`;

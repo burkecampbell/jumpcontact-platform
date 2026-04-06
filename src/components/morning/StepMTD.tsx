@@ -1,6 +1,5 @@
 'use client';
 
-import { isJCAgent } from '@/lib/constants';
 import type { DashboardData } from '@/lib/types';
 import { Num, Label, AgentBar } from './primitives';
 import { T, Z, G } from './theme';
@@ -17,8 +16,7 @@ export function StepMTD({ data }: { data: DashboardData }) {
           <span style={{ fontSize: Z('body'), color: T.inkMuted }}>{pace}/day pace</span>
         </div>
       </div>
-      {mtd.byAgent
-        .filter(a => isJCAgent(a.agent))
+      {[...mtd.byAgent]
         .sort((a, b) => b.count - a.count)
         .map((a, i) => (
           <AgentBar key={a.agent} rank={i} name={a.agent} value={a.count} max={mtd.byAgent[0]?.count || 1} />

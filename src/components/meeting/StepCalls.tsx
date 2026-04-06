@@ -1,6 +1,6 @@
 'use client';
 
-import { C, fmtTalkTime, fmtSpeed, agentColor, isIbrahim, isJCAgent } from '@/lib/constants';
+import { C, fmtTalkTime, fmtSpeed, agentColor, isIbrahim } from '@/lib/constants';
 import type { PeriodData, DashboardData } from '@/lib/types';
 import Card from '../Card';
 import Hero from './Hero';
@@ -14,7 +14,7 @@ interface StepCallsProps {
 
 /** Step 1: Calls + Talk Time + Missed — everything about call volume in one step */
 export default function StepCalls({ period, label, data }: StepCallsProps) {
-  const agents = period.repActivity.agents.filter(a => isJCAgent(a.agent));
+  const agents = period.repActivity.agents;
   const agentSum = agents.reduce((s, a) => s + a.calls, 0);
   // Use the higher of answeredCalls vs agent sum — if Ytica blended higher
   // agent counts into the table, the hero must match, never contradict.

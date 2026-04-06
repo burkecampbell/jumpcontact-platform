@@ -2,14 +2,14 @@
  * Generate insight callouts for a period's data.
  */
 import type { DashboardData, PeriodData } from '@/lib/types';
-import { capitalize, isJCAgent, speedGrade } from '@/lib/constants';
+import { capitalize, speedGrade } from '@/lib/constants';
 
 export interface Callout { emoji: string; message: string }
 
 export function generateCallouts(period: PeriodData, data?: DashboardData): Callout[] {
   const callouts: Callout[] = [];
-  const convAgents = period.conversions.byAgent.filter(a => isJCAgent(a.agent));
-  const repAgents = period.repActivity.agents.filter(a => isJCAgent(a.agent));
+  const convAgents = period.conversions.byAgent;
+  const repAgents = period.repActivity.agents;
   const sorted = [...convAgents].sort((a, b) => b.count - a.count);
 
   // DAILY_LEADER

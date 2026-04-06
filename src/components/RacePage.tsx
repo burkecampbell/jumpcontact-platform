@@ -5,7 +5,7 @@ import NavBar from './NavBar';
 import HealthBanner from './HealthBanner';
 import Card from './Card';
 import ErrorBoundary from './ErrorBoundary';
-import { C, GOAL, capitalize, computePace, agentColor, AGENT_SCHEDULE, fmtSpeed, fmtTalkTime, EXCLUDED_AGENTS, isJCAgent } from '@/lib/constants';
+import { C, GOAL, capitalize, computePace, agentColor, AGENT_SCHEDULE, fmtSpeed, fmtTalkTime, EXCLUDED_AGENTS } from '@/lib/constants';
 import type { DashboardData, AcctStat, YticaMtdAgent } from '@/lib/getDashboard';
 import { Target, BarChart3, Trophy, Zap, Phone, Clock, Timer, Download, TrendingUp, Award, Star, ShieldCheck, Crosshair, ChevronUp, ChevronDown } from 'lucide-react';
 import { useBrand } from '@/hooks/useBrand';
@@ -687,7 +687,7 @@ function RacePageInner() {
                 {topAccounts.map((a: AcctStat, i: number) => {
                   const breakdown = a.agentBreakdown
                     ? Object.entries(a.agentBreakdown)
-                        .filter(([agent]) => isJCAgent(agent))
+                        .filter(([agent]) => isAgentForBrand(agent, brand))
                         .sort((x, y) => y[1] - x[1])
                     : [];
                   return (

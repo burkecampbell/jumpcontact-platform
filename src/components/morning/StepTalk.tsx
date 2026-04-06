@@ -1,6 +1,5 @@
 'use client';
 
-import { isJCAgent } from '@/lib/constants';
 import type { PeriodData } from '@/lib/types';
 import { Num, Label, AgentBar } from './primitives';
 import { G } from './theme';
@@ -10,8 +9,7 @@ function fmtMin(m: number) {
 }
 
 export function StepTalk({ period, label }: { period: PeriodData; label?: string }) {
-  const agents = period.repActivity.agents
-    .filter(a => isJCAgent(a.agent))
+  const agents = [...period.repActivity.agents]
     .sort((a, b) => b.talkMin - a.talkMin);
   return (
     <div>

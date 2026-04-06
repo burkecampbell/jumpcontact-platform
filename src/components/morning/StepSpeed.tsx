@@ -1,6 +1,6 @@
 'use client';
 
-import { isJCAgent, capitalize, agentColor, speedGrade } from '@/lib/constants';
+import { capitalize, agentColor, speedGrade } from '@/lib/constants';
 import type { DashboardData, PeriodData } from '@/lib/types';
 import { Num, Label, Pill } from './primitives';
 import { T, Z, G } from './theme';
@@ -27,7 +27,6 @@ export function StepSpeed({ period, data, label }: { period: PeriodData; data: D
   // 2. Else use Ytica MTD average
   // 3. Else fall back to CDR speed
   const agents = period.repActivity.agents
-    .filter(a => isJCAgent(a.agent))
     .map(a => {
       const cdrSpeed = a.speedSec;
       const yticaSpeed = yticaMtd[a.agent.toLowerCase()];
@@ -69,10 +68,10 @@ export function StepSpeed({ period, data, label }: { period: PeriodData; data: D
       }}>
         {(() => {
           // Compute team-level numbers for each metric
-          const cdrAgents = period.repActivity.agents.filter(a => isJCAgent(a.agent) && a.speedSec != null && a.speedSec > 0);
+          const cdrAgents = period.repActivity.agents.filter(a => a.speedSec != null && a.speedSec > 0);
           const cdrAvg = cdrAgents.length > 0 ? cdrAgents.reduce((s, a) => s + a.speedSec!, 0) / cdrAgents.length : null;
 
-          const yticaAgents = (data.mtdRepActivity ?? []).filter(y => isJCAgent(y.agent) && y.avgSpeedSec != null && y.avgSpeedSec > 0);
+          const yticaAgents = (data.mtdRepActivity ?? []).filter(y => y.avgSpeedSec != null && y.avgSpeedSec > 0);
           const yticaAvg = yticaAgents.length > 0 ? yticaAgents.reduce((s, y) => s + y.avgSpeedSec!, 0) / yticaAgents.length : null;
 
           const metrics = [

@@ -1,13 +1,11 @@
 'use client';
 
-import { isJCAgent } from '@/lib/constants';
 import type { PeriodData } from '@/lib/types';
 import { Num, Label, AgentBar } from './primitives';
 import { G } from './theme';
 
 export function StepCalls({ period, label }: { period: PeriodData; label?: string }) {
-  const agents = period.repActivity.agents
-    .filter(a => isJCAgent(a.agent))
+  const agents = [...period.repActivity.agents]
     .sort((a, b) => b.calls - a.calls);
   const agentSum = agents.reduce((s, a) => s + a.calls, 0);
   const total = Math.max(period.answeredCalls ?? 0, agentSum);
