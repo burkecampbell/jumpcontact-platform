@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { C, GOAL, fmtSpeed, computePace, isMonday } from '@/lib/constants';
+import { C, GOAL, fmtSpeed, computePace, isMonday, isJCAgent } from '@/lib/constants';
 import type { DashboardData } from '@/lib/types';
 import Card from '../Card';
 
@@ -34,6 +34,7 @@ export default function StepSlack({ data }: { data: DashboardData }) {
   const jcMissed = period.missedCalls.total;
 
   const agentLines = period.conversions.byAgent
+    .filter(a => isJCAgent(a.agent))
     .slice(0, 5)
     .map((a, i) => `${medal[i] || `${i + 1}.`} ${dotLeader(a.agent, `*${a.count}*`)}`)
     .join('\n');
@@ -44,7 +45,7 @@ export default function StepSlack({ data }: { data: DashboardData }) {
     .join('\n');
 
   const speedAgents = [...period.repActivity.agents]
-    .filter(a => a.speedSec !== null)
+    .filter(a => isJCAgent(a.agent) && a.speedSec !== null)
     .sort((a, b) => (a.speedSec ?? Infinity) - (b.speedSec ?? Infinity))
     .slice(0, 3);
 
