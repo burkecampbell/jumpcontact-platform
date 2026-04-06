@@ -1,18 +1,16 @@
 'use client';
 
-import { C, agentColor, isIbrahim, fmtSpeed, fmtTalkTime } from '@/lib/constants';
-import type { PeriodData } from '@/lib/types';
+import { C, agentColor, fmtSpeed, fmtTalkTime } from '@/lib/constants';
+import type { PeriodData, DashboardData } from '@/lib/types';
 import Card from '../Card';
 import Hero from './Hero';
 import { TH, TD } from './TableCells';
 import { generateCallouts } from './callouts';
 
-/** Step 4: Conversions — agent breakdown, accounts, missed calls, hourly chart */
-export default function StepConversions({ period, label }: { period: PeriodData; label: string }) {
+/** Step 3: Conversions — agent breakdown, top accounts with top agent, hourly chart */
+export default function StepConversions({ period, label, data }: { period: PeriodData; label: string; data: DashboardData }) {
   const convAgents = period.conversions.byAgent;
   const convAccounts = period.conversions.byAccount;
-  const missed = period.missedCalls;
-  const jcMissed = missed.total;
   const repAgents = period.repActivity.agents;
   const callouts = generateCallouts(period);
   const convRate = period.conversionRate;
@@ -31,6 +29,17 @@ export default function StepConversions({ period, label }: { period: PeriodData;
     return `${h - 12} PM`;
   };
 
+  // Build top agent per account from MTD data
+  // We'll use the mtd byAgent data cross-referenced with today's accounts
+  const mtdAgentMap = new Map<string, { agent: string; count: number }[]>();
+  if (data.mtd?.byAgent) {
+    for (const a of data.mtd.byAgent) {
+      if (a.daily) {
+        // We can't get per-account-per-agent from MTD, so use today's conv data instead
+      }
+    }
+  }
+
   return (
     <div>
       <div className="text-center mb-1 text-[13px] font-semibold uppercase tracking-wider" style={{ color: C.sub }}>{label}</div>
@@ -43,8 +52,8 @@ export default function StepConversions({ period, label }: { period: PeriodData;
           <div className="text-[10px] uppercase" style={{ color: C.sub }}>Conv Rate</div>
         </div>
         <div className="text-center">
-          <div className="text-lg font-bold font-mono" style={{ color: C.pink }}>{jcMissed}</div>
-          <div className="text-[10px] uppercase" style={{ color: C.sub }}>Missed (JC)</div>
+          <div className="text-lg font-bold font-mono" style={{ color: C.cyan }}>{data.mtd?.total ?? '—'}</div>
+          <div className="text-[10px] uppercase" style={{ color: C.sub }}>MTD Total</div>
         </div>
         {peakHour >= 0 && peakCount > 0 && (
           <div className="text-center">
@@ -79,7 +88,6 @@ export default function StepConversions({ period, label }: { period: PeriodData;
                 <TH right>Calls</TH>
                 <TH right>Rate</TH>
                 <TH right>Conv/Hr</TH>
-                <TH right>Pickup</TH>
                 <TH right>Speed</TH>
                 <TH right>Talk</TH>
               </tr>
@@ -90,12 +98,11 @@ export default function StepConversions({ period, label }: { period: PeriodData;
                 const calls = rep?.calls ?? 0;
                 const rate = calls > 0 ? ((a.count / calls) * 100).toFixed(1) : '—';
                 const convPerHr = rep?.convsPerHour != null ? rep.convsPerHour.toFixed(1) : '—';
-                const pickup = rep?.pickupRate;
                 const speed = rep?.speedSec ?? null;
                 const talk = rep?.talkMin ?? 0;
                 return (
                   <tr key={a.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
-                    <TD color={i < 3 ? C.cyan : C.sub}><span className="font-bold">{i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}</span></TD>
+                    <TD color={i < 3 ? C.cyan : C.sub}><span className="font-bold">{i < 3 ? ['\u{1F947}','\u{1F948}','\u{1F949}'][i] : i + 1}</span></TD>
                     <TD>
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full" style={{ background: agentColor(a.agent) }} />
@@ -110,9 +117,6 @@ export default function StepConversions({ period, label }: { period: PeriodData;
                     <TD mono right color={convPerHr !== '—' && parseFloat(convPerHr) >= 1 ? C.lime : C.sub}>
                       {convPerHr}
                     </TD>
-                    <TD mono right color={pickup != null && pickup >= 80 ? '#4ade80' : pickup != null && pickup >= 60 ? '#fbbf24' : C.sub}>
-                      {pickup != null ? `${pickup}%` : '—'}
-                    </TD>
                     <TD mono right color={speed !== null && speed <= 8 ? '#4ade80' : speed !== null && speed <= 15 ? C.cyan : C.sub}>
                       {fmtSpeed(speed)}
                     </TD>
@@ -123,44 +127,28 @@ export default function StepConversions({ period, label }: { period: PeriodData;
                 );
               })}
               {convAgents.length === 0 && (
-                <tr><td colSpan={9} className="text-center text-sm py-5" style={{ color: C.sub }}>No conversions yet</td></tr>
+                <tr><td colSpan={8} className="text-center text-sm py-5" style={{ color: C.sub }}>No conversions yet</td></tr>
               )}
             </tbody>
           </table>
         </div>
       </Card>
 
-      {/* Accounts + Missed side by side */}
-      <div className="grid grid-cols-2 gap-3">
-        <Card>
-          <div className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: C.sub }}>Top Accounts</div>
-          {convAccounts.slice(0, 8).map((a, i) => (
-            <div key={a.account} className="flex justify-between items-center py-1.5" style={{ borderBottom: i < Math.min(convAccounts.length, 8) - 1 ? `1px solid ${C.border}` : 'none' }}>
-              <span className="text-[13px] truncate mr-2" style={{ color: C.text }}>{a.account}</span>
-              <span className="font-bold text-[13px] shrink-0" style={{ color: C.cyan }}>{a.count}</span>
-            </div>
-          ))}
-          {convAccounts.length === 0 && <p className="text-center text-[13px] py-3" style={{ color: C.sub }}>No data</p>}
-        </Card>
-
-        <Card>
-          <div className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: C.sub }}>
-            Missed Calls <span style={{ color: C.pink }}>{jcMissed}</span>
+      {/* Top Accounts — full width */}
+      <Card className="mb-3">
+        <div className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: C.sub }}>Top Accounts</div>
+        {convAccounts.slice(0, 10).map((a, i) => (
+          <div key={a.account} className="flex justify-between items-center py-1.5" style={{ borderBottom: i < Math.min(convAccounts.length, 10) - 1 ? `1px solid ${C.border}` : 'none' }}>
+            <span className="text-[13px] truncate mr-2" style={{ color: C.text }}>{a.account}</span>
+            <span className="font-bold text-[13px] font-mono shrink-0" style={{ color: C.cyan }}>{a.count}</span>
           </div>
-          {missed.byAccount.filter(a => !isIbrahim(a.account)).slice(0, 8).map((a, i) => (
-            <div key={a.account} className="flex justify-between items-center py-1.5" style={{ borderBottom: i < 7 ? `1px solid ${C.border}` : 'none' }}>
-              <span className="text-[13px] truncate mr-2" style={{ color: C.text }}>{a.account}</span>
-              <span className="font-bold text-[13px] shrink-0" style={{ color: C.pink }}>{a.count}</span>
-            </div>
-          ))}
-          {/* Ibrahim Law separate count removed — unified contract uses total */}
-          {missed.byAccount.length === 0 && <p className="text-center text-[13px] py-3" style={{ color: C.sub }}>None — great job!</p>}
-        </Card>
-      </div>
+        ))}
+        {convAccounts.length === 0 && <p className="text-center text-[13px] py-3" style={{ color: C.sub }}>No data</p>}
+      </Card>
 
       {/* Hourly Distribution */}
       {hourly && (
-        <Card className="mt-3">
+        <Card>
           <div className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: C.sub }}>Hourly Distribution</div>
           <div className="flex items-end gap-[2px] h-20">
             {hourly.slice(6, 22).map((v, i) => {

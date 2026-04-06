@@ -8,14 +8,13 @@ import { C, isMonday } from '@/lib/constants';
 import type { DashboardData, PeriodData } from '@/lib/types';
 import { aggregateDays } from './aggregateDays';
 import StepCalls from './StepCalls';
-import StepTalkTime from './StepTalkTime';
 import StepSpeed from './StepSpeed';
 import StepConversions from './StepConversions';
 import StepMTD from './StepMTD';
 import { useBrand } from '@/hooks/useBrand';
 
-const JC_STEP_LABELS = ['Calls', 'Talk Time', 'Speed', 'Conversions', 'MTD Race'];
-const MIXED_STEP_LABELS = ['Calls', 'Talk Time', 'Speed'];
+const JC_STEP_LABELS = ['Calls', 'Speed', 'Conversions', 'MTD + YTD'];
+const MIXED_STEP_LABELS = ['Calls', 'Speed'];
 
 /** Main Meeting presentation shell — data fetch, step/tab state, keyboard nav */
 function MeetingPageInner() {
@@ -113,14 +112,12 @@ function MeetingPageInner() {
   function renderStep() {
     switch (currentLabel) {
       case 'Calls':
-        return <StepCalls period={period} label={periodLabel} />;
-      case 'Talk Time':
-        return <StepTalkTime period={period} label={periodLabel} />;
+        return <StepCalls period={period} label={periodLabel} data={data!} />;
       case 'Speed':
         return <StepSpeed period={period} label={periodLabel} />;
       case 'Conversions':
-        return <StepConversions period={period} label={periodLabel} />;
-      case 'MTD Race':
+        return <StepConversions period={period} label={periodLabel} data={data!} />;
+      case 'MTD + YTD':
         return <StepMTD data={data!} />;
       default:
         return null;

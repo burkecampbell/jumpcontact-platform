@@ -7,7 +7,7 @@ import Hero from './Hero';
 import PaceBar from './PaceBar';
 import { TH, TD } from './TableCells';
 
-/** Step 5: MTD Race — month-to-date pace, leaderboard, accounts, hourly, daily trend */
+/** Step 4: MTD + YTD — monthly pace, avg/hr, agent leaderboard, year to date */
 export default function StepMTD({ data }: { data: DashboardData }) {
   const { dayOfMonth, daysInMonth, projected, pacePercent } = computePace(data.mtd.total, data.pulledAt);
   const agents = data.mtd.byAgent;
@@ -21,35 +21,36 @@ export default function StepMTD({ data }: { data: DashboardData }) {
     const dailyAvg = dayOfMonth > 0 ? +(a.count / dayOfMonth).toFixed(1) : 0;
     const agentProjected = Math.round(dailyAvg * daysInMonth);
     let bestDay = 0;
-    let zeroDays = 0;
     if (a.daily) {
       for (const v of Object.values(a.daily)) {
         if (v > bestDay) bestDay = v;
-        if (v === 0) zeroDays++;
       }
     }
     const sharePercent = data.mtd.total > 0 ? Math.round((a.count / data.mtd.total) * 100) : 0;
-    return { ...a, dailyAvg, projected: agentProjected, bestDay, zeroDays, sharePercent };
+    return { ...a, dailyAvg, projected: agentProjected, bestDay, sharePercent };
   });
 
-  // Hourly stats
-  const maxHourly = Math.max(...hourly, 1);
-  const peakHour = hourly.indexOf(Math.max(...hourly));
-  const totalHourly = hourly.reduce((s: number, v: number) => s + v, 0);
+  // Avg per hour based on schedules
+  const todayAgents = data.today?.repActivity?.agents ?? [];
+  const todayScheduledHrs = todayAgents.reduce((s, a) => s + (a.hoursScheduled || 0), 0);
+  const estTotalScheduledHrs = todayScheduledHrs * dayOfMonth;
+  const avgPerHour = estTotalScheduledHrs > 0 ? (data.mtd.total / estTotalScheduledHrs).toFixed(2) : '—';
 
   // Gap to goal
   const remaining = Math.max(0, GOAL - data.mtd.total);
   const daysLeft = Math.max(0, daysInMonth - dayOfMonth);
   const needPerDay = daysLeft > 0 ? Math.ceil(remaining / daysLeft) : 0;
 
-  // Top 5 accounts
-  const topAccounts = [...accounts].sort((a, b) => b.count - a.count).slice(0, 8);
-  const accountTotal = (accounts ?? []).reduce((s: number, a: { count: number }) => s + a.count, 0);
+  // YTD data
+  const ytd = data.ytd;
+  const ytdTotal = ytd?.total ?? 0;
+  const ytdByMonth = ytd?.byMonth ?? [];
+  const ytdMaxMonth = ytdByMonth.length > 0 ? Math.max(...ytdByMonth.map(m => m.conversions), 1) : 1;
 
   return (
     <div>
       <div className="text-center mb-1 text-[13px] font-semibold uppercase tracking-wider" style={{ color: C.sub }}>Month-to-Date</div>
-      <Hero value={data.mtd.total} sub={`conversions · day ${dayOfMonth} of ${daysInMonth}`} />
+      <Hero value={data.mtd.total} sub={`conversions \u00B7 day ${dayOfMonth} of ${daysInMonth}`} />
 
       {/* Pace Bar */}
       <Card className="mb-3">
@@ -64,12 +65,12 @@ export default function StepMTD({ data }: { data: DashboardData }) {
         </div>
       </Card>
 
-      {/* Expanded KPI Strip — 2 rows of 3 */}
+      {/* KPI Strip — 2 rows of 3 */}
       <div className="grid grid-cols-3 gap-2 mb-1.5">
         {[
           { label: 'Daily Avg', value: dayOfMonth > 0 ? (data.mtd.total / dayOfMonth).toFixed(1) : '—', color: C.text },
           { label: 'Projected', value: String(projected), color: projected >= GOAL ? '#4ade80' : C.text },
-          { label: 'Need/Day', value: daysLeft > 0 ? String(needPerDay) : '✓', color: needPerDay > 40 ? '#f87171' : needPerDay > 30 ? '#fbbf24' : '#4ade80' },
+          { label: 'Need/Day', value: daysLeft > 0 ? String(needPerDay) : '\u2713', color: needPerDay > 40 ? '#f87171' : needPerDay > 30 ? '#fbbf24' : '#4ade80' },
         ].map(s => (
           <Card key={s.label}>
             <div className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: C.sub }}>{s.label}</div>
@@ -81,7 +82,7 @@ export default function StepMTD({ data }: { data: DashboardData }) {
         {[
           { label: 'Remaining', value: String(remaining), color: C.text },
           { label: 'Days Left', value: String(daysLeft), color: daysLeft <= 5 ? '#f87171' : C.text },
-          { label: 'Accounts', value: String(accounts.length), color: C.sub },
+          { label: 'Avg/Hr', value: avgPerHour, color: avgPerHour !== '—' && parseFloat(avgPerHour) >= 1 ? '#4ade80' : C.sub },
         ].map(s => (
           <Card key={s.label}>
             <div className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: C.sub }}>{s.label}</div>
@@ -90,7 +91,7 @@ export default function StepMTD({ data }: { data: DashboardData }) {
         ))}
       </div>
 
-      {/* Agent Leaderboard Table — expanded */}
+      {/* Agent Leaderboard */}
       <Card padding={false} className="mb-3">
         <div className="px-4 pt-3 pb-1 text-xs font-bold uppercase tracking-wider" style={{ color: C.sub }}>Agent Leaderboard</div>
         <div className="overflow-x-auto">
@@ -109,7 +110,7 @@ export default function StepMTD({ data }: { data: DashboardData }) {
             <tbody>
               {agentStats.map((a, i) => (
                 <tr key={a.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
-                  <TD color={i < 3 ? C.cyan : C.sub}><span className="font-bold">{i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}</span></TD>
+                  <TD color={i < 3 ? C.cyan : C.sub}><span className="font-bold">{i < 3 ? ['\u{1F947}','\u{1F948}','\u{1F949}'][i] : i + 1}</span></TD>
                   <TD>
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full" style={{ background: agentColor(a.agent) }} />
@@ -131,7 +132,7 @@ export default function StepMTD({ data }: { data: DashboardData }) {
         </div>
       </Card>
 
-      {/* Agent Share Bar — visual distribution */}
+      {/* Agent Share Bar */}
       {agentStats.length > 0 && (
         <Card className="mb-3">
           <div className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: C.sub }}>Agent Share</div>
@@ -156,86 +157,9 @@ export default function StepMTD({ data }: { data: DashboardData }) {
         </Card>
       )}
 
-      {/* Top Accounts */}
-      {topAccounts.length > 0 && (
-        <Card padding={false} className="mb-3">
-          <div className="px-4 pt-3 pb-1 flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: C.sub }}>Top Accounts</span>
-            <span className="text-[10px] font-mono" style={{ color: C.sub }}>{accounts.length} total</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                  <TH>#</TH>
-                  <TH>Account</TH>
-                  <TH right>Convs</TH>
-                  <TH right>Share</TH>
-                </tr>
-              </thead>
-              <tbody>
-                {topAccounts.map((a, i) => {
-                  const share = accountTotal > 0 ? Math.round((a.count / accountTotal) * 100) : 0;
-                  return (
-                    <tr key={a.account} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
-                      <TD color={i < 3 ? C.cyan : C.sub}><span className="font-bold">{i + 1}</span></TD>
-                      <TD>{a.account}</TD>
-                      <TD mono right>{a.count}</TD>
-                      <TD mono right color={C.sub}>{share}%</TD>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {/* Hourly Distribution — bar chart */}
-      {hourly.length > 0 && totalHourly > 0 && (
-        <Card className="mb-3">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: C.sub }}>Hourly Distribution (MST)</span>
-            <span className="text-[10px] font-mono" style={{ color: C.sub }}>
-              Peak: {peakHour > 12 ? peakHour - 12 : peakHour}{peakHour >= 12 ? 'pm' : 'am'} ({hourly[peakHour]})
-            </span>
-          </div>
-          <div className="flex items-end gap-px h-20">
-            {hourly.map((val, hr) => {
-              if (hr < 6 || hr > 22) return null; // skip overnight hours
-              const pct = (val / maxHourly) * 100;
-              const isActive = val > 0;
-              return (
-                <div key={hr} className="flex-1 flex flex-col items-center">
-                  <div
-                    className="w-full rounded-t-sm transition-all"
-                    style={{
-                      height: `${Math.max(pct, isActive ? 4 : 1)}%`,
-                      background: hr === peakHour ? '#4ade80' : isActive ? C.cyan : C.border,
-                      opacity: isActive ? 1 : 0.3,
-                    }}
-                    title={`${hr > 12 ? hr - 12 : hr}${hr >= 12 ? 'pm' : 'am'}: ${val}`}
-                  />
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex gap-px mt-1">
-            {hourly.map((_, hr) => {
-              if (hr < 6 || hr > 22) return null;
-              return (
-                <div key={hr} className="flex-1 text-center text-[8px]" style={{ color: C.sub }}>
-                  {hr % 2 === 0 ? (hr > 12 ? `${hr - 12}p` : hr === 12 ? '12p' : `${hr}a`) : ''}
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      )}
-
-      {/* Cumulative MTD Chart — SVG */}
+      {/* Cumulative MTD Chart */}
       {mtdDaily.length > 1 && (
-        <Card>
+        <Card className="mb-3">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-bold uppercase tracking-wider" style={{ color: C.sub }}>Daily Trend</span>
             <span className="text-[10px] font-mono" style={{ color: C.sub }}>
@@ -278,6 +202,66 @@ export default function StepMTD({ data }: { data: DashboardData }) {
             <span className="text-[10px]" style={{ color: C.sub }}>Day {dayOfMonth}</span>
           </div>
         </Card>
+      )}
+
+      {/* ═══════════ YEAR TO DATE ═══════════ */}
+      {ytd && (
+        <>
+          <div className="mt-6 mb-3 text-center">
+            <div className="text-[13px] font-semibold uppercase tracking-wider" style={{ color: C.sub }}>Year to Date</div>
+            <div className="text-[64px] font-mono font-extralight leading-none mt-2" style={{ color: C.lime }}>{ytdTotal.toLocaleString()}</div>
+            <div className="text-[13px] mt-1" style={{ color: C.sub }}>conversions in {new Date().getFullYear()}</div>
+          </div>
+
+          {/* YTD KPI strip */}
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            <Card>
+              <div className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: C.sub }}>Annual Pace</div>
+              <div className="text-lg font-bold font-mono" style={{ color: C.text }}>{ytd.annualPace?.toLocaleString() ?? '—'}</div>
+            </Card>
+            <Card>
+              <div className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: C.sub }}>Projected EOY</div>
+              <div className="text-lg font-bold font-mono" style={{ color: ytd.projectedEOY >= (ytd.goal || 10800) ? '#4ade80' : C.text }}>
+                {ytd.projectedEOY?.toLocaleString() ?? '—'}
+              </div>
+            </Card>
+            <Card>
+              <div className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: C.sub }}>On Track</div>
+              <div className="text-lg font-bold" style={{ color: ytd.onTrack ? '#4ade80' : '#f87171' }}>
+                {ytd.onTrack ? '\u2713 Yes' : '\u2717 No'}
+              </div>
+            </Card>
+          </div>
+
+          {/* Monthly bar chart */}
+          {ytdByMonth.length > 0 && (
+            <Card>
+              <div className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: C.sub }}>Monthly Breakdown</div>
+              <div className="flex items-end gap-2 h-28">
+                {ytdByMonth.map((m) => {
+                  const pct = (m.conversions / ytdMaxMonth) * 100;
+                  const isCurrent = ytdByMonth.indexOf(m) === ytdByMonth.length - 1;
+                  return (
+                    <div key={m.month} className="flex-1 flex flex-col items-center group">
+                      <span className="text-[10px] font-mono mb-1 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: C.text }}>
+                        {m.conversions}
+                      </span>
+                      <div
+                        className="w-full rounded-t-md transition-all"
+                        style={{
+                          height: `${Math.max(pct, m.conversions > 0 ? 6 : 2)}%`,
+                          background: isCurrent ? C.lime : C.cyan,
+                          opacity: m.conversions > 0 ? 1 : 0.2,
+                        }}
+                      />
+                      <span className="text-[10px] mt-1 font-medium" style={{ color: isCurrent ? C.lime : C.sub }}>{m.month}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
+        </>
       )}
     </div>
   );

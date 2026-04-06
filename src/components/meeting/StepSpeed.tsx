@@ -6,7 +6,7 @@ import Card from '../Card';
 import Hero from './Hero';
 import { TH, TD } from './TableCells';
 
-/** Step 3: Speed to Answer — agent speed rankings with grading */
+/** Step 2: Speed + Pickup Rate — how fast we answer and how many we catch */
 export default function StepSpeed({ period, label }: { period: PeriodData; label: string }) {
   const sorted = [...period.repActivity.agents].sort((a, b) => {
     if (a.speedSec === null && b.speedSec === null) return 0;
@@ -27,6 +27,14 @@ export default function StepSpeed({ period, label }: { period: PeriodData; label
     else buckets.slow++;
   }
 
+  // Team-level pickup rate from TaskRouter reservations
+  const totalResCreated = sorted.reduce((s, a) => s + (a.reservationsCreated ?? 0), 0);
+  const totalResAccepted = sorted.reduce((s, a) => s + (a.reservationsAccepted ?? 0), 0);
+  const teamPickupRate = totalResCreated > 0 ? Math.round((totalResAccepted / totalResCreated) * 1000) / 10 : null;
+  const pickupColor = teamPickupRate != null
+    ? teamPickupRate >= 80 ? '#4ade80' : teamPickupRate >= 60 ? '#fbbf24' : '#f87171'
+    : C.sub;
+
   return (
     <div>
       <div className="text-center mb-1 text-[13px] font-semibold uppercase tracking-wider" style={{ color: C.sub }}>{label}</div>
@@ -39,52 +47,80 @@ export default function StepSpeed({ period, label }: { period: PeriodData; label
         </div>
       )}
 
-      {/* Speed distribution strip */}
+      {/* Speed + Pickup summary strip */}
+      <div className="grid grid-cols-3 gap-2 mb-1.5">
+        <Card>
+          <div className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: C.sub }}>Team Grade</div>
+          <div className="text-lg font-bold" style={{ color: teamGrade.color }}>{teamGrade.grade}</div>
+        </Card>
+        <Card>
+          <div className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: C.sub }}>Pickup Rate</div>
+          <div className="text-lg font-bold font-mono" style={{ color: pickupColor }}>
+            {teamPickupRate != null ? `${teamPickupRate}%` : '—'}
+          </div>
+        </Card>
+        <Card>
+          <div className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: C.sub }}>Fastest</div>
+          <div className="text-lg font-bold font-mono" style={{ color: '#4ade80' }}>
+            {period.fastestPickup ? fmtSpeed(period.fastestPickup) : '—'}
+          </div>
+        </Card>
+      </div>
+
+      {/* Speed distribution buckets */}
       {avgSec !== null && (
-        <div className="flex justify-center gap-5 mb-4">
-          <div className="text-center">
-            <div className="text-lg font-bold" style={{ color: teamGrade.color }}>{teamGrade.grade}</div>
-            <div className="text-[10px] uppercase" style={{ color: C.sub }}>Team Grade</div>
-          </div>
-          <div className="text-center">
-            <div className="text-lg font-bold font-mono" style={{ color: '#4ade80' }}>{buckets.fast}</div>
-            <div className="text-[10px] uppercase" style={{ color: C.sub }}>&lt;8s</div>
-          </div>
-          <div className="text-center">
-            <div className="text-lg font-bold font-mono" style={{ color: '#38bdf8' }}>{buckets.good}</div>
-            <div className="text-[10px] uppercase" style={{ color: C.sub }}>8-12s</div>
-          </div>
-          <div className="text-center">
-            <div className="text-lg font-bold font-mono" style={{ color: '#fbbf24' }}>{buckets.ok}</div>
-            <div className="text-[10px] uppercase" style={{ color: C.sub }}>12-17s</div>
-          </div>
-          <div className="text-center">
-            <div className="text-lg font-bold font-mono" style={{ color: '#f87171' }}>{buckets.slow}</div>
-            <div className="text-[10px] uppercase" style={{ color: C.sub }}>17s+</div>
-          </div>
+        <div className="grid grid-cols-4 gap-2 mb-3">
+          {[
+            { label: '<8s (Fast)', count: buckets.fast, color: '#4ade80' },
+            { label: '8-12s (Good)', count: buckets.good, color: '#38bdf8' },
+            { label: '12-17s (OK)', count: buckets.ok, color: '#fbbf24' },
+            { label: '17s+ (Slow)', count: buckets.slow, color: '#f87171' },
+          ].map(b => (
+            <Card key={b.label}>
+              <div className="text-center">
+                <div className="text-lg font-bold font-mono" style={{ color: b.color }}>{b.count}</div>
+                <div className="text-[9px] uppercase" style={{ color: C.sub }}>{b.label}</div>
+              </div>
+            </Card>
+          ))}
         </div>
       )}
 
-      {/* Agent Table */}
+      {/* Pickup Rate explainer */}
+      {teamPickupRate != null && (
+        <div className="mb-3 px-3 py-2 rounded-lg text-[12px]" style={{ background: 'rgba(62,165,195,0.08)', color: C.sub }}>
+          <strong style={{ color: C.text }}>Pickup Rate</strong> = calls accepted / calls offered via TaskRouter.
+          Team caught <strong style={{ color: pickupColor }}>{totalResAccepted}</strong> of <strong style={{ color: C.text }}>{totalResCreated}</strong> offered calls.
+        </div>
+      )}
+
+      {/* Agent Table — expanded with pickup rate */}
       <Card padding={false}>
+        <div className="px-4 pt-3 pb-1 text-xs font-bold uppercase tracking-wider" style={{ color: C.sub }}>Agent Speed & Pickup</div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                 <TH>#</TH>
                 <TH>Agent</TH>
-                <TH right>Avg Speed</TH>
+                <TH right>Speed</TH>
                 <TH right>Grade</TH>
+                <TH right>Pickup %</TH>
+                <TH right>Caught</TH>
+                <TH right>Offered</TH>
                 <TH right>Calls</TH>
-                <TH right>Talk Time</TH>
               </tr>
             </thead>
             <tbody>
               {sorted.map((a, i) => {
                 const { grade, color } = speedGrade(a.speedSec);
+                const pickup = a.pickupRate;
+                const pColor = pickup != null
+                  ? pickup >= 80 ? '#4ade80' : pickup >= 60 ? '#fbbf24' : '#f87171'
+                  : C.sub;
                 return (
                   <tr key={a.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
-                    <TD color={i < 3 ? C.cyan : C.sub}><span className="font-bold">{i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}</span></TD>
+                    <TD color={i < 3 ? C.cyan : C.sub}><span className="font-bold">{i < 3 ? ['\u{1F947}','\u{1F948}','\u{1F949}'][i] : i + 1}</span></TD>
                     <TD>
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full" style={{ background: agentColor(a.agent) }} />
@@ -95,13 +131,17 @@ export default function StepSpeed({ period, label }: { period: PeriodData; label
                     <TD right>
                       <span className="text-xs font-extrabold px-1.5 py-0.5 rounded" style={{ color, background: `${color}18` }}>{grade}</span>
                     </TD>
+                    <TD mono right color={pColor}>
+                      {pickup != null ? `${pickup}%` : '—'}
+                    </TD>
+                    <TD mono right color={C.sub}>{a.reservationsAccepted ?? '—'}</TD>
+                    <TD mono right color={C.sub}>{a.reservationsCreated ?? '—'}</TD>
                     <TD mono right color={C.sub}>{a.calls}</TD>
-                    <TD mono right color={C.sub}>{fmtTalkTime(a.talkMin)}</TD>
                   </tr>
                 );
               })}
               {sorted.length === 0 && (
-                <tr><td colSpan={6} className="text-center text-sm py-5" style={{ color: C.sub }}>No speed data yet</td></tr>
+                <tr><td colSpan={8} className="text-center text-sm py-5" style={{ color: C.sub }}>No speed data yet</td></tr>
               )}
             </tbody>
           </table>
