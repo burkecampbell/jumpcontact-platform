@@ -294,6 +294,18 @@ async function buildPeriodData(
   const todayStr_ = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Edmonton' });
   if (dateStr !== todayStr_) {
     period = blendYticaIntoPerioData(period, ytica);
+
+    // Ytica-only agents get hoursScheduled=0 from the blender — patch them
+    // with actual schedule data so conv/hr works for historical days
+    for (const agent of period.repActivity.agents) {
+      if (agent.hoursScheduled === 0) {
+        agent.hoursScheduled = getScheduledHours(schedule, agent.agent, dateObj);
+      }
+      if (agent.convsPerHour == null && agent.hoursScheduled > 0) {
+        const conv = conversions.byAgent[agent.agent.toLowerCase()] || 0;
+        agent.convsPerHour = Math.round((conv / agent.hoursScheduled) * 100) / 100;
+      }
+    }
   }
   // Brand filtering is now applied in the GET handler per ?brand= param
 

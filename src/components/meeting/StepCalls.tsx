@@ -14,7 +14,15 @@ interface StepCallsProps {
 
 /** Step 1: Calls + Talk Time + Missed — everything about call volume in one step */
 export default function StepCalls({ period, label, data }: StepCallsProps) {
-  const agents = period.repActivity.agents;
+  // Build Ytica MTD pickup speed lookup (same logic as StepSpeed)
+  const yticaMtd: Record<string, number> = {};
+  for (const y of data.mtdRepActivity ?? []) {
+    if (y.avgSpeedSec != null && y.avgSpeedSec > 0) {
+      yticaMtd[y.agent.toLowerCase()] = y.avgSpeedSec;
+    }
+  }
+
+  const agents = [...period.repActivity.agents].sort((a, b) => b.calls - a.calls);
   const agentSum = agents.reduce((s, a) => s + a.calls, 0);
   // Use the higher of answeredCalls vs agent sum — if Ytica blended higher
   // agent counts into the table, the hero must match, never contradict.
@@ -77,7 +85,7 @@ export default function StepCalls({ period, label, data }: StepCallsProps) {
                 <TH right>Avg/Call</TH>
                 <TH right>Hrs</TH>
                 <TH right>Calls/Hr</TH>
-                <TH right>Speed</TH>
+                <TH right>Pickup</TH>
                 <TH right>Wrap</TH>
               </tr>
             </thead>
@@ -99,7 +107,12 @@ export default function StepCalls({ period, label, data }: StepCallsProps) {
                   <TD mono right color={C.sub}>{a.calls > 0 ? fmtTalkTime(avgPerCall) : '—'}</TD>
                   <TD mono right color={C.sub}>{a.hoursScheduled > 0 ? a.hoursScheduled : '—'}</TD>
                   <TD mono right color={callsPerHr !== '—' && parseFloat(callsPerHr) >= 3 ? '#4ade80' : C.sub}>{callsPerHr}</TD>
-                  <TD mono right>{fmtSpeed(a.speedSec)}</TD>
+                  <TD mono right>{(() => {
+                    const cdr = a.speedSec;
+                    const ytc = yticaMtd[a.agent.toLowerCase()] ?? null;
+                    const spd = (cdr != null && cdr > 10 && ytc != null) ? ytc : (cdr == null && ytc != null) ? ytc : cdr;
+                    return fmtSpeed(spd);
+                  })()}</TD>
                   <TD mono right color={C.sub}>{a.wrapUpSec != null ? `${Math.round(a.wrapUpSec)}s` : '—'}</TD>
                 </tr>
                 );
