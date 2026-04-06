@@ -1,7 +1,7 @@
 'use client';
 
 import { EXCLUDED_AGENTS, capitalize, agentColor } from '@/lib/constants';
-import type { DashboardData } from '@/lib/types';
+import type { DashboardData, PeriodData } from '@/lib/types';
 import { Num, Label, Pill } from './primitives';
 import { T, Z, G } from './theme';
 
@@ -9,20 +9,18 @@ function dayName(d: string) {
   return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' });
 }
 
-export function StepConversions({ data }: { data: DashboardData }) {
+export function StepConversions({ period, data, label }: { period: PeriodData; data: DashboardData; label?: string }) {
   const convByAgent: Record<string, number> = {};
-  for (const a of data.yesterday.conversions.byAgent) convByAgent[a.agent.toLowerCase()] = a.count;
-  const agents = data.yesterday.repActivity.agents
+  for (const a of period.conversions.byAgent) convByAgent[a.agent.toLowerCase()] = a.count;
+  const agents = period.repActivity.agents
     .filter(a => !EXCLUDED_AGENTS.includes(a.agent))
     .map(a => {
       const convs = convByAgent[a.agent.toLowerCase()] || 0;
-      // CDR can undercount calls (legs expire, pairing misses). Conversions are
-      // authoritative — you can't convert without a call, so floor calls at convs.
       const calls = Math.max(a.calls, convs);
       return { ...a, calls, convs };
     })
     .sort((a, b) => b.convs - a.convs);
-  const total = data.yesterday.conversions.total;
+  const total = period.conversions.total;
   const trend = data.trend7d.conversions;
   const prior = trend.length >= 2 ? trend[trend.length - 1] : null;
   const pct = prior ? Math.round(((total - prior) / Math.max(prior, 1)) * 100) : null;
@@ -31,7 +29,7 @@ export function StepConversions({ data }: { data: DashboardData }) {
   return (
     <div>
       <div style={{ marginBottom: G(24) }}>
-        <Label>Conversions &mdash; {dayName(data.yesterdayDate || '')}</Label>
+        <Label>{label ? `${label} \u2014 Conversions` : `Conversions \u2014 ${dayName(period.date || '')}`}</Label>
         <div style={{ marginTop: G(8), display: 'flex', alignItems: 'baseline', gap: G(16) }}>
           <Num>{total}</Num>
           {pct !== null && (
@@ -96,7 +94,7 @@ export function StepConversions({ data }: { data: DashboardData }) {
         <div style={{ flex: 1 }}>
           <Label>Top accounts</Label>
           <div style={{ marginTop: G(8) }}>
-            {data.yesterday.conversions.byAccount.slice(0, 6).map(a => (
+            {period.conversions.byAccount.slice(0, 6).map(a => (
               <div key={a.account} style={{
                 display: 'flex', justifyContent: 'space-between', padding: `${G(5)}px 0`,
                 borderBottom: `1px solid ${T.border}`, fontSize: Z('body'),
@@ -113,9 +111,9 @@ export function StepConversions({ data }: { data: DashboardData }) {
             <span style={{
               fontFamily: "'JetBrains Mono',monospace", fontSize: Z('agentValue'),
               fontWeight: 600, color: T.negative,
-            }}>{data.yesterday.missedCalls.total}</span>
+            }}>{period.missedCalls.total}</span>
           </div>
-          {data.yesterday.missedCalls.byAccount.slice(0, 5).map(a => (
+          {period.missedCalls.byAccount.slice(0, 5).map(a => (
             <div key={a.account} style={{
               display: 'flex', justifyContent: 'space-between', padding: `${G(4)}px 0`,
               fontSize: Z('body') * 0.9, color: T.inkMuted,

@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
-import type { DashboardData } from '@/lib/types';
+import type { DashboardData, PeriodData } from '@/lib/types';
+import { isMonday } from '@/lib/constants';
 import { T, Z, G, setMode, getMode, SIDEBAR_W, PAD, type LayoutMode } from './theme';
 import { TopBar } from './TopBar';
 import { Sidebar, type StepDef } from './Sidebar';
@@ -13,6 +14,7 @@ import { StepSpeed } from './StepSpeed';
 import { StepConversions } from './StepConversions';
 import { StepMTD } from './StepMTD';
 import { StepChampions } from './StepChampions';
+import { aggregateDays } from '@/components/meeting/aggregateDays';
 
 // ── Step definitions ───────────────────────────────────────────────
 const BASE_STEPS: StepDef[] = [
@@ -21,6 +23,13 @@ const BASE_STEPS: StepDef[] = [
   { key: 'speed', label: 'Speed', num: '03' },
   { key: 'conv', label: 'Conversions', num: '04' },
   { key: 'mtd', label: 'MTD Race', num: '05' },
+];
+
+const MONDAY_STEPS: StepDef[] = [
+  { key: 'friday', label: 'Friday', num: '01' },
+  { key: 'weekend', label: 'Weekend', num: '02' },
+  { key: 'speed', label: 'Speed', num: '03' },
+  { key: 'mtd', label: 'MTD Race', num: '04' },
 ];
 
 // ── TV overlay (time + autoplay) ───────────────────────────────────
@@ -63,13 +72,15 @@ export default function MorningDashboard() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Build step list (champions conditional)
+  // Build step list — Monday gets Friday + Weekend, other days get normal steps
+  const monday = isMonday();
   const steps = useMemo(() => {
+    const base = monday ? MONDAY_STEPS : BASE_STEPS;
     if (data?.prevMonthChampions) {
-      return [{ key: 'champions', label: data.prevMonthChampions.month, num: '00' }, ...BASE_STEPS];
+      return [{ key: 'champions', label: data.prevMonthChampions.month, num: '00' }, ...base];
     }
-    return BASE_STEPS;
-  }, [data?.prevMonthChampions]);
+    return base;
+  }, [data?.prevMonthChampions, monday]);
   const total = steps.length;
 
   // Keyboard nav
@@ -108,14 +119,46 @@ export default function MorningDashboard() {
     );
   }
 
+  // ── Resolve period data for current context ──────────────────────
+  const yesterdayPeriod = data!.yesterday;
+  const fridayPeriod = data!.weekend?.friday;
+  const weekendPeriod = useMemo(() => {
+    if (!data?.weekend) return null;
+    return aggregateDays([data.weekend.friday, data.weekend.saturday, data.weekend.sunday]);
+  }, [data?.weekend]);
+
   // ── Render step content ──────────────────────────────────────────
   function renderStep() {
     switch (steps[step]?.key) {
-      case 'champions': return data!.prevMonthChampions ? <StepChampions champions={data!.prevMonthChampions} /> : null;
-      case 'calls': return <StepCalls data={data!} />;
-      case 'talk': return <StepTalk data={data!} />;
-      case 'speed': return <StepSpeed data={data!} />;
-      case 'conv': return <StepConversions data={data!} />;
+      case 'champions':
+        return data!.prevMonthChampions ? <StepChampions champions={data!.prevMonthChampions} /> : null;
+
+      // Normal day steps (Tue-Sun)
+      case 'calls': return <StepCalls period={yesterdayPeriod} />;
+      case 'talk': return <StepTalk period={yesterdayPeriod} />;
+      case 'speed': return <StepSpeed period={yesterdayPeriod} data={data!} />;
+      case 'conv': return <StepConversions period={yesterdayPeriod} data={data!} />;
+
+      // Monday steps
+      case 'friday':
+        if (!fridayPeriod) return <StepConversions period={yesterdayPeriod} data={data!} label="Friday" />;
+        return (
+          <div>
+            <StepConversions period={fridayPeriod} data={data!} label="Friday" />
+            <div style={{ height: 1, background: T.border, margin: `${G(24)}px 0` }} />
+            <StepCalls period={fridayPeriod} label="Friday" />
+          </div>
+        );
+      case 'weekend':
+        if (!weekendPeriod) return <StepCalls period={yesterdayPeriod} label="Weekend" />;
+        return (
+          <div>
+            <StepConversions period={weekendPeriod} data={data!} label="Weekend (Sat+Sun)" />
+            <div style={{ height: 1, background: T.border, margin: `${G(24)}px 0` }} />
+            <StepCalls period={weekendPeriod} label="Weekend (Sat+Sun)" />
+          </div>
+        );
+
       case 'mtd': return <StepMTD data={data!} />;
       default: return null;
     }

@@ -1,20 +1,20 @@
 'use client';
 
 import { EXCLUDED_AGENTS } from '@/lib/constants';
-import type { DashboardData } from '@/lib/types';
+import type { PeriodData } from '@/lib/types';
 import { Num, Label, AgentBar } from './primitives';
 import { G } from './theme';
 
-export function StepCalls({ data }: { data: DashboardData }) {
-  const agents = data.yesterday.repActivity.agents
+export function StepCalls({ period, label }: { period: PeriodData; label?: string }) {
+  const agents = period.repActivity.agents
     .filter(a => !EXCLUDED_AGENTS.includes(a.agent))
     .sort((a, b) => b.calls - a.calls);
   const agentSum = agents.reduce((s, a) => s + a.calls, 0);
-  const total = Math.max(data.yesterday.answeredCalls ?? 0, agentSum);
+  const total = Math.max(period.answeredCalls ?? 0, agentSum);
   return (
     <div>
       <div style={{ marginBottom: G(24) }}>
-        <Label>Total calls answered</Label>
+        <Label>{label ? `${label} \u2014 Calls answered` : 'Total calls answered'}</Label>
         <div style={{ marginTop: G(8) }}><Num>{total}</Num></div>
       </div>
       {agents.map((a, i) => (

@@ -101,6 +101,12 @@ function MeetingPageInner() {
   } else if (activeDay === 'yesterday') {
     period = data.yesterday;
     periodLabel = 'YESTERDAY';
+  } else if (activeDay === 'friday' && data.weekend?.friday) {
+    period = data.weekend.friday;
+    periodLabel = 'FRIDAY';
+  } else if (activeDay === 'weekend' && data.weekend) {
+    period = aggregateDays([data.weekend.friday, data.weekend.saturday, data.weekend.sunday]);
+    periodLabel = 'WEEKEND';
   } else {
     period = data.yesterday;
     periodLabel = activeDay.toUpperCase();

@@ -21,6 +21,7 @@ import {
   TZ,
   normalizeAgent,
   isOnShift,
+  isMonday,
 } from '@/lib/constants';
 import { cached } from '@/lib/cache';
 import { resolveClient, isMscPhone, getClientBrand } from '@/lib/clients';
@@ -865,6 +866,36 @@ async function fetchDashboardData(): Promise<DashboardData> {
   yesterday = addCallStats(yesterday, yesterdayCalls);
   yesterday = reconcileWithYtica(yesterday);
 
+  // ── Weekend (Monday only) ─────────────────────────────────────
+  // On Monday, fetch Friday + Saturday from Ytica (source of truth for
+  // historical days). Sunday = yesterday (already built above).
+  // No CDR needed — pass empty calls, Ytica blends on top.
+  let weekendData: { friday: PeriodData; saturday: PeriodData; sunday: PeriodData } | undefined;
+  if (isMonday()) {
+    const fridayStr = addDays(todayStr, -3);
+    const saturdayStr = addDays(todayStr, -2);
+    // Sunday is yesterday, already fetched
+
+    const [fridayYtica, fridayTeam, saturdayYtica, saturdayTeam] = await Promise.all([
+      cached('friday-ytica', 3_600_000, () => fetchYticaRepActivity(fridayStr)),
+      cached('friday-team', 3_600_000, () => fetchYticaTeamStats(fridayStr)),
+      cached('saturday-ytica', 3_600_000, () => fetchYticaRepActivity(saturdayStr)),
+      cached('saturday-team', 3_600_000, () => fetchYticaTeamStats(saturdayStr)),
+    ]);
+
+    // Conversions for Fri/Sat are already in histConversions (fetched for MTD/trend)
+    const emptyConv = { total: 0, byAgent: {} as Record<string, number>, byAccount: [] as AcctStat[], byHour: new Array(24).fill(0), firstConvByAgent: {}, lastConvByAgent: {} };
+    const friConvEntry = histConversions.get(fridayStr);
+    const satConvEntry = histConversions.get(saturdayStr);
+    const friConv = friConvEntry ? { ...friConvEntry, firstConvByAgent: {}, lastConvByAgent: {} } : emptyConv;
+    const satConv = satConvEntry ? { ...satConvEntry, firstConvByAgent: {}, lastConvByAgent: {} } : emptyConv;
+
+    const friday = await buildPeriodData(fridayStr, [], friConv, {}, schedule, fridayYtica, fridayTeam);
+    const saturday = await buildPeriodData(saturdayStr, [], satConv, {}, schedule, saturdayYtica, saturdayTeam);
+
+    weekendData = { friday, saturday, sunday: yesterday };
+  }
+
   // ── MTD ────────────────────────────────────────────────────────
   // Build mtdMap from histConversions restricted to mtdDates
   const mtdMap = new Map<string, { total: number; byAgent: Record<string, number>; byAccount: AcctStat[]; byHour: number[] }>();
@@ -1030,6 +1061,7 @@ async function fetchDashboardData(): Promise<DashboardData> {
     prevMonthChampions,
     mtdRepActivity: mtdYtica,
     clientSpeed,
+    weekend: weekendData,
     pulledAt,
     // Internal: used by GET handler for brand-specific rebuilds
     _todayCalls: todayCalls,

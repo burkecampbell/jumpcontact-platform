@@ -1,7 +1,7 @@
 'use client';
 
 import { EXCLUDED_AGENTS, capitalize, agentColor, speedGrade } from '@/lib/constants';
-import type { DashboardData } from '@/lib/types';
+import type { DashboardData, PeriodData } from '@/lib/types';
 import { Num, Label, Pill } from './primitives';
 import { T, Z, G } from './theme';
 
@@ -13,7 +13,7 @@ import { T, Z, G } from './theme';
  *
  * Priority: yesterday's Ytica blended speed → MTD Ytica avg → CDR fallback.
  */
-export function StepSpeed({ data }: { data: DashboardData }) {
+export function StepSpeed({ period, data, label }: { period: PeriodData; data: DashboardData; label?: string }) {
   // Build a Ytica MTD speed lookup: agent → avgSpeedSec
   const yticaMtd: Record<string, number> = {};
   for (const y of data.mtdRepActivity ?? []) {
@@ -26,7 +26,7 @@ export function StepSpeed({ data }: { data: DashboardData }) {
   // 1. If yesterday's speedSec looks like Ytica-blended (< 10s), use it
   // 2. Else use Ytica MTD average
   // 3. Else fall back to CDR speed
-  const agents = data.yesterday.repActivity.agents
+  const agents = period.repActivity.agents
     .filter(a => !EXCLUDED_AGENTS.includes(a.agent))
     .map(a => {
       const cdrSpeed = a.speedSec;
@@ -53,7 +53,7 @@ export function StepSpeed({ data }: { data: DashboardData }) {
   return (
     <div>
       <div style={{ marginBottom: G(24) }}>
-        <Label>Speed{usingMtd ? ' (MTD avg)' : ''}</Label>
+        <Label>{label ? `${label} \u2014 Speed` : 'Speed'}{usingMtd ? ' (MTD avg)' : ''}</Label>
         <div style={{ marginTop: G(8), display: 'flex', alignItems: 'baseline', gap: G(16), flexWrap: 'wrap' }}>
           <Num>{avg.toFixed(1)}s</Num>
           <Pill color={hitting === agents.length ? T.positive : hitting > 0 ? T.caution : T.negative}>
@@ -69,7 +69,7 @@ export function StepSpeed({ data }: { data: DashboardData }) {
       }}>
         {(() => {
           // Compute team-level numbers for each metric
-          const cdrAgents = data.yesterday.repActivity.agents.filter(a => !EXCLUDED_AGENTS.includes(a.agent) && a.speedSec != null && a.speedSec > 0);
+          const cdrAgents = period.repActivity.agents.filter(a => !EXCLUDED_AGENTS.includes(a.agent) && a.speedSec != null && a.speedSec > 0);
           const cdrAvg = cdrAgents.length > 0 ? cdrAgents.reduce((s, a) => s + a.speedSec!, 0) / cdrAgents.length : null;
 
           const yticaAgents = (data.mtdRepActivity ?? []).filter(y => !EXCLUDED_AGENTS.includes(y.agent) && y.avgSpeedSec != null && y.avgSpeedSec > 0);
