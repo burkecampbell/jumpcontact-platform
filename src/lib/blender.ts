@@ -236,6 +236,13 @@ function deriveSingleBrandView(
     };
   }
 
+  // ── 7. Conversion rate — use agent calls sum as denominator ───
+  const agentCallsSum = visibleAgents.reduce((s, a) => s + a.calls, 0);
+  const convDenom = agentCallsSum > 0 ? agentCallsSum : answeredCalls;
+  const conversionRate = convDenom > 0 && period.conversions.total > 0
+    ? Math.round((period.conversions.total / convDenom) * 1000) / 10
+    : period.conversionRate;
+
   return {
     ...period,
     repActivity: {
@@ -245,6 +252,7 @@ function deriveSingleBrandView(
     },
     missedCalls: brandMissed,
     teamStats: brandTeamStats,
+    conversionRate,
     // Headline metrics
     answeredCalls,
     totalCalls,
