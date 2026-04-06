@@ -712,6 +712,14 @@ export async function GET(request: NextRequest) {
       },
     };
 
+    // Filter weekend data through brand pipeline (no CDR for historical days → 50/50 blended split)
+    const emptySummary = buildBrandSummary([]);
+    const brandWeekend = cleanRaw.weekend ? {
+      friday: deriveBrandView(cleanRaw.weekend.friday, brand, emptySummary),
+      saturday: deriveBrandView(cleanRaw.weekend.saturday, brand, emptySummary),
+      sunday: derivedYesterday,
+    } : undefined;
+
     const data = {
       ...cleanRaw,
       today: {
@@ -719,6 +727,7 @@ export async function GET(request: NextRequest) {
         convPerHour: raw.today.convPerHour,
       },
       yesterday: derivedYesterday,
+      weekend: brandWeekend,
       recentCalls: brandRecentCalls,
       dataQuality,
       brandBreakdown,
