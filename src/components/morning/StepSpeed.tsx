@@ -10,14 +10,15 @@ export function StepSpeed({ data }: { data: DashboardData }) {
     .filter(a => !EXCLUDED_AGENTS.includes(a.agent) && a.speedSec != null && a.speedSec > 0)
     .sort((a, b) => a.speedSec! - b.speedSec!);
   const hitting = agents.filter(a => a.speedSec! < 10).length;
+  const avg = agents.length > 0 ? agents.reduce((s, a) => s + a.speedSec!, 0) / agents.length : 0;
   const b = Z('badge');
   return (
     <div>
       <div style={{ marginBottom: G(24) }}>
-        <Label>Speed to answer</Label>
-        <div style={{ marginTop: G(8), display: 'flex', alignItems: 'baseline', gap: G(16) }}>
-          <Num>&lt;10s target</Num>
-          <Pill color={T.positive}>{hitting}/{agents.length} hitting</Pill>
+        <Label>Speed</Label>
+        <div style={{ marginTop: G(8), display: 'flex', alignItems: 'baseline', gap: G(16), flexWrap: 'wrap' }}>
+          <Num>{avg.toFixed(1)}s</Num>
+          <Pill color={T.positive}>{hitting}/{agents.length} under 10s</Pill>
         </div>
       </div>
       {agents.map((a, i) => {
