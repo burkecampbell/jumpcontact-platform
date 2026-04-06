@@ -16,7 +16,9 @@ interface StepCallsProps {
 export default function StepCalls({ period, label, data }: StepCallsProps) {
   const agents = period.repActivity.agents;
   const agentSum = agents.reduce((s, a) => s + a.calls, 0);
-  const total = period.answeredCalls ?? agentSum;
+  // Use the higher of answeredCalls vs agent sum — if Ytica blended higher
+  // agent counts into the table, the hero must match, never contradict.
+  const total = Math.max(period.answeredCalls ?? 0, agentSum);
   const totalTalk = agents.reduce((s, a) => s + a.talkMin, 0);
   const totalCalls = agents.reduce((s, a) => s + a.calls, 0);
   const avgTalkPerCall = totalCalls > 0 ? totalTalk / totalCalls : 0;

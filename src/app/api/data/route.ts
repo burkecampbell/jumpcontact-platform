@@ -354,6 +354,60 @@ function addCallStats(
   return result;
 }
 
+// ── Reconcile headline metrics after Ytica blending ─────────────────
+// CDR leg pairing is unreliable for historical days (legs expire/purge).
+// Ytica is source of truth. After blending, headline numbers must reflect
+// the blended agent data + Ytica team stats — not stale CDR counts.
+
+function reconcileWithYtica(period: PeriodData): PeriodData {
+  const agents = period.repActivity.agents;
+  const agentSum = agents.reduce((s, a) => s + a.calls, 0);
+  const ts = period.teamStats;
+
+  // Ytica team stats are authoritative when available
+  if (ts) {
+    const answered = ts.inbound > 0 ? ts.inbound - ts.missed : agentSum;
+    const totalCalls = ts.totalCalls || agentSum;
+    const missed = ts.missed;
+    const answerRate = totalCalls > 0 ? Math.round((answered / totalCalls) * 100) : 0;
+    const missedCallRate = ts.inbound > 0
+      ? Math.round((missed / ts.inbound) * 1000) / 10
+      : 0;
+
+    return {
+      ...period,
+      answeredCalls: answered,
+      totalCalls,
+      answerRate,
+      missedCallRate,
+      missedCalls: {
+        ...period.missedCalls,
+        total: missed,
+      },
+      conversionRate: answered > 0
+        ? Math.round((period.conversions.total / answered) * 1000) / 10
+        : period.conversionRate,
+    };
+  }
+
+  // No Ytica team stats — fall back to blended agent sum if it's higher than CDR
+  if (agentSum > (period.answeredCalls ?? 0)) {
+    const totalCalls = agentSum + (period.missedCalls?.total ?? 0);
+    const answerRate = totalCalls > 0 ? Math.round((agentSum / totalCalls) * 100) : 0;
+    return {
+      ...period,
+      answeredCalls: agentSum,
+      totalCalls,
+      answerRate,
+      conversionRate: agentSum > 0
+        ? Math.round((period.conversions.total / agentSum) * 1000) / 10
+        : period.conversionRate,
+    };
+  }
+
+  return period;
+}
+
 // ── Build recentCalls (last 20 paired calls) ───────────────────────
 
 function buildRecentCalls(calls: PairedCall[]): RawCall[] {
@@ -805,9 +859,11 @@ async function fetchDashboardData(): Promise<DashboardData> {
     yesterdayWorkerStats,
     schedule, yesterdayYtica, yesterdayTeamStats,
   );
-  // Add totalCalls, answeredCalls, answerRate, etc. — same as today
+  // Add CDR-derived call stats, then reconcile with Ytica source of truth.
+  // CDR leg pairing is unreliable for historical days — Ytica team stats
+  // and blended agent sums must drive the headline numbers.
   yesterday = addCallStats(yesterday, yesterdayCalls);
-  // Brand filtering is now applied in the GET handler per ?brand= param
+  yesterday = reconcileWithYtica(yesterday);
 
   // ── MTD ────────────────────────────────────────────────────────
   // Build mtdMap from histConversions restricted to mtdDates
