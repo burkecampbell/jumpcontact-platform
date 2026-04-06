@@ -134,12 +134,20 @@ export default function StepConversions({ period, label, data }: { period: Perio
         </div>
       </Card>
 
-      {/* Top Accounts — full width */}
+      {/* Top Accounts — full width with top converter */}
       <Card className="mb-3">
         <div className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: C.sub }}>Top Accounts</div>
         {convAccounts.slice(0, 10).map((a, i) => (
           <div key={a.account} className="flex justify-between items-center py-1.5" style={{ borderBottom: i < Math.min(convAccounts.length, 10) - 1 ? `1px solid ${C.border}` : 'none' }}>
-            <span className="text-[13px] truncate mr-2" style={{ color: C.text }}>{a.account}</span>
+            <div className="flex items-center gap-2 truncate mr-2">
+              <span className="text-[13px] truncate" style={{ color: C.text }}>{a.account}</span>
+              {a.topAgent && (
+                <span className="flex items-center gap-1 shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: agentColor(a.topAgent) }} />
+                  <span className="text-[11px] capitalize" style={{ color: C.sub }}>{a.topAgent}</span>
+                </span>
+              )}
+            </div>
             <span className="font-bold text-[13px] font-mono shrink-0" style={{ color: C.cyan }}>{a.count}</span>
           </div>
         ))}

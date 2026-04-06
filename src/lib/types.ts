@@ -154,7 +154,7 @@ export interface ScheduleEntry {
 // ── Contract Types ──────────────────────────────────────────────────
 
 export interface AgentStat { agent: string; count: number; daily?: Record<string, number> }
-export interface AcctStat { account: string; count: number }
+export interface AcctStat { account: string; count: number; topAgent?: string }
 
 export interface RepAgent {
   agent: string;

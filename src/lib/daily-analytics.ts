@@ -184,8 +184,8 @@ export async function fetchAllWorkerStats(dateStr: string, auth: string) {
         if (!r.ok) return;
         const j = await r.json();
         const c = j.cumulative || {};
-        const acts: { friendly_name: string; max: number }[] = c.activity_durations || [];
-        const g = (n: string) => acts.find(a => a.friendly_name === n)?.max || 0;
+        const acts: { friendly_name: string; max: number; total: number }[] = c.activity_durations || [];
+        const g = (n: string) => acts.find(a => a.friendly_name === n)?.total || 0;
         const av = g('Available') + g('Idle');
         const bu = g('Busy') + g('Reserved');
         const wr = g('WrapUp');
@@ -195,6 +195,9 @@ export async function fetchAllWorkerStats(dateStr: string, auth: string) {
         const resRejected  = c.reservations_rejected  || 0;
         const resTimedOut  = c.reservations_timed_out || 0;
         const taskAcceptanceRate = resCreated > 0 ? Math.round((resAccepted / resCreated) * 100) : 0;
+        // avg_task_cleanup_time is not reliably present in Worker Stats —
+        // compute average wrap-up from total WrapUp activity seconds / tasks accepted
+        const avgWrapUp = resAccepted > 0 ? Math.round((wr / resAccepted) * 10) / 10 : 0;
         result[name] = {
           availableSec: av, busySec: bu, wrapUpSec: wr, offlineSec: of_,
           totalActiveSec: av + bu + wr,
@@ -202,7 +205,7 @@ export async function fetchAllWorkerStats(dateStr: string, auth: string) {
           reservationsRejected: resRejected, reservationsTimedOut: resTimedOut,
           taskAcceptanceRate,
           avgSpeed: 0,
-          avgWrapUp: Math.round((c.avg_task_cleanup_time || 0) * 10) / 10,
+          avgWrapUp,
         };
       } catch { /* skip */ }
     }));

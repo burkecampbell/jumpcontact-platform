@@ -157,6 +157,47 @@ export default function StepMTD({ data }: { data: DashboardData }) {
         </Card>
       )}
 
+      {/* Top Accounts with top converter */}
+      {accounts.length > 0 && (
+        <Card padding={false} className="mb-3">
+          <div className="px-4 pt-3 pb-1 flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: C.sub }}>Top Accounts</span>
+            <span className="text-[10px] font-mono" style={{ color: C.sub }}>{accounts.length} total</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <TH>#</TH>
+                  <TH>Account</TH>
+                  <TH>Top Converter</TH>
+                  <TH right>Convs</TH>
+                </tr>
+              </thead>
+              <tbody>
+                {[...accounts].sort((a, b) => b.count - a.count).slice(0, 8).map((a, i) => (
+                  <tr key={a.account} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
+                    <TD color={i < 3 ? C.cyan : C.sub}><span className="font-bold">{i + 1}</span></TD>
+                    <TD>{a.account}</TD>
+                    <TD>
+                      {a.topAgent ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full" style={{ background: agentColor(a.topAgent) }} />
+                          <span className="capitalize text-[13px]" style={{ color: C.text }}>{a.topAgent}</span>
+                        </div>
+                      ) : (
+                        <span style={{ color: C.sub }}>—</span>
+                      )}
+                    </TD>
+                    <TD mono right>{a.count}</TD>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
       {/* Cumulative MTD Chart */}
       {mtdDaily.length > 1 && (
         <Card className="mb-3">

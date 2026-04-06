@@ -122,6 +122,7 @@ export async function fetchConversions(dateStr: string): Promise<{
 
     const agentMap: Record<string, number> = {};
     const accountMap: Record<string, number> = {};
+    const accountAgentMap: Record<string, Record<string, number>> = {};
     const hourly = new Array(24).fill(0);
     const firstConvTs: Record<string, Date> = {};
     const lastConvTs: Record<string, Date> = {};
@@ -136,6 +137,10 @@ export async function fetchConversions(dateStr: string): Promise<{
       if (c.account) {
         const key = c.account.toLowerCase();
         accountMap[key] = (accountMap[key] || 0) + 1;
+        if (c.agent) {
+          if (!accountAgentMap[key]) accountAgentMap[key] = {};
+          accountAgentMap[key][c.agent] = (accountAgentMap[key][c.agent] || 0) + 1;
+        }
       }
       hourly[c.hour]++;
     }
@@ -146,7 +151,11 @@ export async function fetchConversions(dateStr: string): Promise<{
     const lastConvByAgent  = Object.fromEntries(Object.entries(lastConvTs).map(([a, d])  => [a, fmt(d)]));
 
     const byAccount = Object.entries(accountMap)
-      .map(([account, count]) => ({ account, count }))
+      .map(([account, count]) => {
+        const agentCounts = accountAgentMap[account] || {};
+        const topAgent = Object.entries(agentCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+        return { account, count, topAgent };
+      })
       .sort((a, b) => b.count - a.count);
 
     return { total: parsed.length, byAgent: agentMap, byAccount, byHour: hourly, firstConvByAgent, lastConvByAgent };
@@ -169,9 +178,9 @@ export async function fetchConversionsForDates(dates: string[]): Promise<Map<str
   byHour: number[];
 }>> {
   const dateSet = new Set(dates);
-  type Entry = { total: number; byAgent: Record<string, number>; _acct: Record<string, number>; byHour: number[] };
+  type Entry = { total: number; byAgent: Record<string, number>; _acct: Record<string, number>; _acctAgent: Record<string, Record<string, number>>; byHour: number[] };
   const result = new Map<string, Entry>();
-  for (const d of dates) result.set(d, { total: 0, byAgent: {}, _acct: {}, byHour: new Array(24).fill(0) });
+  for (const d of dates) result.set(d, { total: 0, byAgent: {}, _acct: {}, _acctAgent: {}, byHour: new Array(24).fill(0) });
 
   try {
     const rows = await readSheet(CONVERSIONS_SHEET_ID, 'A:E');
@@ -191,7 +200,13 @@ export async function fetchConversionsForDates(dates: string[]): Promise<Map<str
       const account = (row[2] || '').trim().toLowerCase();
       entry.total++;
       if (agent) entry.byAgent[agent] = (entry.byAgent[agent] || 0) + 1;
-      if (account) entry._acct[account] = (entry._acct[account] || 0) + 1;
+      if (account) {
+        entry._acct[account] = (entry._acct[account] || 0) + 1;
+        if (agent) {
+          if (!entry._acctAgent[account]) entry._acctAgent[account] = {};
+          entry._acctAgent[account][agent] = (entry._acctAgent[account][agent] || 0) + 1;
+        }
+      }
       entry.byHour[mst.getHours()]++;
     }
   } catch (err) {
@@ -203,7 +218,11 @@ export async function fetchConversionsForDates(dates: string[]): Promise<Map<str
     final.set(date, {
       total: e.total,
       byAgent: e.byAgent,
-      byAccount: Object.entries(e._acct).map(([account, count]) => ({ account, count })).sort((a, b) => b.count - a.count),
+      byAccount: Object.entries(e._acct).map(([account, count]) => {
+        const agentCounts = e._acctAgent[account] || {};
+        const topAgent = Object.entries(agentCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+        return { account, count, topAgent };
+      }).sort((a, b) => b.count - a.count),
       byHour: e.byHour,
     });
   }
