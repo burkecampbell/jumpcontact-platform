@@ -503,7 +503,7 @@ export async function fetchYticaMtdActivity(monthPrefix: string): Promise<YticaM
 
       const calls = parseInt(row[6]) || 0;
       const talkMin = parseTimeMins(row[2]);
-      const speedSec = parseTimeSec(row[5]);
+      const speedSec = parseTimeSec(row[3]);  // D: Avg Ring Time (agent pickup speed)
       const wrapUpSec = parseTimeSec(row[7]);
 
       const entry = agentMap.get(agent) || { calls: 0, talkMin: 0, speedSum: 0, speedCount: 0, wrapSum: 0, wrapCount: 0 };
