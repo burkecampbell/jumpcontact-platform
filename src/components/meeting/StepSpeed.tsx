@@ -54,10 +54,11 @@ export default function StepSpeed({ period, label, data }: { period: PeriodData;
     else buckets.slow++;
   }
 
-  // Team-level pickup rate from TaskRouter reservations
+  // Team-level pickup rate from TaskRouter reservations (only available for live/today data)
   const totalResCreated = sorted.reduce((s, a) => s + (a.reservationsCreated ?? 0), 0);
   const totalResAccepted = sorted.reduce((s, a) => s + (a.reservationsAccepted ?? 0), 0);
   const teamPickupRate = totalResCreated > 0 ? Math.round((totalResAccepted / totalResCreated) * 1000) / 10 : null;
+  const hasPickup = totalResCreated > 0;
   const pickupColor = teamPickupRate != null
     ? teamPickupRate >= 80 ? '#4ade80' : teamPickupRate >= 60 ? '#fbbf24' : '#f87171'
     : C.sub;
@@ -74,18 +75,20 @@ export default function StepSpeed({ period, label, data }: { period: PeriodData;
         </div>
       )}
 
-      {/* Speed + Pickup summary strip */}
-      <div className="grid grid-cols-3 gap-2 mb-1.5">
+      {/* Speed summary strip */}
+      <div className={`grid gap-2 mb-1.5 ${teamPickupRate != null ? 'grid-cols-3' : 'grid-cols-2'}`}>
         <Card>
           <div className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: C.sub }}>Team Grade</div>
           <div className="text-lg font-bold" style={{ color: teamGrade.color }}>{teamGrade.grade}</div>
         </Card>
-        <Card>
-          <div className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: C.sub }}>Pickup Rate</div>
-          <div className="text-lg font-bold font-mono" style={{ color: pickupColor }}>
-            {teamPickupRate != null ? `${teamPickupRate}%` : '—'}
-          </div>
-        </Card>
+        {teamPickupRate != null && (
+          <Card>
+            <div className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: C.sub }}>Pickup Rate</div>
+            <div className="text-lg font-bold font-mono" style={{ color: pickupColor }}>
+              {teamPickupRate}%
+            </div>
+          </Card>
+        )}
         <Card>
           <div className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: C.sub }}>Fastest</div>
           <div className="text-lg font-bold font-mono" style={{ color: '#4ade80' }}>
@@ -121,9 +124,11 @@ export default function StepSpeed({ period, label, data }: { period: PeriodData;
         </div>
       )}
 
-      {/* Agent Table — expanded with pickup rate */}
+      {/* Agent Table */}
       <Card padding={false}>
-        <div className="px-4 pt-3 pb-1 text-xs font-bold uppercase tracking-wider" style={{ color: C.sub }}>Agent Speed & Pickup</div>
+        <div className="px-4 pt-3 pb-1 text-xs font-bold uppercase tracking-wider" style={{ color: C.sub }}>
+          Agent Speed{hasPickup ? ' & Pickup' : ''}
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -132,9 +137,9 @@ export default function StepSpeed({ period, label, data }: { period: PeriodData;
                 <TH>Agent</TH>
                 <TH right>Speed</TH>
                 <TH right>Grade</TH>
-                <TH right>Pickup %</TH>
-                <TH right>Caught</TH>
-                <TH right>Offered</TH>
+                {hasPickup && <TH right>Pickup %</TH>}
+                {hasPickup && <TH right>Caught</TH>}
+                {hasPickup && <TH right>Offered</TH>}
                 <TH right>Calls</TH>
               </tr>
             </thead>
@@ -158,11 +163,9 @@ export default function StepSpeed({ period, label, data }: { period: PeriodData;
                     <TD right>
                       <span className="text-xs font-extrabold px-1.5 py-0.5 rounded" style={{ color, background: `${color}18` }}>{grade}</span>
                     </TD>
-                    <TD mono right color={pColor}>
-                      {pickup != null ? `${pickup}%` : '—'}
-                    </TD>
-                    <TD mono right color={C.sub}>{a.reservationsAccepted ?? '—'}</TD>
-                    <TD mono right color={C.sub}>{a.reservationsCreated ?? '—'}</TD>
+                    {hasPickup && <TD mono right color={pColor}>{pickup != null ? `${pickup}%` : '—'}</TD>}
+                    {hasPickup && <TD mono right color={C.sub}>{a.reservationsAccepted ?? '—'}</TD>}
+                    {hasPickup && <TD mono right color={C.sub}>{a.reservationsCreated ?? '—'}</TD>}
                     <TD mono right color={C.sub}>{a.calls}</TD>
                   </tr>
                 );
