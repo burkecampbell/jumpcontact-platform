@@ -221,7 +221,7 @@ export async function fetchConversionsForDates(dates: string[]): Promise<Map<str
       byAccount: Object.entries(e._acct).map(([account, count]) => {
         const agentCounts = e._acctAgent[account] || {};
         const topAgent = Object.entries(agentCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
-        return { account, count, topAgent };
+        return { account, count, topAgent, agentBreakdown: Object.keys(agentCounts).length > 0 ? agentCounts : undefined };
       }).sort((a, b) => b.count - a.count),
       byHour: e.byHour,
     });
@@ -337,13 +337,25 @@ function fallbackSchedule(): ScheduleEntry[] {
 
 // ── Date Parsing ────────────────────────────────────────────────────
 
+/** Convert a naive ISO string (no tz) into a proper Date treating it as MST/MDT */
+function mstToDate(iso: string): Date {
+  // Parse as explicit UTC so the result is deterministic regardless of server TZ
+  const asUTC = new Date(iso + 'Z');
+  if (isNaN(asUTC.getTime())) return asUTC; // propagate NaN
+  // Compute the MST/MDT offset for this instant (handles DST automatically)
+  const utcParts = new Date(asUTC.toLocaleString('en-US', { timeZone: 'UTC' }));
+  const mstParts = new Date(asUTC.toLocaleString('en-US', { timeZone: TZ }));
+  const offsetMs = utcParts.getTime() - mstParts.getTime(); // +6h MDT or +7h MST
+  // Sheet wrote this time in MST, so actual UTC = naive + offset
+  return new Date(asUTC.getTime() + offsetMs);
+}
+
 function parseFlexDate(s: string): Date | null {
   const parts = s.trim().split(/[\s,]+/);
   const datePart = parts[0];
-  // Default to noon (not midnight) — midnight UTC becomes yesterday in MST
   const timePart = parts[1] || '12:00';
   if (datePart.includes('-') && datePart.length === 10) {
-    return new Date(`${datePart}T${timePart}`);
+    return mstToDate(`${datePart}T${timePart}`);
   }
   const slash = datePart.split('/');
   if (slash.length >= 3) {
@@ -351,15 +363,15 @@ function parseFlexDate(s: string): Date | null {
     const b = parseInt(slash[1]);
     const y = parseInt(slash[2]);
     const year = y < 100 ? 2000 + y : y;
-    if (a > 12) return new Date(`${year}-${String(b).padStart(2, '0')}-${String(a).padStart(2, '0')}T${timePart}`);
-    if (b > 12) return new Date(`${year}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}T${timePart}`);
-    if (a === b) return new Date(`${year}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}T${timePart}`);
+    if (a > 12) return mstToDate(`${year}-${String(b).padStart(2, '0')}-${String(a).padStart(2, '0')}T${timePart}`);
+    if (b > 12) return mstToDate(`${year}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}T${timePart}`);
+    if (a === b) return mstToDate(`${year}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}T${timePart}`);
     // Ambiguous: both a and b are ≤ 12 and different.
     // The conversions sheet has TWO data sources writing different formats
     // (M/D/Y and D/M/Y). Pick the interpretation closest to today that
     // isn't in the future.
-    const mdy = new Date(`${year}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}T${timePart}`);
-    const dmy = new Date(`${year}-${String(b).padStart(2, '0')}-${String(a).padStart(2, '0')}T${timePart}`);
+    const mdy = mstToDate(`${year}-${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}T${timePart}`);
+    const dmy = mstToDate(`${year}-${String(b).padStart(2, '0')}-${String(a).padStart(2, '0')}T${timePart}`);
     const now = Date.now();
     const mdyDist = mdy.getTime() <= now ? now - mdy.getTime() : Infinity;
     const dmyDist = dmy.getTime() <= now ? now - dmy.getTime() : Infinity;

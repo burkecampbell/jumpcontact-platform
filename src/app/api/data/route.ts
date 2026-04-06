@@ -458,7 +458,14 @@ function buildMtd(
     }
     for (const a of entry.byAccount) {
       acctTotals[a.account] = (acctTotals[a.account] || 0) + a.count;
-      if (a.topAgent) {
+      // Accumulate per-agent-per-account counts from daily breakdowns
+      if (a.agentBreakdown) {
+        if (!acctAgentCounts[a.account]) acctAgentCounts[a.account] = {};
+        for (const [agent, cnt] of Object.entries(a.agentBreakdown)) {
+          acctAgentCounts[a.account][agent] = (acctAgentCounts[a.account][agent] || 0) + cnt;
+        }
+      } else if (a.topAgent) {
+        // Fallback: count days as top agent
         if (!acctAgentCounts[a.account]) acctAgentCounts[a.account] = {};
         acctAgentCounts[a.account][a.topAgent] = (acctAgentCounts[a.account][a.topAgent] || 0) + 1;
       }
@@ -484,7 +491,7 @@ function buildMtd(
     .map(([account, count]) => {
       const agents = acctAgentCounts[account];
       const topAgent = agents ? Object.entries(agents).sort((a, b) => b[1] - a[1])[0]?.[0] : undefined;
-      return { account, count, topAgent };
+      return { account, count, topAgent, agentBreakdown: agents && Object.keys(agents).length > 0 ? agents : undefined };
     })
     .sort((a, b) => b.count - a.count);
 

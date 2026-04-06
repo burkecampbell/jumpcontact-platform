@@ -5,7 +5,7 @@ import NavBar from './NavBar';
 import HealthBanner from './HealthBanner';
 import Card from './Card';
 import ErrorBoundary from './ErrorBoundary';
-import { C, GOAL, capitalize, computePace, agentColor, AGENT_SCHEDULE, fmtSpeed, fmtTalkTime, EXCLUDED_AGENTS } from '@/lib/constants';
+import { C, GOAL, capitalize, computePace, agentColor, AGENT_SCHEDULE, fmtSpeed, fmtTalkTime, EXCLUDED_AGENTS, isJCAgent } from '@/lib/constants';
 import type { DashboardData, AcctStat, YticaMtdAgent } from '@/lib/getDashboard';
 import { Target, BarChart3, Trophy, Zap, Phone, Clock, Timer, Download, TrendingUp, Award, Star, ShieldCheck, Crosshair, ChevronUp, ChevronDown } from 'lucide-react';
 import { useBrand } from '@/hooks/useBrand';
@@ -679,33 +679,39 @@ function RacePageInner() {
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                   <TH>#</TH>
                   <TH>Client</TH>
-                  <TH right>Conversions</TH>
-                  <TH right>% of Total</TH>
-                  <TH>Bar</TH>
+                  <TH>Agent Breakdown</TH>
+                  <TH right>Total</TH>
                 </tr>
               </thead>
               <tbody>
                 {topAccounts.map((a: AcctStat, i: number) => {
-                  const pctOfTotal = mtd.total > 0 ? ((a.count / mtd.total) * 100).toFixed(1) : '0';
-                  const topAcct = topAccounts[0]?.count ?? 1;
+                  const breakdown = a.agentBreakdown
+                    ? Object.entries(a.agentBreakdown)
+                        .filter(([agent]) => isJCAgent(agent))
+                        .sort((x, y) => y[1] - x[1])
+                    : [];
                   return (
                     <tr key={a.account} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
                       <TD color={i < 3 ? C.cyan : C.sub}>
                         <span className="font-bold">{i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}</span>
                       </TD>
                       <TD>
-                        <span className="font-medium truncate block max-w-[280px]">{a.account}</span>
+                        <span className="font-medium truncate block max-w-[220px]">{a.account}</span>
                       </TD>
-                      <TD mono right>{a.count}</TD>
-                      <TD mono right color={C.sub}>{pctOfTotal}%</TD>
                       <td className="px-3 py-2">
-                        <div className="h-1.5 rounded-full overflow-hidden w-24" style={{ background: 'rgba(139,146,168,0.12)' }}>
-                          <div
-                            className="h-full rounded-full transition-all duration-700"
-                            style={{ width: `${Math.max((a.count / topAcct) * 100, 3)}%`, background: C.cyan }}
-                          />
+                        <div className="flex flex-wrap gap-1.5">
+                          {breakdown.map(([agent, cnt]) => (
+                            <span key={agent} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium"
+                              style={{ background: agentColor(agent) + '20', border: `1px solid ${agentColor(agent)}40` }}>
+                              <span className="w-1.5 h-1.5 rounded-full" style={{ background: agentColor(agent) }} />
+                              <span style={{ color: C.text }}>{capitalize(agent)}</span>
+                              <span className="font-mono font-bold" style={{ color: agentColor(agent) }}>{cnt}</span>
+                            </span>
+                          ))}
+                          {breakdown.length === 0 && <span style={{ color: C.sub }}>—</span>}
                         </div>
                       </td>
+                      <TD mono right>{a.count}</TD>
                     </tr>
                   );
                 })}
