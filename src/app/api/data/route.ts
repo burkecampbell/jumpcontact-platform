@@ -878,6 +878,22 @@ async function fetchDashboardData(): Promise<DashboardData> {
     todayYtica,
     todayTeamStats,
   );
+  // Override daily Ytica speed/wrap with MTD weighted averages (more accurate)
+  if (mtdYtica.length > 0) {
+    const mtdLookup = new Map(mtdYtica.map(a => [a.agent.toLowerCase(), a]));
+    for (const agent of todayPeriod.repActivity.agents) {
+      const mtd = mtdLookup.get(agent.agent.toLowerCase());
+      if (mtd) {
+        if (mtd.avgSpeedSec != null) agent.speedSec = mtd.avgSpeedSec;
+        if (mtd.avgWrapUpSec != null) agent.wrapUpSec = mtd.avgWrapUpSec;
+      }
+    }
+    // Recompute team average from corrected values
+    const speedVals = todayPeriod.repActivity.agents.filter(a => a.speedSec != null && a.speedSec! > 0).map(a => a.speedSec!);
+    todayPeriod.repActivity.avgSpeedSec = speedVals.length > 0
+      ? +(speedVals.reduce((s, v) => s + v, 0) / speedVals.length).toFixed(1)
+      : null;
+  }
   const today = addCallStats(todayPeriod, todayCalls, { includeConvPerHour: true }) as DashboardData['today'];
 
   // ── Yesterday ──────────────────────────────────────────────────
