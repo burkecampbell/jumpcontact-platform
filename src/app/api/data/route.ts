@@ -460,7 +460,7 @@ function buildMtd(
       acctTotals[a.account] = (acctTotals[a.account] || 0) + a.count;
       if (a.topAgent) {
         if (!acctAgentCounts[a.account]) acctAgentCounts[a.account] = {};
-        acctAgentCounts[a.account][a.topAgent] = (acctAgentCounts[a.account][a.topAgent] || 0) + a.count;
+        acctAgentCounts[a.account][a.topAgent] = (acctAgentCounts[a.account][a.topAgent] || 0) + 1;
       }
     }
     for (let h = 0; h < 24; h++) hourly[h] += entry.byHour[h];
