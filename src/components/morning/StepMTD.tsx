@@ -1,6 +1,6 @@
 'use client';
 
-import { EXCLUDED_AGENTS } from '@/lib/constants';
+import { isJCAgent } from '@/lib/constants';
 import type { DashboardData } from '@/lib/types';
 import { Num, Label, AgentBar } from './primitives';
 import { T, Z, G } from './theme';
@@ -18,7 +18,7 @@ export function StepMTD({ data }: { data: DashboardData }) {
         </div>
       </div>
       {mtd.byAgent
-        .filter(a => !EXCLUDED_AGENTS.includes(a.agent))
+        .filter(a => isJCAgent(a.agent))
         .sort((a, b) => b.count - a.count)
         .map((a, i) => (
           <AgentBar key={a.agent} rank={i} name={a.agent} value={a.count} max={mtd.byAgent[0]?.count || 1} />

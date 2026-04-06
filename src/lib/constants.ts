@@ -34,6 +34,12 @@ export const MSC_ONLY_AGENTS = new Set([
   'desi', 'natalie', 'sofia', 'sue', 'rebecca', 'francis', 'richard', 'anthony',
 ]);
 
+/** Agent should appear on JC dashboards (not excluded, not MSC-only) */
+export function isJCAgent(name: string): boolean {
+  const n = name.toLowerCase();
+  return !EXCLUDED_AGENTS.includes(n) && !MSC_ONLY_AGENTS.has(n);
+}
+
 export const AGENT_COLORS: Record<string, string> = {
   // JC agents
   burke:    '#4ade80',

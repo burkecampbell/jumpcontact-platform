@@ -1,6 +1,6 @@
 'use client';
 
-import { EXCLUDED_AGENTS } from '@/lib/constants';
+import { isJCAgent } from '@/lib/constants';
 import type { PeriodData } from '@/lib/types';
 import { Num, Label, AgentBar } from './primitives';
 import { G } from './theme';
@@ -11,7 +11,7 @@ function fmtMin(m: number) {
 
 export function StepTalk({ period, label }: { period: PeriodData; label?: string }) {
   const agents = period.repActivity.agents
-    .filter(a => !EXCLUDED_AGENTS.includes(a.agent))
+    .filter(a => isJCAgent(a.agent))
     .sort((a, b) => b.talkMin - a.talkMin);
   return (
     <div>

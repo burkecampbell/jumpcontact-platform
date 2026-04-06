@@ -1,6 +1,6 @@
 'use client';
 
-import { EXCLUDED_AGENTS, capitalize, agentColor } from '@/lib/constants';
+import { isJCAgent, capitalize, agentColor } from '@/lib/constants';
 import type { DashboardData, PeriodData } from '@/lib/types';
 import { Num, Label, Pill } from './primitives';
 import { T, Z, G } from './theme';
@@ -13,7 +13,7 @@ export function StepConversions({ period, data, label }: { period: PeriodData; d
   const convByAgent: Record<string, number> = {};
   for (const a of period.conversions.byAgent) convByAgent[a.agent.toLowerCase()] = a.count;
   const agents = period.repActivity.agents
-    .filter(a => !EXCLUDED_AGENTS.includes(a.agent))
+    .filter(a => isJCAgent(a.agent))
     .map(a => {
       const convs = convByAgent[a.agent.toLowerCase()] || 0;
       const calls = Math.max(a.calls, convs);

@@ -2,7 +2,7 @@
  * "Story of the numbers" — generates contextual insights from DashboardData.
  * Pure functions, no React.
  */
-import { capitalize, EXCLUDED_AGENTS } from '@/lib/constants';
+import { capitalize, isJCAgent } from '@/lib/constants';
 import type { DashboardData } from '@/lib/types';
 
 export interface Insight {
@@ -33,7 +33,7 @@ export function generateInsights(data: DashboardData): Insight[] {
   }
 
   // 2. Yesterday's leader
-  const convAgents = yd.conversions.byAgent.filter(a => !EXCLUDED_AGENTS.includes(a.agent));
+  const convAgents = yd.conversions.byAgent.filter(a => isJCAgent(a.agent));
   if (convAgents.length > 0 && convAgents[0].count > 0) {
     insights.push({
       icon: '\uD83D\uDC51',
@@ -56,7 +56,7 @@ export function generateInsights(data: DashboardData): Insight[] {
   }
 
   // 4. Speed alert
-  const speedAgents = yd.repActivity.agents.filter(a => !EXCLUDED_AGENTS.includes(a.agent) && a.speedSec != null && a.speedSec > 0);
+  const speedAgents = yd.repActivity.agents.filter(a => isJCAgent(a.agent) && a.speedSec != null && a.speedSec > 0);
   if (speedAgents.length > 0) {
     const allUnder10 = speedAgents.every(a => a.speedSec! < 10);
     const avg = speedAgents.reduce((s, a) => s + a.speedSec!, 0) / speedAgents.length;

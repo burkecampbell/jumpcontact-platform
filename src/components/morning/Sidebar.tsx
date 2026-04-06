@@ -21,16 +21,17 @@ export function Sidebar({ steps, current, onSelect, autoPlay, onToggleAutoPlay }
 
   // ── TV mode: large tactile nav on left edge ──────────────────────
   if (mode === 'tv') {
-    const dotSize = 28;
-    const activeDotSize = 36;
+    const dotSize = 32;
+    const activeDotSize = 40;
     return (
       <div style={{
-        position: 'fixed', left: 24, top: '50%', transform: 'translateY(-50%)',
+        position: 'fixed', left: 20, top: '50%', transform: 'translateY(-50%)',
         display: 'flex', flexDirection: 'column', alignItems: 'center',
-        gap: 12, zIndex: 60,
-        background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(12px)',
-        borderRadius: 24, padding: '20px 14px',
-        border: `1px solid rgba(255,255,255,0.08)`,
+        gap: 10, zIndex: 60,
+        background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(12px)',
+        borderRadius: 20, padding: '16px 12px',
+        border: `1px solid ${T.border}`,
+        boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
       }}>
         {steps.map((s, i) => {
           const active = i === current;

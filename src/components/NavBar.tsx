@@ -11,7 +11,7 @@ import BrandToggle from './BrandToggle';
 const NAV_ITEMS = [
   { href: '/',        label: 'Live Now',  icon: Activity },
   { href: '/calls',   label: 'Call Log',  icon: Phone },
-  { href: '/meeting', label: 'Huddle',   icon: Presentation },
+  { href: '/meeting', label: 'Money Monday', icon: Presentation },
   { href: '/race',    label: 'Race',      icon: Trophy },
 ] as const;
 

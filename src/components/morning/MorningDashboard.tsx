@@ -178,31 +178,33 @@ export default function MorningDashboard() {
         <Sidebar steps={steps} current={step} onSelect={setStep} autoPlay={autoPlay} onToggleAutoPlay={() => setAutoPlay(a => !a)} />
 
         {/* TV header */}
-        <div style={{ padding: `${G(32)}px ${G(60)}px ${G(20)}px` }}>
-          <div style={{ fontSize: Z('sub'), fontWeight: 600, textTransform: 'uppercase', letterSpacing: 4, color: T.inkFaint }}>
+        <div style={{ padding: `24px 80px 16px` }}>
+          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 4, color: T.inkFaint }}>
             Jump Contact
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: G(20), marginTop: G(4) }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginTop: 4 }}>
             <h1 style={{ fontSize: Z('heading'), fontWeight: 800, margin: 0, letterSpacing: -1, color: T.ink }}>
               {steps[step].label}
             </h1>
             <span style={{
               fontFamily: "'JetBrains Mono',monospace", fontSize: Z('label'),
               fontWeight: 700, color: T.inkFaint, background: T.subtle,
-              padding: `${G(4)}px ${G(10)}px`, borderRadius: 4,
+              padding: '3px 8px', borderRadius: 4,
             }}>{steps[step].num}</span>
           </div>
         </div>
 
         {/* TV content */}
-        <main style={{ padding: `${G(8)}px ${G(60)}px ${G(40)}px`, maxHeight: 'calc(100vh - 160px)', overflowY: 'auto' }}>
-          {renderStep()}
+        <main style={{ padding: '8px 80px 32px', maxHeight: 'calc(100vh - 120px)', overflowY: 'auto' }}>
+          <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+            {renderStep()}
+          </div>
         </main>
 
         {/* TV progress bar */}
-        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, display: 'flex', gap: 2, padding: `0 ${G(20)}px ${G(10)}px` }}>
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, display: 'flex', gap: 2, padding: '0 20px 8px' }}>
           {steps.map((_, i) => (
-            <div key={i} style={{ flex: 1, height: G(4), borderRadius: 2, background: i <= step ? T.ink : T.border, transition: 'background 0.3s' }} />
+            <div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? T.ink : T.border, transition: 'background 0.3s' }} />
           ))}
         </div>
       </div>

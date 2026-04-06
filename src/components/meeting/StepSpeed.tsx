@@ -1,29 +1,56 @@
 'use client';
 
-import { C, fmtSpeed, fmtTalkTime, speedGrade, agentColor } from '@/lib/constants';
-import type { PeriodData } from '@/lib/types';
+import { C, fmtSpeed, fmtTalkTime, speedGrade, agentColor, isJCAgent } from '@/lib/constants';
+import type { DashboardData, PeriodData } from '@/lib/types';
 import Card from '../Card';
 import Hero from './Hero';
 import { TH, TD } from './TableCells';
 
 /** Step 2: Speed + Pickup Rate — how fast we answer and how many we catch */
-export default function StepSpeed({ period, label }: { period: PeriodData; label: string }) {
-  const sorted = [...period.repActivity.agents].sort((a, b) => {
-    if (a.speedSec === null && b.speedSec === null) return 0;
-    if (a.speedSec === null) return 1;
-    if (b.speedSec === null) return -1;
-    return a.speedSec - b.speedSec;
+export default function StepSpeed({ period, label, data }: { period: PeriodData; label: string; data?: DashboardData }) {
+  // Build Ytica MTD speed lookup for fallback
+  const yticaMtd: Record<string, number> = {};
+  for (const y of data?.mtdRepActivity ?? []) {
+    if (y.avgSpeedSec != null && y.avgSpeedSec > 0) {
+      yticaMtd[y.agent.toLowerCase()] = y.avgSpeedSec;
+    }
+  }
+
+  // For each agent, pick best speed: Ytica when CDR looks inflated (>10s)
+  const agents = period.repActivity.agents
+    .filter(a => isJCAgent(a.agent))
+    .map(a => {
+      const cdrSpeed = a.speedSec;
+      const yticaSpeed = yticaMtd[a.agent.toLowerCase()];
+      let bestSpeed: number | null = cdrSpeed;
+      if (cdrSpeed != null && cdrSpeed > 10 && yticaSpeed != null) {
+        bestSpeed = yticaSpeed;
+      } else if (cdrSpeed == null && yticaSpeed != null) {
+        bestSpeed = yticaSpeed;
+      }
+      return { ...a, displaySpeed: bestSpeed };
+    });
+
+  const sorted = [...agents].sort((a, b) => {
+    if (a.displaySpeed === null && b.displaySpeed === null) return 0;
+    if (a.displaySpeed === null) return 1;
+    if (b.displaySpeed === null) return -1;
+    return a.displaySpeed - b.displaySpeed;
   });
-  const avgSec = period.repActivity.avgSpeedSec;
+
+  const withSpeed = sorted.filter(a => a.displaySpeed != null && a.displaySpeed > 0);
+  const avgSec = withSpeed.length > 0
+    ? withSpeed.reduce((s, a) => s + a.displaySpeed!, 0) / withSpeed.length
+    : period.repActivity.avgSpeedSec;
   const teamGrade = speedGrade(avgSec);
 
   // Speed distribution buckets
   const buckets = { fast: 0, good: 0, ok: 0, slow: 0 };
   for (const a of sorted) {
-    if (a.speedSec === null) continue;
-    if (a.speedSec < 8) buckets.fast++;
-    else if (a.speedSec < 12) buckets.good++;
-    else if (a.speedSec < 17) buckets.ok++;
+    if (a.displaySpeed === null) continue;
+    if (a.displaySpeed < 8) buckets.fast++;
+    else if (a.displaySpeed < 12) buckets.good++;
+    else if (a.displaySpeed < 17) buckets.ok++;
     else buckets.slow++;
   }
 
@@ -62,7 +89,7 @@ export default function StepSpeed({ period, label }: { period: PeriodData; label
         <Card>
           <div className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: C.sub }}>Fastest</div>
           <div className="text-lg font-bold font-mono" style={{ color: '#4ade80' }}>
-            {period.fastestPickup ? fmtSpeed(period.fastestPickup) : '—'}
+            {sorted.length > 0 && sorted[0].displaySpeed != null ? fmtSpeed(sorted[0].displaySpeed) : '—'}
           </div>
         </Card>
       </div>
@@ -113,7 +140,7 @@ export default function StepSpeed({ period, label }: { period: PeriodData; label
             </thead>
             <tbody>
               {sorted.map((a, i) => {
-                const { grade, color } = speedGrade(a.speedSec);
+                const { grade, color } = speedGrade(a.displaySpeed);
                 const pickup = a.pickupRate;
                 const pColor = pickup != null
                   ? pickup >= 80 ? '#4ade80' : pickup >= 60 ? '#fbbf24' : '#f87171'
@@ -127,7 +154,7 @@ export default function StepSpeed({ period, label }: { period: PeriodData; label
                         <span className="font-semibold capitalize">{a.agent}</span>
                       </div>
                     </TD>
-                    <TD mono right>{fmtSpeed(a.speedSec)}</TD>
+                    <TD mono right>{fmtSpeed(a.displaySpeed)}</TD>
                     <TD right>
                       <span className="text-xs font-extrabold px-1.5 py-0.5 rounded" style={{ color, background: `${color}18` }}>{grade}</span>
                     </TD>

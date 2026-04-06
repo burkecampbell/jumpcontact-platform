@@ -12,7 +12,7 @@ export default function StepConversions({ period, label, data }: { period: Perio
   const convAgents = period.conversions.byAgent;
   const convAccounts = period.conversions.byAccount;
   const repAgents = period.repActivity.agents;
-  const callouts = generateCallouts(period);
+  const callouts = generateCallouts(period, data);
   const convRate = period.conversionRate;
 
   // Peak hour

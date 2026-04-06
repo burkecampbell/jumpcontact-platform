@@ -1,6 +1,6 @@
 'use client';
 
-import { C, GOAL, computePace, agentColor } from '@/lib/constants';
+import { C, GOAL, computePace, agentColor, isJCAgent } from '@/lib/constants';
 import type { DashboardData } from '@/lib/types';
 import Card from '../Card';
 import Hero from './Hero';
@@ -10,7 +10,7 @@ import { TH, TD } from './TableCells';
 /** Step 4: MTD + YTD — monthly pace, avg/hr, agent leaderboard, year to date */
 export default function StepMTD({ data }: { data: DashboardData }) {
   const { dayOfMonth, daysInMonth, projected, pacePercent } = computePace(data.mtd.total, data.pulledAt);
-  const agents = data.mtd.byAgent;
+  const agents = data.mtd.byAgent.filter(a => isJCAgent(a.agent));
   const accounts = data.mtd.byAccount ?? [];
   const hourly = data.mtd.hourly ?? [];
   const paceColor = pacePercent >= 100 ? '#4ade80' : pacePercent >= 80 ? C.cyan : '#f87171';

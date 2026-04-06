@@ -24,19 +24,19 @@ export const T = {
   gold: '#ca8a04',
 };
 
-// ── Base sizes (desktop = 1.0x) ────────────────────────────────────
+// ── Base sizes (desktop = 1.0x, tuned for 1920×1080 at 100% zoom) ──
 const BASE: Record<string, number> = {
-  hero: 52,
-  heading: 30,
-  stepTitle: 22,
+  hero: 48,
+  heading: 26,
+  stepTitle: 20,
   agentName: 15,
-  agentValue: 20,
+  agentValue: 18,
   label: 10,
   tab: 10,
   body: 14,
   pill: 11,
   date: 12,
-  badge: 28,
+  badge: 26,
   bar: 7,
   dot: 8,
   button: 14,
@@ -47,7 +47,7 @@ const BASE: Record<string, number> = {
 const SCALE: Record<LayoutMode, number> = {
   mobile: 0.85,
   auto: 1.0,
-  tv: 2.0,
+  tv: 1.25,  // screen-sharing friendly — NOT across-the-room TV
 };
 
 // Floor clamps — nothing smaller than these on mobile

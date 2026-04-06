@@ -120,7 +120,7 @@ function MeetingPageInner() {
       case 'Calls':
         return <StepCalls period={period} label={periodLabel} data={data!} />;
       case 'Speed':
-        return <StepSpeed period={period} label={periodLabel} />;
+        return <StepSpeed period={period} label={periodLabel} data={data!} />;
       case 'Conversions':
         return <StepConversions period={period} label={periodLabel} data={data!} />;
       case 'MTD + YTD':
@@ -135,8 +135,8 @@ function MeetingPageInner() {
       <NavBar pulledAt={data.pulledAt} />
       <HealthBanner />
       <div className="max-w-4xl mx-auto px-4 py-6">
-        {/* Day Tabs */}
-        <div className="flex items-center justify-center gap-2 mb-4">
+        {/* Day Tabs + Auto-play */}
+        <div className="flex items-center justify-center gap-2 mb-4 relative">
           {['today', 'yesterday', ...(monday ? ['friday', 'weekend'] : [])].map(day => (
             <button
               key={day}
@@ -151,6 +151,18 @@ function MeetingPageInner() {
               {day.charAt(0).toUpperCase() + day.slice(1)}
             </button>
           ))}
+          <button
+            onClick={() => setAutoPlay(p => !p)}
+            className="absolute right-0 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border-none cursor-pointer transition-colors"
+            style={{
+              background: autoPlay ? C.cyan + '22' : 'rgba(139,146,168,0.1)',
+              color: autoPlay ? C.cyan : C.sub,
+              border: `1px solid ${autoPlay ? C.cyan + '44' : 'transparent'}`,
+            }}
+            title={autoPlay ? 'Pause auto-advance (Space)' : 'Resume auto-advance (Space)'}
+          >
+            {autoPlay ? '\u25AE\u25AE Auto' : '\u25B6 Auto'}
+          </button>
         </div>
 
         {/* Step Tabs */}
@@ -177,7 +189,7 @@ function MeetingPageInner() {
         </ErrorBoundary>
 
         {/* Navigation */}
-        <div className="flex items-center justify-between mt-6">
+        <div className="flex items-center justify-between mt-6 mb-12">
           <button
             onClick={() => goTo(step - 1)}
             disabled={step === 0}
@@ -189,29 +201,15 @@ function MeetingPageInner() {
           >
             &larr; Back
           </button>
-          <div className="flex items-center gap-3">
-            <div className="flex gap-1.5">
-              {stepLabels.map((_, i) => (
-                <span
-                  key={i}
-                  className="w-2 h-2 rounded-full transition-colors cursor-pointer"
-                  style={{ background: step === i ? C.cyan : 'rgba(139,146,168,0.2)' }}
-                  onClick={() => goTo(i)}
-                />
-              ))}
-            </div>
-            <button
-              onClick={() => setAutoPlay(p => !p)}
-              className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border-none cursor-pointer transition-colors"
-              style={{
-                background: autoPlay ? C.cyan + '22' : 'rgba(139,146,168,0.1)',
-                color: autoPlay ? C.cyan : C.sub,
-                border: `1px solid ${autoPlay ? C.cyan + '44' : 'transparent'}`,
-              }}
-              title={autoPlay ? 'Pause auto-advance' : 'Resume auto-advance'}
-            >
-              {autoPlay ? '\u25AE\u25AE' : '\u25B6'}
-            </button>
+          <div className="flex gap-1.5">
+            {stepLabels.map((_, i) => (
+              <span
+                key={i}
+                className="w-2 h-2 rounded-full transition-colors cursor-pointer"
+                style={{ background: step === i ? C.cyan : 'rgba(139,146,168,0.2)' }}
+                onClick={() => goTo(i)}
+              />
+            ))}
           </div>
           <button
             onClick={() => goTo(step + 1)}

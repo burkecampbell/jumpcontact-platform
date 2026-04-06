@@ -442,6 +442,7 @@ function buildMtd(
   const agentTotals: Record<string, number> = {};
   const agentDaily: Record<string, Record<string, number>> = {};
   const acctTotals: Record<string, number> = {};
+  const acctAgentCounts: Record<string, Record<string, number>> = {};
   const hourly = new Array(24).fill(0);
   const mtdDaily: { date: string; total: number }[] = [];
 
@@ -457,6 +458,10 @@ function buildMtd(
     }
     for (const a of entry.byAccount) {
       acctTotals[a.account] = (acctTotals[a.account] || 0) + a.count;
+      if (a.topAgent) {
+        if (!acctAgentCounts[a.account]) acctAgentCounts[a.account] = {};
+        acctAgentCounts[a.account][a.topAgent] = (acctAgentCounts[a.account][a.topAgent] || 0) + a.count;
+      }
     }
     for (let h = 0; h < 24; h++) hourly[h] += entry.byHour[h];
   }
@@ -476,7 +481,11 @@ function buildMtd(
     .sort((a, b) => b.count - a.count);
 
   const byAccount: AcctStat[] = Object.entries(acctTotals)
-    .map(([account, count]) => ({ account, count }))
+    .map(([account, count]) => {
+      const agents = acctAgentCounts[account];
+      const topAgent = agents ? Object.entries(agents).sort((a, b) => b[1] - a[1])[0]?.[0] : undefined;
+      return { account, count, topAgent };
+    })
     .sort((a, b) => b.count - a.count);
 
   return {
