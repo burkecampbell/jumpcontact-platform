@@ -14,7 +14,13 @@ export function StepConversions({ data }: { data: DashboardData }) {
   for (const a of data.yesterday.conversions.byAgent) convByAgent[a.agent.toLowerCase()] = a.count;
   const agents = data.yesterday.repActivity.agents
     .filter(a => !EXCLUDED_AGENTS.includes(a.agent))
-    .map(a => ({ ...a, convs: convByAgent[a.agent.toLowerCase()] || 0 }))
+    .map(a => {
+      const convs = convByAgent[a.agent.toLowerCase()] || 0;
+      // CDR can undercount calls (legs expire, pairing misses). Conversions are
+      // authoritative — you can't convert without a call, so floor calls at convs.
+      const calls = Math.max(a.calls, convs);
+      return { ...a, calls, convs };
+    })
     .sort((a, b) => b.convs - a.convs);
   const total = data.yesterday.conversions.total;
   const trend = data.trend7d.conversions;
