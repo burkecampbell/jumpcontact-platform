@@ -16,7 +16,7 @@ import MixedInsights from './MixedInsights';
 import KPICard from './KPICard';
 import { shareRecording } from '@/lib/recording-utils';
 
-type SortKey = 'calls' | 'talkMin' | 'speedSec' | 'wrapUpSec' | 'hoursScheduled' | 'convs' | 'convsPerHour';
+type SortKey = 'calls' | 'talkMin' | 'pickup' | 'wrapUp' | 'hoursScheduled' | 'convs' | 'convsPerHour' | 'pickupRate';
 
 function LiveNowPageInner() {
   const { brand, isMixed, fullName } = useBrand();
@@ -91,26 +91,45 @@ function LiveNowPageInner() {
   const convRate      = data.today.conversionRate;
   const yesterdayRate = data.yesterday.conversionRate;
 
-  // Avg ring / wrap-up across agents
+  // Avg pickup rate + wrap-up across agents
   const agents = data.today.repActivity.agents;
-  const agentsWithSpeed = agents.filter(a => a.speedSec != null);
-  const avgRing = agentsWithSpeed.length > 0
-    ? agentsWithSpeed.reduce((s, a) => s + (a.speedSec ?? 0), 0) / agentsWithSpeed.length
+  const agentsWithPickup = agents.filter(a => a.pickupRate != null);
+  const avgPickupRate = agentsWithPickup.length > 0
+    ? Math.round(agentsWithPickup.reduce((s, a) => s + (a.pickupRate ?? 0), 0) / agentsWithPickup.length)
     : null;
-  const agentsWithWrap = agents.filter(a => a.wrapUpSec != null);
+  const agentsWithWrap = agents.filter(a => a.wrapUpSec != null && a.wrapUpSec > 0);
   const avgWrap = agentsWithWrap.length > 0
     ? agentsWithWrap.reduce((s, a) => s + (a.wrapUpSec ?? 0), 0) / agentsWithWrap.length
     : null;
 
-  // Build agent ranking rows with conversions
+  // Build Ytica MTD lookup for accurate pickup speed + wrap-up fallback
+  const yticaMtd: Record<string, { avgSpeedSec?: number; avgWrapUpSec?: number }> = {};
+  for (const y of (data.mtdRepActivity || [])) {
+    yticaMtd[y.agent.toLowerCase()] = { avgSpeedSec: y.avgSpeedSec ?? undefined, avgWrapUpSec: y.avgWrapUpSec ?? undefined };
+  }
+
+  // Build agent ranking rows with conversions + Ytica-corrected speeds
   const convByAgent: Record<string, number> = {};
   for (const a of data.today.conversions.byAgent) convByAgent[a.agent.toLowerCase()] = a.count;
 
-  type RankRow = RepAgent & { convs: number };
-  const rankRows: RankRow[] = agents.map(a => ({
-    ...a,
-    convs: convByAgent[a.agent.toLowerCase()] || 0,
-  }));
+  type RankRow = RepAgent & { convs: number; pickup: number | null; wrapUp: number | null };
+  const rankRows: RankRow[] = agents.map(a => {
+    const yt = yticaMtd[a.agent.toLowerCase()];
+    // Pickup: prefer Ytica MTD when CDR is inflated (>10s), otherwise CDR
+    const pickup = (a.speedSec != null && a.speedSec > 0 && a.speedSec <= 10)
+      ? a.speedSec
+      : (yt?.avgSpeedSec ?? a.speedSec ?? null);
+    // Wrap-up: CDR when available (>0), else Ytica MTD
+    const wrapUp = (a.wrapUpSec != null && a.wrapUpSec > 0)
+      ? a.wrapUpSec
+      : (yt?.avgWrapUpSec ?? null);
+    return {
+      ...a,
+      convs: convByAgent[a.agent.toLowerCase()] || 0,
+      pickup,
+      wrapUp,
+    };
+  });
 
   // Sort
   const handleSort = (key: SortKey) => {
@@ -118,9 +137,14 @@ function LiveNowPageInner() {
     else { setSortKey(key); setSortAsc(false); }
   };
   const sorted = [...rankRows].sort((a, b) => {
-    const av = sortKey === 'convs' ? a.convs : (a[sortKey] ?? -1);
-    const bv = sortKey === 'convs' ? b.convs : (b[sortKey] ?? -1);
-    return sortAsc ? (av as number) - (bv as number) : (bv as number) - (av as number);
+    const get = (r: RankRow) => {
+      if (sortKey === 'convs') return r.convs;
+      if (sortKey === 'pickup') return r.pickup ?? -1;
+      if (sortKey === 'wrapUp') return r.wrapUp ?? -1;
+      if (sortKey === 'pickupRate') return r.pickupRate ?? -1;
+      return (r[sortKey] ?? -1) as number;
+    };
+    return sortAsc ? get(a) - get(b) : get(b) - get(a);
   });
 
   const SortIcon = ({ col }: { col: SortKey }) => {
@@ -181,9 +205,13 @@ function LiveNowPageInner() {
             badge={avgSpeed !== null ? { label: grade.grade, color: grade.color } : undefined}
           />
           <KPICard
-            label="Avg Ring"
-            value={fmtSpeed(avgRing)}
+            label="Pickup Rate"
+            value={avgPickupRate != null ? `${avgPickupRate}%` : '—'}
             icon={<Timer size={18} />}
+            badge={avgPickupRate != null ? {
+              label: avgPickupRate >= 80 ? 'Good' : avgPickupRate >= 60 ? 'OK' : 'Low',
+              color: avgPickupRate >= 80 ? '#4ade80' : avgPickupRate >= 60 ? '#facc15' : '#f87171',
+            } : undefined}
           />
           <KPICard
             label="Avg Wrap-Up"
@@ -235,8 +263,9 @@ function LiveNowPageInner() {
                       ['convs', 'Conv'],
                       ['calls', 'Calls'],
                       ['talkMin', 'Talk Time'],
-                      ['speedSec', 'Ring'],
-                      ['wrapUpSec', 'Wrap-Up'],
+                      ['pickup', 'Pickup'],
+                      ['wrapUp', 'Wrap-Up'],
+                      ['pickupRate', 'Pickup %'],
                       ['hoursScheduled', 'Hrs'],
                       ['convsPerHour', 'Conv/Hr'],
                     ] as [SortKey, string][]).map(([key, label]) => (
@@ -263,8 +292,19 @@ function LiveNowPageInner() {
                       <td className="px-5 py-2.5 text-right font-mono text-xs font-bold" style={{ color: C.lime }}>{row.convs}</td>
                       <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: C.text }}>{row.calls}</td>
                       <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: C.text }}>{fmtTalkTime(row.talkMin)}</td>
-                      <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: C.text }}>{fmtSpeed(row.speedSec)}</td>
-                      <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: C.text }}>{fmtSpeed(row.wrapUpSec)}</td>
+                      <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: row.pickup != null ? speedGrade(row.pickup).color : C.sub }}>
+                        {row.pickup != null ? fmtSpeed(row.pickup) : '—'}
+                      </td>
+                      <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: C.text }}>
+                        {row.wrapUp != null ? fmtSpeed(row.wrapUp) : '—'}
+                      </td>
+                      <td className="px-5 py-2.5 text-right font-mono text-xs" style={{
+                        color: row.pickupRate != null
+                          ? (row.pickupRate >= 80 ? '#4ade80' : row.pickupRate >= 60 ? '#facc15' : '#f87171')
+                          : C.sub
+                      }}>
+                        {row.pickupRate != null ? `${row.pickupRate}%` : '—'}
+                      </td>
                       <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: C.sub }}>{row.hoursScheduled}h</td>
                       <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: row.convsPerHour != null && row.convsPerHour >= 2 ? '#4ade80' : C.text }}>
                         {row.convsPerHour != null ? row.convsPerHour.toFixed(1) : '—'}
