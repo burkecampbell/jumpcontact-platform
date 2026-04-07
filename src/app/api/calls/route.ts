@@ -21,6 +21,7 @@ interface RawCall {
   account?: string;
   ringTime?: number;
   totalDuration?: number;
+  wrapUpSec?: number;
 }
 
 interface AgentCallSummary {
@@ -29,7 +30,8 @@ interface AgentCallSummary {
   talkMin: number;
 }
 
-function toRawCall(c: PairedCall): RawCall {
+function toRawCall(c: PairedCall, agentWrapMap?: Map<string, number>): RawCall {
+  const agentKey = (c.agent || '').toLowerCase();
   return {
     time: c.time,
     agent: c.agent,
@@ -44,6 +46,7 @@ function toRawCall(c: PairedCall): RawCall {
     account: c.client || undefined,
     ringTime: c.ringTime > 0 ? c.ringTime : undefined,
     totalDuration: c.totalDuration > 0 ? c.totalDuration : undefined,
+    wrapUpSec: agentWrapMap?.get(agentKey),
   };
 }
 
@@ -201,31 +204,30 @@ export async function GET(request: NextRequest) {
     const brand = parseBrand(searchParams.get('brand'));
     const brandPaired = clientPaired.filter(c => isCallForBrand(c, brand));
 
-    // Convert to RawCall for the response
-    const brandCalls = brandPaired.map(toRawCall);
+    // Build agent wrap-up map from KPI sheet BEFORE converting calls
+    const kpiDays = await Promise.all(
+      dates.slice(0, 7).map(d => fetchKPIForDate(d).catch(() => [] as KPIAgentDay[]))
+    );
+    const agentWrapMap = new Map<string, number>();
+    for (const dayRows of kpiDays) {
+      for (const r of dayRows) {
+        if (r.avgWrapSec > 0 && !agentWrapMap.has(r.agent)) {
+          agentWrapMap.set(r.agent, r.avgWrapSec);
+        }
+      }
+    }
+
+    // Convert to RawCall with wrap-up embedded per call
+    const brandCalls = brandPaired.map(c => toRawCall(c, agentWrapMap));
 
     const agents = buildAgentSummaries(brandCalls, brand);
     const total = brandCalls.length;
     const page = brandCalls.slice(offset, offset + limit);
     const hasMore = offset + limit < total;
 
-    // Fetch KPI sheet wrap-up per agent for the date range
-    const kpiDays = await Promise.all(
-      dates.slice(0, 7).map(d => fetchKPIForDate(d).catch(() => [] as KPIAgentDay[]))
-    );
-    const agentWrap: Record<string, number> = {};
-    for (const dayRows of kpiDays) {
-      for (const r of dayRows) {
-        if (r.avgWrapSec > 0 && !agentWrap[r.agent]) {
-          agentWrap[r.agent] = r.avgWrapSec;
-        }
-      }
-    }
-
     return NextResponse.json({
       calls: page,
       agents,
-      agentWrap,
       pulledAt: new Date().toISOString(),
       total,
       hasMore,

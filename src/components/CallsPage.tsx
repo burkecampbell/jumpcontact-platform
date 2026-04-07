@@ -88,12 +88,13 @@ async function downloadReport(calls: RawCall[], filename: string, _date: string)
     { width: 18 },  // D: Phone
     { width: 12 },  // E: Duration
     { width: 10 },  // F: Ring Time
-    { width: 12 },  // G: Direction
-    { width: 18 },  // H: Recording
+    { width: 10 },  // G: Wrap Up
+    { width: 12 },  // H: Direction
+    { width: 18 },  // I: Recording
   ];
 
   // ── Branded header (teal bar) ──
-  ws.mergeCells('A1:G1');
+  ws.mergeCells('A1:H1');
   const titleCell = ws.getCell('A1');
   titleCell.value = 'JUMP CONTACT';
   titleCell.font = { name: 'Arial', size: 20, bold: true, color: { argb: WHITE } };
@@ -102,13 +103,13 @@ async function downloadReport(calls: RawCall[], filename: string, _date: string)
   titleCell.border = { bottom: { style: 'medium', color: { argb: JC_TEAL } } };
   ws.getRow(1).height = 36;
 
-  ws.mergeCells('A2:G2');
+  ws.mergeCells('A2:H2');
   const subtitleCell = ws.getCell('A2');
   subtitleCell.value = 'Call Detail Report';
   subtitleCell.font = { name: 'Arial', size: 12, bold: true, color: { argb: JC_DARK } };
   subtitleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: WHITE } };
 
-  ws.mergeCells('A3:G3');
+  ws.mergeCells('A3:H3');
   const dateCell = ws.getCell('A3');
   const fromDate = calls.length > 0 ? new Date(calls[calls.length - 1].time) : new Date();
   const toDate = calls.length > 0 ? new Date(calls[0].time) : new Date();
@@ -122,7 +123,7 @@ async function downloadReport(calls: RawCall[], filename: string, _date: string)
   const labelFont = { name: 'Arial', size: 11, bold: true, color: { argb: JC_LABEL } };
   const valueFont = { name: 'Arial', size: 13, bold: true, color: { argb: JC_TEXT } };
 
-  for (let c = 1; c <= 7; c++) {
+  for (let c = 1; c <= 8; c++) {
     ws.getRow(5).getCell(c).fill = infoFill;
     ws.getRow(5).getCell(c).border = { top: thin(JC_BORDER), bottom: thin(JC_BORDER) };
     ws.getRow(6).getCell(c).fill = infoFill;
@@ -136,12 +137,12 @@ async function downloadReport(calls: RawCall[], filename: string, _date: string)
   ws.getCell('E5').value = 'Outbound'; ws.getCell('E5').font = labelFont;
   ws.getCell('F5').value = outbound; ws.getCell('F5').font = { ...valueFont, color: { argb: JC_BLUE } };
   ws.getCell('G5').value = 'Talk Time'; ws.getCell('G5').font = labelFont;
+  ws.getCell('H5').value = fmtDur(totalDurSec); ws.getCell('H5').font = valueFont;
   ws.getCell('A6').value = 'Recordings'; ws.getCell('A6').font = labelFont;
   ws.getCell('B6').value = withRec; ws.getCell('B6').font = valueFont;
-  ws.getCell('G6').value = fmtDur(totalDurSec); ws.getCell('G6').font = valueFont;
 
   // ── Column headers (row 8) — teal underline per doc standards ──
-  const headers = ['Time', 'Agent', 'Client', 'Phone', 'Duration', 'Ring Time', 'Direction', 'Recording'];
+  const headers = ['Time', 'Agent', 'Client', 'Phone', 'Duration', 'Ring Time', 'Wrap Up', 'Direction', 'Recording'];
   const headerRowXLS = ws.getRow(8);
   headers.forEach((h, i) => {
     const cell = headerRowXLS.getCell(i + 1);
@@ -154,7 +155,7 @@ async function downloadReport(calls: RawCall[], filename: string, _date: string)
   headerRowXLS.height = 22;
 
   // Auto-filter
-  ws.autoFilter = { from: { row: 8, column: 1 }, to: { row: 8 + calls.length, column: 8 } };
+  ws.autoFilter = { from: { row: 8, column: 1 }, to: { row: 8 + calls.length, column: 9 } };
 
   // ── Data rows — alternating white/gray stripes ──
   calls.forEach((c, i) => {
@@ -184,21 +185,25 @@ async function downloadReport(calls: RawCall[], filename: string, _date: string)
     row.getCell(6).font = { ...baseFont, color: { argb: c.ringTime ? JC_TEAL : 'CCCCCC' } };
     row.getCell(6).alignment = { horizontal: 'right' };
 
+    row.getCell(7).value = c.wrapUpSec ? Math.round(c.wrapUpSec) + 's' : '';
+    row.getCell(7).font = { ...baseFont, color: { argb: c.wrapUpSec ? JC_LABEL : 'CCCCCC' } };
+    row.getCell(7).alignment = { horizontal: 'right' };
+
     const isInbound = c.direction === 'inbound';
-    row.getCell(7).value = isInbound ? 'Inbound' : 'Outbound';
-    row.getCell(7).font = { ...baseFont, size: 10, color: { argb: isInbound ? JC_GREEN : JC_BLUE } };
+    row.getCell(8).value = isInbound ? 'Inbound' : 'Outbound';
+    row.getCell(8).font = { ...baseFont, size: 10, color: { argb: isInbound ? JC_GREEN : JC_BLUE } };
 
     // Recording hyperlink — teal per brand
     const url = buildPlayerUrl(c);
     if (url) {
-      row.getCell(8).value = { text: '▶ Play', hyperlink: url };
-      row.getCell(8).font = { name: 'Arial', size: 10, color: { argb: JC_TEAL }, underline: true };
+      row.getCell(9).value = { text: '▶ Play', hyperlink: url };
+      row.getCell(9).font = { name: 'Arial', size: 10, color: { argb: JC_TEAL }, underline: true };
     } else {
-      row.getCell(8).value = '—';
-      row.getCell(8).font = { ...baseFont, color: { argb: 'CCCCCC' } };
+      row.getCell(9).value = '—';
+      row.getCell(9).font = { ...baseFont, color: { argb: 'CCCCCC' } };
     }
 
-    for (let col = 1; col <= 8; col++) {
+    for (let col = 1; col <= 9; col++) {
       row.getCell(col).fill = fillStyle;
       row.getCell(col).border = docBorder;
     }
@@ -551,7 +556,6 @@ function CallsPageInner() {
 
   const agents = ['all', ...ACTIVE_AGENTS];
 
-  // Agent wrap-up lookup — placeholder for future per-call wrap column
   const totalCalls = data.calls.length;
   const recordingCount = data.calls.filter(c => c.recordingUrl).length;
 
@@ -656,7 +660,7 @@ function CallsPageInner() {
                       </button>
                     )}
                   </th>
-                  {['Time', 'Agent', 'Client', 'Phone', 'Duration', 'Ring', '', 'Recording'].map(h => (
+                  {['Time', 'Agent', 'Client', 'Phone', 'Duration', 'Ring', 'Wrap', '', 'Recording'].map(h => (
                     <th key={h} className="px-5 py-2.5 text-left text-xs font-medium" style={{ color: C.sub }}>{h}</th>
                   ))}
                 </tr>
@@ -690,6 +694,9 @@ function CallsPageInner() {
                       <td className="px-5 py-2.5 font-mono text-xs" style={{ color: C.text }}>{formatDuration(call.duration)}</td>
                       <td className="px-5 py-2.5 font-mono text-xs" style={{ color: call.ringTime ? C.cyan : C.border }}>
                         {call.ringTime ? call.ringTime + 's' : '—'}
+                      </td>
+                      <td className="px-5 py-2.5 font-mono text-xs" style={{ color: call.wrapUpSec ? C.sub : C.border }}>
+                        {call.wrapUpSec ? Math.round(call.wrapUpSec) + 's' : '—'}
                       </td>
                       <td className="px-5 py-2.5">
                         {call.direction === 'inbound'
@@ -729,7 +736,7 @@ function CallsPageInner() {
                 })}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-5 py-12 text-center text-sm" style={{ color: C.sub }}>
+                    <td colSpan={10} className="px-5 py-12 text-center text-sm" style={{ color: C.sub }}>
                       No calls match the current filters
                     </td>
                   </tr>

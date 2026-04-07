@@ -266,6 +266,7 @@ export interface RawCall {
   account?: string;
   ringTime?: number;
   totalDuration?: number;
+  wrapUpSec?: number;
 }
 
 export interface MtdData {
