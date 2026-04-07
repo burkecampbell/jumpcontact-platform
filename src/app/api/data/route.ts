@@ -928,6 +928,26 @@ async function fetchDashboardData(): Promise<DashboardData> {
       if (kpi.totalTalkMin > 0 && agent.talkMin === 0) {
         agent.talkMin = kpi.totalTalkMin;
       }
+      // Conversions — KPI sheet has brand-accurate conversion counts
+      if (kpi.conversions > 0) {
+        agent.conversions = kpi.conversions;
+      }
+    }
+
+    // Rebuild conversions.byAgent from KPI-overridden agent data
+    if (kpiRows.length > 0) {
+      const kpiConvByAgent = period.repActivity.agents
+        .filter(a => a.conversions > 0)
+        .map(a => ({ agent: a.agent, count: a.conversions }))
+        .sort((a, b) => b.count - a.count);
+      const kpiConvTotal = kpiConvByAgent.reduce((s, a) => s + a.count, 0);
+      if (kpiConvTotal > 0) {
+        period.conversions = {
+          ...period.conversions,
+          total: kpiConvTotal,
+          byAgent: kpiConvByAgent,
+        };
+      }
     }
 
     // Recompute team average from KPI-corrected values
