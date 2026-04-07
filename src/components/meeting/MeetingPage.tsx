@@ -422,9 +422,9 @@ function MeetingPageInner() {
               onClick={() => setActiveDay(day as typeof activeDay)}
               className="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors border-none cursor-pointer"
               style={{
-                background: activeDay === day ? C.cyan + '22' : 'transparent',
+                background: activeDay === day ? C.cyanSoft : 'transparent',
                 color: activeDay === day ? C.cyan : C.sub,
-                border: activeDay === day ? `1px solid ${C.cyan}44` : '1px solid transparent',
+                border: activeDay === day ? `1px solid ${C.cyanHover}` : '1px solid transparent',
               }}
             >
               {day.charAt(0).toUpperCase() + day.slice(1)}
@@ -459,9 +459,9 @@ function MeetingPageInner() {
               onClick={() => setAutoPlay(p => !p)}
               className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border-none cursor-pointer transition-colors"
               style={{
-                background: autoPlay ? C.cyan + '22' : 'rgba(139,146,168,0.1)',
+                background: autoPlay ? C.cyanSoft : 'rgba(139,146,168,0.1)',
                 color: autoPlay ? C.cyan : C.sub,
-                border: `1px solid ${autoPlay ? C.cyan + '44' : 'transparent'}`,
+                border: `1px solid ${autoPlay ? C.cyanHover : 'transparent'}`,
               }}
               title={autoPlay ? 'Pause auto-advance (Space)' : 'Resume auto-advance (Space)'}
             >
@@ -478,9 +478,9 @@ function MeetingPageInner() {
               onClick={() => goTo(i)}
               className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border-none cursor-pointer"
               style={{
-                background: step === i ? C.cyan + '22' : 'transparent',
+                background: step === i ? C.cyanSoft : 'transparent',
                 color: step === i ? C.text : C.sub,
-                border: step === i ? `1px solid ${C.cyan}44` : '1px solid transparent',
+                border: step === i ? `1px solid ${C.cyanHover}` : '1px solid transparent',
               }}
             >
               {i + 1}. {label}

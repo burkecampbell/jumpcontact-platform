@@ -167,14 +167,14 @@ function CalendarMonth({
           let borderRadius = '6px';
 
           if (disabled) {
-            textColor = C.sub + '55';
+            textColor = 'rgba(139,146,168,0.33)';
           } else if (isStart || isEnd) {
             bg = C.cyan;
             textColor = '#0A0E1A';
             fontWeight = '700';
             borderRadius = isStart && isEnd ? '6px' : isStart ? '6px 0 0 6px' : '0 6px 6px 0';
           } else if (inRange) {
-            bg = C.cyan + '22';
+            bg = C.cyanSoft;
             textColor = C.text;
             borderRadius = '0';
           }
@@ -195,7 +195,7 @@ function CalendarMonth({
                 fontFamily: 'var(--font-mono, monospace)',
                 opacity: disabled ? 0.3 : 1,
                 cursor: disabled ? 'not-allowed' : 'pointer',
-                ...(isToday && !isStart && !isEnd ? { boxShadow: `inset 0 0 0 1px ${C.cyan}66` } : {}),
+                ...(isToday && !isStart && !isEnd ? { boxShadow: `inset 0 0 0 1px ${C.cyanMuted}` } : {}),
               }}
             >
               {day}
@@ -317,8 +317,8 @@ export default function DateRangePicker({ value, onChange, maxDate }: Props) {
         }}
         className="flex items-center gap-2 rounded-lg px-3 py-1.5 border transition-all cursor-pointer"
         style={{
-          background: open ? C.cyan + '15' : C.card,
-          borderColor: open ? C.cyan + '66' : C.cyan + '44',
+          background: open ? C.cyanSoft : C.card,
+          borderColor: open ? C.cyanMuted : C.cyanHover,
           color: C.text,
         }}
       >
@@ -329,7 +329,7 @@ export default function DateRangePicker({ value, onChange, maxDate }: Props) {
         {days > 1 && (
           <span
             className="text-[10px] font-mono rounded-md px-1.5 py-0.5"
-            style={{ background: C.cyan + '22', color: C.cyan }}
+            style={{ background: C.cyanSoft, color: C.cyan }}
           >
             {days}d
           </span>
@@ -362,7 +362,7 @@ export default function DateRangePicker({ value, onChange, maxDate }: Props) {
                   onClick={() => handlePreset(p.range)}
                   className="text-left px-2.5 py-1.5 rounded-md text-xs transition-colors border-none cursor-pointer"
                   style={{
-                    background: activePreset === p.label ? C.cyan + '22' : 'transparent',
+                    background: activePreset === p.label ? C.cyanSoft : 'transparent',
                     color: activePreset === p.label ? C.cyan : C.sub,
                     fontWeight: activePreset === p.label ? '600' : '400',
                   }}
@@ -400,7 +400,7 @@ export default function DateRangePicker({ value, onChange, maxDate }: Props) {
 
                 {selecting === 'start' && (
                   <div className="text-[10px] font-medium px-2 py-0.5 rounded-full"
-                    style={{ background: C.cyan + '22', color: C.cyan }}>
+                    style={{ background: C.cyanSoft, color: C.cyan }}>
                     Select end date
                   </div>
                 )}

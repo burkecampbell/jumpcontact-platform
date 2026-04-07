@@ -50,7 +50,7 @@ export default function DraggableCard({
           ? 'rgba(20,24,36,0.88)'
           : C.card,
         borderRadius: '16px',
-        border: `1px solid ${state.isDragging ? C.cyan + '44' : C.border}`,
+        border: `1px solid ${state.isDragging ? C.cyanHover : C.border}`,
         padding: '20px',
         boxShadow: state.isDragging
           ? '0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(62,165,195,0.2)'

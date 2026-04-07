@@ -165,7 +165,7 @@ function PlayerInner() {
           borderRadius: 20,
           border: `1px solid ${C.border}`,
           overflow: 'hidden',
-          boxShadow: `0 0 80px ${C.cyan}08, 0 20px 60px rgba(0,0,0,0.5)`,
+          boxShadow: '0 0 80px rgba(62,165,195,0.03), 0 20px 60px rgba(0,0,0,0.5)',
         }}>
           {/* Call Info Header */}
           <div style={{
@@ -180,7 +180,7 @@ function PlayerInner() {
                 letterSpacing: 1.5,
                 textTransform: 'uppercase',
                 color: dir === 'inbound' ? '#4ade80' : C.cyan,
-                background: dir === 'inbound' ? '#4ade8015' : C.cyan + '15',
+                background: dir === 'inbound' ? 'rgba(74,222,128,0.08)' : 'rgba(62,165,195,0.08)',
                 padding: '4px 10px',
                 borderRadius: 6,
               }}>
@@ -277,7 +277,7 @@ function PlayerInner() {
                     top: 0,
                     bottom: 0,
                     width: `${progress}%`,
-                    background: `linear-gradient(90deg, ${C.cyan}30, ${C.cyan}50)`,
+                    background: 'linear-gradient(90deg, rgba(62,165,195,0.19), rgba(62,165,195,0.31))',
                     transition: 'width 0.1s linear',
                     borderRadius: 8,
                   }} />
@@ -301,7 +301,7 @@ function PlayerInner() {
                             flex: 1,
                             height: Math.max(4, h),
                             borderRadius: 2,
-                            background: played ? C.cyan : C.cyan + '25',
+                            background: played ? C.cyan : 'rgba(62,165,195,0.15)',
                             transition: 'background 0.15s',
                           }}
                         />
@@ -316,12 +316,12 @@ function PlayerInner() {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      background: C.bg + 'cc',
+                      background: 'rgba(10,14,26,0.8)',
                     }}>
                       <div style={{
                         width: 24,
                         height: 24,
-                        border: `2px solid ${C.cyan}33`,
+                        border: '2px solid rgba(62,165,195,0.2)',
                         borderTopColor: C.cyan,
                         borderRadius: '50%',
                         animation: 'spin 0.8s linear infinite',
@@ -354,12 +354,12 @@ function PlayerInner() {
                       height: 56,
                       borderRadius: '50%',
                       border: 'none',
-                      background: state === 'playing' ? C.cyan : `linear-gradient(135deg, ${C.cyan}, ${C.cyan}cc)`,
+                      background: state === 'playing' ? C.cyan : `linear-gradient(135deg, ${C.cyan}, rgba(62,165,195,0.8))`,
                       cursor: state === 'loading' ? 'wait' : 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      boxShadow: `0 4px 20px ${C.cyan}40`,
+                      boxShadow: '0 4px 20px rgba(62,165,195,0.25)',
                       transition: 'transform 0.15s, box-shadow 0.15s',
                     }}
                     onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.08)'; }}
@@ -461,7 +461,7 @@ function PlayerInner() {
         </div>
 
         {/* Footer */}
-        <div style={{ textAlign: 'center', marginTop: 24, fontSize: 11, color: C.sub + '80' }}>
+        <div style={{ textAlign: 'center', marginTop: 24, fontSize: 11, color: 'rgba(139,146,168,0.5)' }}>
           Call SID: {sid.slice(0, 20)}...
         </div>
       </div>

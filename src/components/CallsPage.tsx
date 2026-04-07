@@ -309,7 +309,7 @@ function FilterDropdown({ value, onChange, options }: {
       style={{
         background: C.card,
         color: value !== 'all' ? C.cyan : C.sub,
-        border: `1px solid ${value !== 'all' ? C.cyan + '44' : C.border}`,
+        border: `1px solid ${value !== 'all' ? C.cyanHover : C.border}`,
         paddingRight: '1.5rem',
         backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238B92A8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
         backgroundRepeat: 'no-repeat',
@@ -625,7 +625,7 @@ function CallsPageInner() {
                 onClick={handleBulkDownload}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
                 style={{
-                  background: C.cyan + '18',
+                  background: C.cyanSoft,
                   color: C.cyan,
                   border: `1px solid ${C.cyan}44`,
                 }}
@@ -639,9 +639,9 @@ function CallsPageInner() {
               disabled={!filtered.length || exporting}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
               style={{
-                background: filtered.length ? C.lime + '18' : 'transparent',
+                background: filtered.length ? C.limeSoft : 'transparent',
                 color: filtered.length ? C.lime : C.sub,
-                border: `1px solid ${filtered.length ? C.lime + '44' : C.border}`,
+                border: `1px solid ${filtered.length ? C.limeHover : C.border}`,
                 opacity: exporting ? 0.6 : 1,
               }}
             >
@@ -771,7 +771,7 @@ function CallsPageInner() {
                 disabled={exporting}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border-none cursor-pointer transition-colors"
                 style={{
-                  background: C.lime + '18',
+                  background: C.limeSoft,
                   color: C.lime,
                   border: `1px solid ${C.lime}44`,
                   opacity: exporting ? 0.6 : 1,

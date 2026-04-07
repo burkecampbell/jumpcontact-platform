@@ -126,9 +126,9 @@ function PacePill({ label, value, color }: { label: string; value: string; color
 
 function cellColor(count: number): string {
   if (count === 0) return 'rgba(139,146,168,0.08)';
-  if (count <= 2) return C.cyan + '30';
-  if (count <= 4) return C.cyan + '60';
-  return C.cyan + '99';
+  if (count <= 2) return C.cyanHover;
+  if (count <= 4) return C.cyanMuted;
+  return C.cyanMuted;
 }
 
 function cellText(count: number): string {
@@ -664,9 +664,9 @@ function RacePageInner() {
               disabled={!topAccounts.length}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
               style={{
-                background: topAccounts.length ? C.lime + '18' : 'transparent',
+                background: topAccounts.length ? C.limeSoft : 'transparent',
                 color: topAccounts.length ? C.lime : C.sub,
-                border: `1px solid ${topAccounts.length ? C.lime + '44' : C.border}`,
+                border: `1px solid ${topAccounts.length ? C.limeHover : C.border}`,
               }}
             >
               <Download size={13} />
