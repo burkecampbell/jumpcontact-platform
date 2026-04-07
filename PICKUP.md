@@ -2,71 +2,55 @@
 tags: [client/msc, ghl, google-sheets, jump-contact, platform, twilio, type/integration, type/spec, type/tool]
 ---
 
-# Pickup Prompt — Brand Pipeline Rework
+# Pickup Prompt — April 7 Session Handoff
 
-Read CLAUDE.md at C:\App Builder\PLATFORM\tools\jumpcontact-platform\CLAUDE.md first.
+> Read CLAUDE.md first, then this file. Handoff from April 6-7 marathon (50+ commits).
 
-## Context
+## What's Working
 
-The jumpcontact-platform has a JC/Mixed/MSC brand toggle. The numbers DON'T ADD UP:
-- JC Yesterday: 270 calls | MSC Yesterday: 278 | Mixed: 460 | **Ytica truth: 351**
-- JC + MSC = 548 ≠ 351. Mixed = 460 ≠ 351. All wrong.
+- **Brand toggle** (JC/Mixed/MSC) via `?brand=` — all pages respond
+- **Date range picker** — double calendar, presets, 90-day max
+- **Call Log** — pagination (200 + Load 50), Export All ExcelJS, Ring Time column
+- **Meeting page** — 5 steps (Calls → Speed → Pickup Rate → Conversions → MTD), Monday mode
+- **KPI Sheet connected** — reads "Stats & KPI" sheet (15d--jXha...), overrides speed/wrap/pickup
+- **Recording map** — 29,707 CA→RE pairs, midnight cron
+- **316 tests pass**, build clean, production live
 
-## Root Cause
+## Unfinished (Priority Order)
 
-Mixed mode is not the canonical source. JC and MSC are built independently, causing:
-1. Blended agents (Wendy 58 calls, Sara 16 calls) counted in BOTH JC and MSC at full value
-2. `Math.max(cdr.calls, ytica.calls)` in blending inflates when CDR mispairs more than Ytica reports
-3. No per-client call splitting for blended agents
+### 1. LIGHT MODE — Half-baked
+C object returns CSS var() refs. 26 opacity patterns fixed. ThemeToggle in NavBar.
+BUT: hardcoded dark colors (`#141824`, `rgba(10,14,26,...)`) in many components.
+Light palette in globals.css defined but untested end-to-end.
+**Fix**: grep hardcoded dark hex, replace with C vars, test light mode.
 
-## What Must Be True
+### 2. MSC CONVERSIONS — Not flowing for today
+KPI sheet has yesterday's MSC conversions (Desi=10, Francis=9). Today may not have data yet.
+`applyKPIOverrides()` patches agents from KPI sheet when data exists.
+**Fix**: verify yesterday MSC conv, investigate KPI sheet update cadence.
 
-- **Mixed = Ytica total (351 yesterday)** — the superset, built first
-- **JC + MSC = Mixed** — mathematically enforced
-- Blended agents' calls split by which client they served (Clients Yesterday Ytica sheet has per-phone-number data, each phone maps to a brand via clients.json)
+### 3. WRAP-UP COLUMN — Reverted after crash
+Caused infinite re-render (React #310) from agentWrap useMemo.
+**Fix**: enrich call records in `toRawCall()` server-side, not client-side memo.
 
-## Data Sources (DO NOT CHANGE THIS HIERARCHY)
+### 4. MSC AGENT HOURS → Conv/Hr
+File: `C:\Users\fuzzy\Downloads\All AGENT HOURS - MSC MST _ Mountain Time (Shared) (4).xlsx`
+Monthly tabs, shift strings like "6am-5pm". Parse to hours, compute conv/hr.
 
-1. **Ytica Google Sheet** (6am daily dump) = source of truth for yesterday and historical daily metrics
-2. **Twilio CDR** (30s cache) = source of truth for TODAY's real-time data only
-3. **Google Sheets conversions** = JC conversion tracking
-4. **GHL via ops-center** = MSC conversion tracking (appt_booked tags)
+### 5. CEO BUILD REPORT
+`src/lib/ceo-report.ts` written (5-sheet ExcelJS). Not wired to any UI button.
 
-## Architecture Fix
+### 6. RECORDING PERSISTENCE → Neon
+Cron discovers pairs but only caches in-memory (~15 min). Need Neon `recordings` table.
 
-1. `fetchDashboardData()` builds period data from Ytica (already works via `blendYticaIntoPerioData`)
-2. The GET handler currently runs `filterByBrand()` which only removes agents — needs to SPLIT blended agent call counts
-3. Need to read "Clients Yesterday" Ytica sheet (per-external-contact volumes) to split Wendy/Sara
-4. Mixed shows the raw Ytica total. JC = JC agents + Wendy's JC-client portion + Sara's JC-client portion. MSC = MSC agents + Wendy's MSC-client portion + Sara's MSC-client portion.
+### 7. MSC CLIENT CALLS SHEET
+`src/lib/msc-calls.ts` reads Sheet ID 15sZ-T-y1lre... Not wired to any page.
 
-## Key Files
+### 8. CLEANUP
+- Delete `src/app/api/debug-kpi/route.ts` (temporary)
+- Fix favicon 404
 
-- `src/app/api/data/route.ts` — GET handler, filterByBrand call, buildPeriodData
-- `src/lib/blender.ts` — filterByBrand(), blendYticaIntoPerioData()
-- `src/lib/sheets.ts` — fetchYticaRepActivity(), JUMP_AGENTS set, Ytica sheet reading
-- `src/lib/types.ts` — PairedCall (has pairMethod/brandSource provenance fields)
-- `src/data/clients.json` — phone→client mapping, clientBrands map
+## Env Vars Added (Production)
 
-## What Was Done This Session
-
-- Completed 9-item improvement backlog (phone pairing, cache, tests, CI, ops-center, etc.)
-- Built /morning page (automated morning meeting dashboard, light theme, TV/Auto/Mobile modes)
-- Built data provenance system (pairMethod + brandSource on every PairedCall)
-- Fixed JUMP_AGENTS whitelist (was missing 7 MSC agents)
-- Fixed GET handler to use Ytica as source of truth (not CDR rebuild)
-- MSC now shows real Ytica numbers (Richard 38, Natalie 43, etc.)
-- Brand filtering still double-counts blended agents — THE MAIN REMAINING BUG
-
-## Verification Data
-
-Burke's Ytica file (Burke Daily Rep Activity (71).xlsx) for April 1:
-- Total: 351 calls across 14 agents
-- JC agents: Omar 36, Burke 44, Danny 27, Chris 19, Ian 7 = 133
-- MSC agents: Richard 38, Natalie 43, Sofia 29, Desi 31, Sue 25, Francis 20, Anthony 12, Rebecca 2 = 200
-- Blended: Wendy 58, Sara 16 = 74
-- 133 + 200 + 74 = 407 (agent total > 351 because Ytica counts "Call Conversations" which includes re-engagements)
-
-Burke's Clients Yesterday (64).xlsx shows per-phone call volumes:
-- JC client calls: 177
-- MSC client calls: 211
-- Unknown: 16
+- `MSC_KPI_SHEET_ID` = `15d--jXhaWvWk_QuMJcsxV1Oirlc7bjtieS1p4ClZnec`
+- `MSC_CALLS_SHEET_ID` = `YOUR_SHEET_ID`
