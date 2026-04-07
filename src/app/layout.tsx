@@ -17,13 +17,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         elements: getClerkPageElements(),
       }}
     >
-      <html lang="en" className="dark">
+      <html lang="en" suppressHydrationWarning>
         <head>
           <link rel="preconnect" href="https://fonts.googleapis.com" />
           <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
           <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+          {/* Flash prevention: apply saved theme before paint */}
+          <script dangerouslySetInnerHTML={{ __html: `try{if(localStorage.getItem('jc-theme')==='light')document.documentElement.classList.add('light')}catch(e){}` }} />
         </head>
-        <body className="antialiased min-h-screen" style={{ background: getPageBackground() }}>
+        <body className="antialiased min-h-screen" style={{ background: 'var(--jc-bg)' }}>
           <main className="pt-14">
             {children}
           </main>

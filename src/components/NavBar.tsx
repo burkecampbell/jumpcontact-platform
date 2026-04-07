@@ -7,6 +7,8 @@ import { Suspense } from 'react';
 import { Activity, Phone, Presentation, Trophy } from 'lucide-react';
 import { UserButton } from '@clerk/nextjs';
 import BrandToggle from './BrandToggle';
+import ThemeToggle from './ThemeToggle';
+import { C } from '@/lib/constants';
 
 function getMeetingLabel(): string {
   const day = new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/Edmonton' });
@@ -38,8 +40,8 @@ function NavBarInner({ pulledAt }: { pulledAt?: string }) {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-xl border-b"
          style={{
-           background: 'rgba(10,14,26,0.82)',
-           borderColor: 'rgba(62,165,195,0.18)',
+           background: C.navBg,
+           borderColor: C.border,
          }}>
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
         {/* Logo + Brand Toggle */}
@@ -47,7 +49,7 @@ function NavBarInner({ pulledAt }: { pulledAt?: string }) {
           <Link href={'/' + brandSuffix} className="flex items-center gap-2">
             <Image src="/logo.png" alt="JC" width={100} height={28} className="h-7 w-auto" />
           </Link>
-          <div style={{ width: 1, height: 20, background: 'rgba(62,165,195,0.18)' }} />
+          <div style={{ width: 1, height: 20, background: C.border }} />
           <BrandToggle />
         </div>
 
@@ -61,7 +63,7 @@ function NavBarInner({ pulledAt }: { pulledAt?: string }) {
                 href={href + brandSuffix}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors relative"
                 style={{
-                  color: active ? accent : '#8B92A8',
+                  color: active ? accent : C.sub,
                 }}
               >
                 <Icon size={16} />
@@ -77,10 +79,11 @@ function NavBarInner({ pulledAt }: { pulledAt?: string }) {
         {/* Right side: time + user */}
         <div className="flex items-center gap-3 shrink-0">
           {timeStr && (
-            <span className="text-xs" style={{ color: '#8B92A8' }}>
+            <span className="text-xs" style={{ color: C.sub }}>
               Pulled {timeStr}
             </span>
           )}
+          <ThemeToggle />
           <UserButton appearance={{ elements: { avatarBox: 'w-7 h-7' } }} />
         </div>
       </div>

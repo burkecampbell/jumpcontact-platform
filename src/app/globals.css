@@ -1,5 +1,6 @@
 @import "tailwindcss";
 
+/* ── Dark mode (default) ────────────────────────────────────────── */
 :root {
   --jc-bg: #0A0E1A;
   --jc-card: rgba(20,24,36,0.72);
@@ -9,6 +10,50 @@
   --jc-lime: #BCFD4C;
   --jc-cyan: #3EA5C3;
   --jc-pink: #E63888;
+  --jc-good: #4ade80;
+  --jc-warn: #fbbf24;
+  --jc-bad: #f87171;
+  --jc-info: #38bdf8;
+  /* Opacity variants (used where code did C.cyan + '22') */
+  --jc-cyan-soft: color-mix(in srgb, #3EA5C3 13%, transparent);
+  --jc-cyan-hover: color-mix(in srgb, #3EA5C3 27%, transparent);
+  --jc-cyan-muted: color-mix(in srgb, #3EA5C3 40%, transparent);
+  --jc-lime-soft: color-mix(in srgb, #BCFD4C 10%, transparent);
+  --jc-lime-hover: color-mix(in srgb, #BCFD4C 27%, transparent);
+  --jc-pink-soft: color-mix(in srgb, #E63888 10%, transparent);
+  /* Nav/chrome */
+  --jc-nav-bg: rgba(10,14,26,0.82);
+  --jc-table-hover: rgba(62,165,195,0.06);
+  --jc-skeleton: rgba(139,146,168,0.2);
+  --jc-scrollbar: rgba(62,165,195,0.3);
+  color-scheme: dark;
+}
+
+/* ── Light mode — MSC teal-inspired ─────────────────────────────── */
+html.light {
+  --jc-bg: #f8fafc;
+  --jc-card: rgba(255,255,255,0.9);
+  --jc-text: #1e293b;
+  --jc-sub: #64748b;
+  --jc-border: rgba(91,197,212,0.18);
+  --jc-lime: #059669;
+  --jc-cyan: #0891b2;
+  --jc-pink: #db2777;
+  --jc-good: #16a34a;
+  --jc-warn: #d97706;
+  --jc-bad: #dc2626;
+  --jc-info: #0284c7;
+  --jc-cyan-soft: color-mix(in srgb, #0891b2 8%, transparent);
+  --jc-cyan-hover: color-mix(in srgb, #0891b2 15%, transparent);
+  --jc-cyan-muted: color-mix(in srgb, #0891b2 25%, transparent);
+  --jc-lime-soft: color-mix(in srgb, #059669 8%, transparent);
+  --jc-lime-hover: color-mix(in srgb, #059669 15%, transparent);
+  --jc-pink-soft: color-mix(in srgb, #db2777 8%, transparent);
+  --jc-nav-bg: rgba(248,250,252,0.92);
+  --jc-table-hover: rgba(91,197,212,0.06);
+  --jc-skeleton: rgba(100,116,139,0.12);
+  --jc-scrollbar: rgba(91,197,212,0.3);
+  color-scheme: light;
 }
 
 @theme inline {
@@ -20,7 +65,7 @@
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(62,165,195,0.3) transparent;
+  scrollbar-color: var(--jc-scrollbar) transparent;
 }
 
 body {
@@ -29,6 +74,7 @@ body {
   font-family: "Inter", system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .glass-card {
@@ -44,7 +90,7 @@ body {
 }
 .skeleton {
   animation: pulse-skeleton 1.5s ease-in-out infinite;
-  background: rgba(139,146,168,0.2);
+  background: var(--jc-skeleton);
   border-radius: 0.5rem;
 }
 
@@ -57,5 +103,5 @@ body {
 }
 
 .table-row-hover:hover {
-  background: rgba(62,165,195,0.06);
+  background: var(--jc-table-hover);
 }

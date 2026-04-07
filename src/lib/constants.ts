@@ -1,17 +1,27 @@
-// ── Colors ──────────────────────────────────────────────────────────
+// ── Colors (CSS variable bridge — values defined in globals.css) ────
+// Dark/light mode is controlled by `html.light` class toggle.
+// All 471+ inline style references resolve through these CSS vars.
 export const C = {
-  bg:     '#0A0E1A',
-  card:   'rgba(20,24,36,0.72)',
-  text:   '#f1f5f9',
-  sub:    '#8B92A8',
-  border: 'rgba(62,165,195,0.18)',
-  lime:   '#BCFD4C',
-  cyan:   '#3EA5C3',
-  pink:   '#E63888',
-  good:   '#4ade80',
-  warn:   '#fbbf24',
-  bad:    '#f87171',
-  info:   '#38bdf8',
+  bg:        'var(--jc-bg)',
+  card:      'var(--jc-card)',
+  text:      'var(--jc-text)',
+  sub:       'var(--jc-sub)',
+  border:    'var(--jc-border)',
+  lime:      'var(--jc-lime)',
+  cyan:      'var(--jc-cyan)',
+  pink:      'var(--jc-pink)',
+  good:      'var(--jc-good)',
+  warn:      'var(--jc-warn)',
+  bad:       'var(--jc-bad)',
+  info:      'var(--jc-info)',
+  // Opacity variants (replace C.cyan + '22' patterns)
+  cyanSoft:  'var(--jc-cyan-soft)',
+  cyanHover: 'var(--jc-cyan-hover)',
+  cyanMuted: 'var(--jc-cyan-muted)',
+  limeSoft:  'var(--jc-lime-soft)',
+  limeHover: 'var(--jc-lime-hover)',
+  pinkSoft:  'var(--jc-pink-soft)',
+  navBg:     'var(--jc-nav-bg)',
 } as const;
 
 export const ACTIVITY_COLORS = {
