@@ -264,6 +264,8 @@ export interface RawCall {
   agentLegSid?: string;
   recordingUrl?: string;
   account?: string;
+  ringTime?: number;
+  totalDuration?: number;
 }
 
 export interface MtdData {

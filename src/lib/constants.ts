@@ -35,7 +35,7 @@ export const ACTIVITY_COLORS = {
 const csv = (key: string, fallback: string) =>
   (process.env[key] || fallback).split(',').map(s => s.trim().toLowerCase());
 
-export const ACTIVE_AGENTS = csv('ACTIVE_AGENTS', 'omar,burke,ian,danny,chris,wendy,sara,george,sue');
+export const ACTIVE_AGENTS = csv('ACTIVE_AGENTS', 'omar,burke,ian,danny,chris,wendy,sara,george,sue,angel');
 export const OUTBOUND_AGENTS = csv('OUTBOUND_AGENTS', 'william,joseph');
 export const EXCLUDED_AGENTS = csv('EXCLUDED_AGENTS', 'sara,sue');
 
@@ -58,6 +58,7 @@ export const AGENT_COLORS: Record<string, string> = {
   danny:    '#fbbf24',
   chris:    '#f87171',
   george:   '#22d3ee',
+  angel:    '#e879f9',
   william:  '#c084fc',
   joseph:   '#34d399',
   // MSC agents
@@ -90,6 +91,7 @@ export const TZ = 'America/Edmonton';
 const AGENT_ALIASES: Record<string, string> = {
   'danny r': 'danny', 'danny rodriguez': 'danny',
   'daniel': 'danny',
+  'anthony': 'jose', 'anthony ': 'jose', // Anthony is Jose making calls under a different name
 };
 
 const NON_AGENT_VALUES = new Set(['yes', 'no', 'true', 'false', 'n/a', 'na', '-', 'other', '']);

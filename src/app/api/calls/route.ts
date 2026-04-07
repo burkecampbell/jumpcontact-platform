@@ -18,6 +18,8 @@ interface RawCall {
   agentLegSid?: string;
   recordingUrl?: string;
   account?: string;
+  ringTime?: number;
+  totalDuration?: number;
 }
 
 interface AgentCallSummary {
@@ -39,6 +41,8 @@ function toRawCall(c: PairedCall): RawCall {
       ? `/api/calls/recording?sid=${c.id}${c.agentLegSid ? `&agent_sid=${c.agentLegSid}` : ''}`
       : undefined,
     account: c.client || undefined,
+    ringTime: c.ringTime > 0 ? c.ringTime : undefined,
+    totalDuration: c.totalDuration > 0 ? c.totalDuration : undefined,
   };
 }
 

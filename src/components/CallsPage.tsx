@@ -87,8 +87,9 @@ async function downloadReport(calls: RawCall[], filename: string, _date: string)
     { width: 28 },  // C: Client
     { width: 18 },  // D: Phone
     { width: 12 },  // E: Duration
-    { width: 12 },  // F: Direction
-    { width: 18 },  // G: Recording
+    { width: 10 },  // F: Ring Time
+    { width: 12 },  // G: Direction
+    { width: 18 },  // H: Recording
   ];
 
   // ── Branded header (teal bar) ──
@@ -140,7 +141,7 @@ async function downloadReport(calls: RawCall[], filename: string, _date: string)
   ws.getCell('G6').value = fmtDur(totalDurSec); ws.getCell('G6').font = valueFont;
 
   // ── Column headers (row 8) — teal underline per doc standards ──
-  const headers = ['Time', 'Agent', 'Client', 'Phone', 'Duration', 'Direction', 'Recording'];
+  const headers = ['Time', 'Agent', 'Client', 'Phone', 'Duration', 'Ring Time', 'Direction', 'Recording'];
   const headerRowXLS = ws.getRow(8);
   headers.forEach((h, i) => {
     const cell = headerRowXLS.getCell(i + 1);
@@ -153,7 +154,7 @@ async function downloadReport(calls: RawCall[], filename: string, _date: string)
   headerRowXLS.height = 22;
 
   // Auto-filter
-  ws.autoFilter = { from: { row: 8, column: 1 }, to: { row: 8 + calls.length, column: 7 } };
+  ws.autoFilter = { from: { row: 8, column: 1 }, to: { row: 8 + calls.length, column: 8 } };
 
   // ── Data rows — alternating white/gray stripes ──
   calls.forEach((c, i) => {
@@ -179,21 +180,25 @@ async function downloadReport(calls: RawCall[], filename: string, _date: string)
     row.getCell(5).font = baseFont;
     row.getCell(5).alignment = { horizontal: 'right' };
 
+    row.getCell(6).value = c.ringTime ? c.ringTime + 's' : '';
+    row.getCell(6).font = { ...baseFont, color: { argb: c.ringTime ? JC_TEAL : 'CCCCCC' } };
+    row.getCell(6).alignment = { horizontal: 'right' };
+
     const isInbound = c.direction === 'inbound';
-    row.getCell(6).value = isInbound ? 'Inbound' : 'Outbound';
-    row.getCell(6).font = { ...baseFont, size: 10, color: { argb: isInbound ? JC_GREEN : JC_BLUE } };
+    row.getCell(7).value = isInbound ? 'Inbound' : 'Outbound';
+    row.getCell(7).font = { ...baseFont, size: 10, color: { argb: isInbound ? JC_GREEN : JC_BLUE } };
 
     // Recording hyperlink — teal per brand
     const url = buildPlayerUrl(c);
     if (url) {
-      row.getCell(7).value = { text: '▶ Play', hyperlink: url };
-      row.getCell(7).font = { name: 'Arial', size: 10, color: { argb: JC_TEAL }, underline: true };
+      row.getCell(8).value = { text: '▶ Play', hyperlink: url };
+      row.getCell(8).font = { name: 'Arial', size: 10, color: { argb: JC_TEAL }, underline: true };
     } else {
-      row.getCell(7).value = '—';
-      row.getCell(7).font = { ...baseFont, color: { argb: 'CCCCCC' } };
+      row.getCell(8).value = '—';
+      row.getCell(8).font = { ...baseFont, color: { argb: 'CCCCCC' } };
     }
 
-    for (let col = 1; col <= 7; col++) {
+    for (let col = 1; col <= 8; col++) {
       row.getCell(col).fill = fillStyle;
       row.getCell(col).border = docBorder;
     }
@@ -649,7 +654,7 @@ function CallsPageInner() {
                       </button>
                     )}
                   </th>
-                  {['Time', 'Agent', 'Client', 'Phone', 'Duration', '', 'Recording'].map(h => (
+                  {['Time', 'Agent', 'Client', 'Phone', 'Duration', 'Ring', '', 'Recording'].map(h => (
                     <th key={h} className="px-5 py-2.5 text-left text-xs font-medium" style={{ color: C.sub }}>{h}</th>
                   ))}
                 </tr>
@@ -681,6 +686,9 @@ function CallsPageInner() {
                       </td>
                       <td className="px-5 py-2.5 font-mono text-xs" style={{ color: C.sub }}>{formatPhone(call.phone)}</td>
                       <td className="px-5 py-2.5 font-mono text-xs" style={{ color: C.text }}>{formatDuration(call.duration)}</td>
+                      <td className="px-5 py-2.5 font-mono text-xs" style={{ color: call.ringTime ? C.cyan : C.border }}>
+                        {call.ringTime ? call.ringTime + 's' : '—'}
+                      </td>
                       <td className="px-5 py-2.5">
                         {call.direction === 'inbound'
                           ? <ArrowDown size={14} style={{ color: '#4ade80' }} />
@@ -719,7 +727,7 @@ function CallsPageInner() {
                 })}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-5 py-12 text-center text-sm" style={{ color: C.sub }}>
+                    <td colSpan={9} className="px-5 py-12 text-center text-sm" style={{ color: C.sub }}>
                       No calls match the current filters
                     </td>
                   </tr>
