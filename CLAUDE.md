@@ -19,9 +19,11 @@ Internal operations dashboard for Jump Contact + Med Spa Communications (24/7 vi
 | Styling | Inline styles (morning) / Tailwind 4 (rest) | Morning has light theme (`T` object), rest is dark (`C` object) |
 | Animation | Custom spring physics + @chenglou/pretext | `useSpringValue`, `useSpring` hooks for DOM-free text measurement |
 | Testing | Vitest 4.x | 316 tests, runs before build (`vitest run && next build`) |
+| Data: Primary | KPI Sheet (Google Sheets) | **Source of truth** — ring time, pickup %, wrap-up, conversions, brand tags per agent per day |
 | Data: Real-time | Twilio CDR API | Today's calls, leg pairing, recordings |
-| Data: Historical | Ytica (Google Sheets) | Source of truth for agent speed, calls, talk time, wrap-up |
-| Data: Conversions | Google Sheets (JC) + GHL/ops-center (MSC) | Merged for Mixed view |
+| Data: Fallback | Ytica (Google Sheets) | MTD speed/wrap when KPI sheet missing |
+| Data: Conversions | Google Sheets (JC) + KPI Sheet/GHL (MSC) | Merged for Mixed view |
+| Data: MSC Calls | MSC Client Calls Sheet | Call records, dispositions, conversion tracking |
 | Data: Schedule | Google Sheets | Agent hours, shift parsing |
 | Data: Snapshots | Neon Postgres (drizzle-orm) | Daily immutable snapshots via cron |
 | Export | ExcelJS | Branded XLSX per JC Document Standards |
@@ -131,6 +133,8 @@ src/
 │   ├── ops-center.ts                 # MSC data fetcher (ops-center API calls)
 │   ├── health-checks.ts              # Client staleness monitoring
 │   ├── alerts.ts                     # Slack/notification alerts
+│   ├── kpi-sheet.ts                  # PRIMARY: KPI Sheet fetcher (ring time, pickup %, wrap-up, conversions)
+│   ├── msc-calls.ts                 # MSC Client Calls Sheet fetcher (dispositions, conversion tracking)
 │   ├── recording-map.ts              # Static CA→RE pairs (26,091 entries)
 │   ├── recording-utils.ts            # buildPlayerUrl(), shareRecording()
 │   ├── theme.ts                      # Clerk theme variables derived from C palette
@@ -144,8 +148,8 @@ src/
 
 ## Gotchas (Hard-Won Lessons)
 
-1. **Ytica column D = Ring Time (correct), column F = Speed to Answer (wrong)** — always use row[3] for agent pickup speed, never row[5]
-2. **Daily Ytica values can be inflated** — override with MTD weighted averages from `fetchYticaMtdActivity()` in the data route
+1. **KPI Sheet is primary** — `kpi-sheet.ts` overrides Ytica and CDR for speed, wrap-up, and pickup. Falls back to Ytica MTD if KPI has no data for the date.
+2. **KPI Sheet has brand tags** — Column C ("MSC", "Jump", "MSC/Jump") enables proper brand filtering without guessing
 3. **Conv rate denominator** — use Ytica agent calls sum, NOT CDR `answeredCalls` (which is incomplete after brand filtering)
 4. **`request.nextUrl.searchParams` is synchronous** in Route Handlers — ignore linter warnings about async searchParams (that's page components only, not route handlers)
 5. **Blended agents (Sara, Wendy, Jose)** appear in both JC and MSC — JC + MSC totals > Mixed total by the blended agent count. This is correct, not a bug.
@@ -158,15 +162,29 @@ src/
 ## Data Pipeline
 
 ```
-Ytica (Google Sheets) ──→ Source of truth for agent metrics
+KPI Sheet ──────────────→ PRIMARY: ring time, pickup %, wrap-up, conversions, brand tags
 Twilio CDR ─────────────→ Today's calls + recordings (real-time)
+Ytica (Google Sheets) ──→ FALLBACK: MTD speed/wrap when KPI sheet missing
 Conversions Sheet ──────→ JC conversions (Google Sheets)
-GHL / ops-center ───────→ MSC conversions (appt_booked tags)
+MSC Client Calls Sheet ─→ MSC call records, dispositions, conversion tracking
 Neon Postgres ──────────→ Daily immutable snapshots
 
 All merge in /api/data (30s cache per brand) → All pages poll this
 /api/calls (CDR only) → Call Log page with pagination
 ```
+
+### KPI Sheet (Primary Data Source)
+
+**"Stats & KPI - Agents & Teams | Jump & MSC"**
+- Sheet ID: `15d--jXhaWvWk_QuMJcsxV1Oirlc7bjtieS1p4ClZnec` (env: `MSC_KPI_SHEET_ID`)
+- Tab: `Agents` — per-agent per-day metrics with brand tagging
+- Column C: Team tag ("MSC", "Jump", "MSC/Jump") — enables proper brand filtering
+- Column F: Ring Time (seconds) — THE speed metric
+- Column I: % picked up calls — pickup rate
+- Column M: Avg Wrap up time — wrap-up
+- Column D: # of Conversions — with brand context
+- Fetcher: `src/lib/kpi-sheet.ts`
+- Overrides Ytica and CDR-derived values for speed, wrap-up, and pickup rate
 
 ### Cache TTLs
 
