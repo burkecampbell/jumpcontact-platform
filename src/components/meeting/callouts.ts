@@ -4,6 +4,9 @@
 import type { DashboardData, PeriodData } from '@/lib/types';
 import { capitalize, speedGrade } from '@/lib/constants';
 
+// Leadership — never flag with "needs improvement" or "0 conversions" warnings
+const LEADERSHIP = new Set(['rebecca', 'rebecca cramer', 'jose', 'burke']);
+
 export interface Callout { emoji: string; message: string }
 
 export function generateCallouts(period: PeriodData, data?: DashboardData): Callout[] {
@@ -36,9 +39,10 @@ export function generateCallouts(period: PeriodData, data?: DashboardData): Call
     }
   }
 
-  // ZERO_CONV — agent with calls but 0 conversions
+  // ZERO_CONV — agent with calls but 0 conversions (skip leadership)
   const zeroConv = repAgents.filter(rep => {
     if (rep.calls < 3) return false;
+    if (LEADERSHIP.has(rep.agent.toLowerCase())) return false;
     const conv = convAgents.find(a => a.agent.toLowerCase() === rep.agent.toLowerCase());
     return !conv || conv.count === 0;
   });

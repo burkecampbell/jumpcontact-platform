@@ -1,6 +1,8 @@
 'use client';
 
 import { C, capitalize, agentColor } from '@/lib/constants';
+
+const LEADERSHIP = new Set(['rebecca', 'rebecca cramer', 'jose', 'burke']);
 import type { DashboardData, PeriodData } from '@/lib/types';
 import Card from '../Card';
 import Hero from './Hero';
@@ -84,7 +86,7 @@ export default function StepPickupRate({ period, label }: { period: PeriodData; 
           </span>
         </div>
       )}
-      {worst && worst.agent !== best?.agent && (worst.pickupRate ?? 100) < 50 && (
+      {worst && worst.agent !== best?.agent && (worst.pickupRate ?? 100) < 50 && !LEADERSHIP.has(worst.agent.toLowerCase()) && (
         <div className="mb-1.5 px-4 py-2.5 rounded-xl" style={{ background: '#fbbf2410', borderLeft: '3px solid #fbbf24' }}>
           <span style={{ color: '#fbbf24' }}>⚠️</span>
           <span className="ml-2 text-sm" style={{ color: C.text }}>
