@@ -80,6 +80,7 @@ export const CONVERSIONS_SHEET_ID = process.env.CONVERSIONS_SHEET_ID || 'YOUR_SH
 export const MISSED_CALLS_SHEET_ID = process.env.MISSED_CALLS_SHEET_ID || 'YOUR_SHEET_ID';
 export const SCHEDULE_SHEET_ID = process.env.SCHEDULE_SHEET_ID || 'YOUR_SHEET_ID';
 export const YTICA_SHEET_ID = process.env.YTICA_SHEET_ID || 'YOUR_SHEET_ID';
+export const MSC_CALLS_SHEET_ID = process.env.MSC_CALLS_SHEET_ID || 'YOUR_SHEET_ID';
 export const GOAL = 900;
 export const DAILY_GOAL = 30;
 export const MONTHLY_GOAL = 900;
