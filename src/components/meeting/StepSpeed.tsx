@@ -53,14 +53,7 @@ export default function StepSpeed({ period, label, data }: { period: PeriodData;
     else buckets.slow++;
   }
 
-  // Team-level pickup rate from TaskRouter reservations (only available for live/today data)
-  const totalResCreated = sorted.reduce((s, a) => s + (a.reservationsCreated ?? 0), 0);
-  const totalResAccepted = sorted.reduce((s, a) => s + (a.reservationsAccepted ?? 0), 0);
-  const teamPickupRate = totalResCreated > 0 ? Math.round((totalResAccepted / totalResCreated) * 1000) / 10 : null;
-  const hasPickup = totalResCreated > 0;
-  const pickupColor = teamPickupRate != null
-    ? teamPickupRate >= 80 ? '#4ade80' : teamPickupRate >= 60 ? '#fbbf24' : '#f87171'
-    : C.sub;
+  // Pickup rate is now its own step — StepPickupRate
 
   return (
     <div>
@@ -75,19 +68,11 @@ export default function StepSpeed({ period, label, data }: { period: PeriodData;
       )}
 
       {/* Speed summary strip */}
-      <div className={`grid gap-2 mb-1.5 ${teamPickupRate != null ? 'grid-cols-3' : 'grid-cols-2'}`}>
+      <div className="grid grid-cols-2 gap-2 mb-1.5">
         <Card>
           <div className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: C.sub }}>Team Grade</div>
           <div className="text-lg font-bold" style={{ color: teamGrade.color }}>{teamGrade.grade}</div>
         </Card>
-        {teamPickupRate != null && (
-          <Card>
-            <div className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: C.sub }}>Pickup Rate</div>
-            <div className="text-lg font-bold font-mono" style={{ color: pickupColor }}>
-              {teamPickupRate}%
-            </div>
-          </Card>
-        )}
         <Card>
           <div className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: C.sub }}>Fastest</div>
           <div className="text-lg font-bold font-mono" style={{ color: '#4ade80' }}>
@@ -115,18 +100,10 @@ export default function StepSpeed({ period, label, data }: { period: PeriodData;
         </div>
       )}
 
-      {/* Pickup Rate explainer */}
-      {teamPickupRate != null && (
-        <div className="mb-3 px-3 py-2 rounded-lg text-[12px]" style={{ background: 'rgba(62,165,195,0.08)', color: C.sub }}>
-          <strong style={{ color: C.text }}>Pickup Rate</strong> = calls accepted / calls offered via TaskRouter.
-          Team caught <strong style={{ color: pickupColor }}>{totalResAccepted}</strong> of <strong style={{ color: C.text }}>{totalResCreated}</strong> offered calls.
-        </div>
-      )}
-
-      {/* Agent Table */}
+      {/* Agent Table — speed only, pickup rate is in its own step */}
       <Card padding={false}>
         <div className="px-4 pt-3 pb-1 text-xs font-bold uppercase tracking-wider" style={{ color: C.sub }}>
-          Agent Pickup Speed{hasPickup ? ' & Rate' : ''}
+          Agent Pickup Speed
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -134,24 +111,18 @@ export default function StepSpeed({ period, label, data }: { period: PeriodData;
               <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                 <TH>#</TH>
                 <TH>Agent</TH>
-                <TH right>Pickup</TH>
+                <TH right>Speed</TH>
                 <TH right>Grade</TH>
-                {hasPickup && <TH right>Pickup %</TH>}
-                {hasPickup && <TH right>Caught</TH>}
-                {hasPickup && <TH right>Offered</TH>}
                 <TH right>Calls</TH>
+                <TH right>Talk Time</TH>
               </tr>
             </thead>
             <tbody>
               {sorted.map((a, i) => {
                 const { grade, color } = speedGrade(a.displaySpeed);
-                const pickup = a.pickupRate;
-                const pColor = pickup != null
-                  ? pickup >= 80 ? '#4ade80' : pickup >= 60 ? '#fbbf24' : '#f87171'
-                  : C.sub;
                 return (
                   <tr key={a.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
-                    <TD color={i < 3 ? C.cyan : C.sub}><span className="font-bold">{i < 3 ? ['\u{1F947}','\u{1F948}','\u{1F949}'][i] : i + 1}</span></TD>
+                    <TD color={i < 3 ? C.cyan : C.sub}><span className="font-bold">{i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}</span></TD>
                     <TD>
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full" style={{ background: agentColor(a.agent) }} />
@@ -162,15 +133,13 @@ export default function StepSpeed({ period, label, data }: { period: PeriodData;
                     <TD right>
                       <span className="text-xs font-extrabold px-1.5 py-0.5 rounded" style={{ color, background: `${color}18` }}>{grade}</span>
                     </TD>
-                    {hasPickup && <TD mono right color={pColor}>{pickup != null ? `${pickup}%` : '—'}</TD>}
-                    {hasPickup && <TD mono right color={C.sub}>{a.reservationsAccepted ?? '—'}</TD>}
-                    {hasPickup && <TD mono right color={C.sub}>{a.reservationsCreated ?? '—'}</TD>}
                     <TD mono right color={C.sub}>{a.calls}</TD>
+                    <TD mono right color={C.sub}>{fmtTalkTime(a.talkMin)}</TD>
                   </tr>
                 );
               })}
               {sorted.length === 0 && (
-                <tr><td colSpan={8} className="text-center text-sm py-5" style={{ color: C.sub }}>No speed data yet</td></tr>
+                <tr><td colSpan={6} className="text-center text-sm py-5" style={{ color: C.sub }}>No speed data yet</td></tr>
               )}
             </tbody>
           </table>

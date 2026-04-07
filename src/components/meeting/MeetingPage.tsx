@@ -9,12 +9,15 @@ import type { DashboardData, PeriodData } from '@/lib/types';
 import { aggregateDays } from './aggregateDays';
 import StepCalls from './StepCalls';
 import StepSpeed from './StepSpeed';
+import StepPickupRate from './StepPickupRate';
 import StepConversions from './StepConversions';
 import StepMTD from './StepMTD';
 import { useBrand } from '@/hooks/useBrand';
 
-const JC_STEP_LABELS = ['Calls', 'Speed', 'Conversions', 'MTD + YTD'];
-const MIXED_STEP_LABELS = ['Calls', 'Speed'];
+// Meeting cadence matches Burke's speaking flow:
+// "Yesterday's numbers" → Speed → Pickup Rate → Conversions → MTD
+const JC_STEP_LABELS = ['Calls', 'Speed', 'Pickup Rate', 'Conversions', 'MTD'];
+const MIXED_STEP_LABELS = ['Calls', 'Speed', 'Pickup Rate'];
 
 /** Main Meeting presentation shell — data fetch, step/tab state, keyboard nav */
 function MeetingPageInner() {
@@ -92,7 +95,62 @@ function MeetingPageInner() {
     const t = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Edmonton' });
     const CLOSING = ["Let's close strong today! 💪", "Make today count! 🔥", "Every call is an opportunity! 📞", "Let's hit our targets! 🎯", "Time to lock in! 🔒", "Stay hungry, stay sharp! ⚡", "Greatness is a choice — choose it today! 🏆"];
 
-    const msg = `🌅 *JUMP CONTACT — MORNING REPORT*\n📅 ${data.date}\n\n━━━━━━━━━━━━━━━━━━━━━\n📊 *CONVERSIONS*\n━━━━━━━━━━━━━━━━━━━━━\n${dot(pLbl, `*${p.conversions.total}*`)}${wtdLine}\n${dot('MTD Total', `*${data.mtd.total}* / ${GOAL}`)}\n${dot('Projected', `*${projected}* ${paceEmoji} (${pacePercent}%)`)}\n\n━━━━━━━━━━━━━━━━━━━━━\n🏆 *AGENT RANKINGS — ${pLbl}*\n━━━━━━━━━━━━━━━━━━━━━\n${agentLines || 'No data yet'}\n\n━━━━━━━━━━━━━━━━━━━━━\n📋 *TOP ACCOUNTS — ${pLbl}*\n━━━━━━━━━━━━━━━━━━━━━\n${acctLines || 'No data yet'}\n\n━━━━━━━━━━━━━━━━━━━━━\n⚡ *SPEED TO LEAD — ${pLbl}*\n━━━━━━━━━━━━━━━━━━━━━\n${speedLines}${avgLine}\n\n━━━━━━━━━━━━━━━━━━━━━\n📞 *MISSED CALLS*  ${p.missedCalls.total}\n━━━━━━━━━━━━━━━━━━━━━\n\n${CLOSING[new Date().getDay() % CLOSING.length]}\n_Generated ${t} MST_`;
+    // Calls section — ranked by volume (matches meeting step 1)
+    const callAgents = [...p.repActivity.agents].sort((a, b) => b.calls - a.calls).slice(0, 8);
+    const callLines = callAgents
+      .map((a, i) => `${medal[i] || `${i + 1}.`} ${dot(capitalize(a.agent), `*${a.calls} calls* (${a.talkMin ? Math.round(a.talkMin) + 'm' : '0m'})`)}`).join('\n');
+
+    // Pickup rate section — ranked by rate (matches meeting step 3)
+    const pickupAgents = [...p.repActivity.agents].filter(a => (a.reservationsCreated ?? 0) > 0)
+      .sort((a, b) => (b.pickupRate ?? 0) - (a.pickupRate ?? 0));
+    const totalOffered = p.repActivity.agents.reduce((s, a) => s + (a.reservationsCreated ?? 0), 0);
+    const totalCaught = p.repActivity.agents.reduce((s, a) => s + (a.reservationsAccepted ?? 0), 0);
+    const teamPickup = totalOffered > 0 ? Math.round((totalCaught / totalOffered) * 1000) / 10 : null;
+    const pickupLines = pickupAgents.length > 0
+      ? pickupAgents.map((a, i) => `${medal[i] || `${i + 1}.`} ${dot(capitalize(a.agent), `*${a.pickupRate}%* (${a.reservationsAccepted}/${a.reservationsCreated})`)}`).join('\n')
+      : 'No pickup data';
+
+    const msg = [
+      `🌅 *JUMP CONTACT — MORNING REPORT*`,
+      `📅 ${data.date}`,
+      ``,
+      `━━━━━━━━━━━━━━━━━━━━━`,
+      `📞 *CALLS — ${pLbl}*`,
+      `━━━━━━━━━━━━━━━━━━━━━`,
+      callLines || 'No data yet',
+      ``,
+      `━━━━━━━━━━━━━━━━━━━━━`,
+      `⚡ *SPEED — ${pLbl}*`,
+      `━━━━━━━━━━━━━━━━━━━━━`,
+      speedLines,
+      avgLine,
+      ``,
+      `━━━━━━━━━━━━━━━━━━━━━`,
+      `🎯 *PICKUP RATE — ${pLbl}*`,
+      `━━━━━━━━━━━━━━━━━━━━━`,
+      teamPickup != null ? dot('Team', `*${teamPickup}%* (${totalCaught}/${totalOffered})`) : '',
+      pickupLines,
+      ``,
+      `━━━━━━━━━━━━━━━━━━━━━`,
+      `📊 *CONVERSIONS — ${pLbl}*`,
+      `━━━━━━━━━━━━━━━━━━━━━`,
+      dot(pLbl, `*${p.conversions.total}*`),
+      agentLines || 'No data yet',
+      ``,
+      acctLines ? `📋 *Top Accounts*\n${acctLines}` : '',
+      ``,
+      `━━━━━━━━━━━━━━━━━━━━━`,
+      `📈 *MTD PACE*`,
+      `━━━━━━━━━━━━━━━━━━━━━`,
+      dot('MTD Total', `*${data.mtd.total}* / ${GOAL}`),
+      dot('Projected', `*${projected}* ${paceEmoji} (${pacePercent}%)`),
+      wtdLine,
+      ``,
+      p.missedCalls.total > 0 ? `📵 *Missed Calls:* ${p.missedCalls.total}` : '',
+      ``,
+      CLOSING[new Date().getDay() % CLOSING.length],
+      `_Generated ${t} MST_`,
+    ].filter(Boolean).join('\n');
 
     await navigator.clipboard.writeText(msg);
     setSlackCopied(true);
@@ -223,9 +281,11 @@ function MeetingPageInner() {
         return <StepCalls period={period} label={periodLabel} data={data!} />;
       case 'Speed':
         return <StepSpeed period={period} label={periodLabel} data={data!} />;
+      case 'Pickup Rate':
+        return <StepPickupRate period={period} label={periodLabel} data={data!} />;
       case 'Conversions':
         return <StepConversions period={period} label={periodLabel} data={data!} />;
-      case 'MTD + YTD':
+      case 'MTD':
         return <StepMTD data={data!} />;
       default:
         return null;
