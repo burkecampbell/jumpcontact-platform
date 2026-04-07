@@ -2,36 +2,38 @@
 tags: [client/msc, ghl, google-sheets, jump-contact, platform, twilio, type/integration, type/spec, type/tool]
 ---
 
-# Pickup Prompt — April 7 Session Handoff
+# Pickup Prompt — April 7 Evening Session Handoff
 
-> Read CLAUDE.md first, then this file. Handoff from April 6-7 marathon (50+ commits).
+> Read CLAUDE.md first, then this file. Handoff from April 7 session (4 commits).
+
+## What Shipped Today
+
+- **Wrap-up column** in Call Log + ExcelJS export — server-side enrichment via `toRawCall()`, no more useMemo crash
+- **"Yesterday by now"** context on Missed Calls KPI card — hourly missed data from CDR
+- **Light mode sweep** — 18 hardcoded dark hex values replaced with CSS vars (`C.bg`, `C.contrast`, `C.overlay`, `C.navBg`). DateRangePicker popup, sticky thead, dropdowns, buttons all fixed. Sign-in/sign-up and play/page.tsx intentionally kept dark.
+- **KPI sheet as primary** — removed CDR-only guards on call counts and talk time. KPI values always win when present. Added missed calls cross-check (available - picked up).
+- **Cleanup** — debug-kpi route deleted, favicon.ico added
+- **CSS vars added** — `--jc-contrast` (text on bright buttons), `--jc-overlay` (semi-transparent backdrop) for both themes
 
 ## What's Working
 
 - **Brand toggle** (JC/Mixed/MSC) via `?brand=` — all pages respond
-- **Date range picker** — double calendar, presets, 90-day max
-- **Call Log** — pagination (200 + Load 50), Export All ExcelJS, Ring Time column
-- **Meeting page** — 5 steps (Calls → Speed → Pickup Rate → Conversions → MTD), Monday mode
-- **KPI Sheet connected** — reads "Stats & KPI" sheet (15d--jXha...), overrides speed/wrap/pickup
+- **KPI Sheet is PRIMARY** — speed, wrap-up, pickup %, conversions, call counts, talk time all come from KPI sheet when available. CDR fills gaps only.
+- **Call Log** — pagination, Export All, Ring Time, Wrap column, date range picker
+- **Meeting page** — 5 steps, Monday mode
 - **Recording map** — 29,707 CA→RE pairs, midnight cron
 - **316 tests pass**, build clean, production live
 
 ## Unfinished (Priority Order)
 
-### 1. LIGHT MODE — Half-baked
-C object returns CSS var() refs. 26 opacity patterns fixed. ThemeToggle in NavBar.
-BUT: hardcoded dark colors (`#141824`, `rgba(10,14,26,...)`) in many components.
-Light palette in globals.css defined but untested end-to-end.
-**Fix**: grep hardcoded dark hex, replace with C vars, test light mode.
+### 1. OUTBOUND CALLS — No agent
+All outbound calls show blank agent in Call Log. Was marked resolved Apr 2 but still broken. Needs investigation in `pairCallLegs()` in `src/lib/twilio.ts`. This is the #1 bug.
 
-### 2. MSC CONVERSIONS — Not flowing for today
-KPI sheet has yesterday's MSC conversions (Desi=10, Francis=9). Today may not have data yet.
-`applyKPIOverrides()` patches agents from KPI sheet when data exists.
-**Fix**: verify yesterday MSC conv, investigate KPI sheet update cadence.
+### 2. WRAP-UP COLUMN — Dashes showing
+Code is correct (case mismatch fixed), but daily average per agent still shows "—" for all calls. Likely date format mismatch between `fetchKPIForDate('2026-04-07')` and how the KPI sheet stores today's date. Debug needed. Note: wrap-up is daily average per agent, NOT per-call (per-call would require TaskRouter reservation API, too expensive).
 
-### 3. WRAP-UP COLUMN — Reverted after crash
-Caused infinite re-render (React #310) from agentWrap useMemo.
-**Fix**: enrich call records in `toRawCall()` server-side, not client-side memo.
+### 3. LIGHT MODE — Needs end-to-end test
+CSS vars are in place, hardcoded hex replaced in components. But untested visually. Toggle the theme (gear icon → sun/moon) and verify all pages look correct.
 
 ### 4. MSC AGENT HOURS → Conv/Hr
 File: `C:\Users\fuzzy\Downloads\All AGENT HOURS - MSC MST _ Mountain Time (Shared) (4).xlsx`
@@ -46,11 +48,11 @@ Cron discovers pairs but only caches in-memory (~15 min). Need Neon `recordings`
 ### 7. MSC CLIENT CALLS SHEET
 `src/lib/msc-calls.ts` reads Sheet ID 15sZ-T-y1lre... Not wired to any page.
 
-### 8. CLEANUP
-- Delete `src/app/api/debug-kpi/route.ts` (temporary)
-- Fix favicon 404
+## Key Architecture Decision (This Session)
 
-## Env Vars Added (Production)
+KPI sheet is now the **authority** for agent metrics, not a fallback. `applyKPIOverrides()` always prefers KPI data when present. CDR is used for per-call detail only (recordings, phone numbers, timestamps, client resolution). This simplifies the data pipeline and produces more reliable numbers.
+
+## Env Vars (Production)
 
 - `MSC_KPI_SHEET_ID` = `15d--jXhaWvWk_QuMJcsxV1Oirlc7bjtieS1p4ClZnec`
 - `MSC_CALLS_SHEET_ID` = `YOUR_SHEET_ID`
