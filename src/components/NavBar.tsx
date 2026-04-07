@@ -8,12 +8,17 @@ import { Activity, Phone, Presentation, Trophy } from 'lucide-react';
 import { UserButton } from '@clerk/nextjs';
 import BrandToggle from './BrandToggle';
 
+function getMeetingLabel(): string {
+  const day = new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/Edmonton' });
+  return day === 'Monday' ? 'Money Monday' : 'Meeting';
+}
+
 const NAV_ITEMS = [
-  { href: '/',        label: 'Live Now',  icon: Activity },
-  { href: '/calls',   label: 'Call Log',  icon: Phone },
-  { href: '/meeting', label: 'Money Monday', icon: Presentation },
-  { href: '/race',    label: 'Race',      icon: Trophy },
-] as const;
+  { href: '/',        label: 'Live Now',       icon: Activity },
+  { href: '/calls',   label: 'Call Log',       icon: Phone },
+  { href: '/meeting', label: getMeetingLabel(), icon: Presentation },
+  { href: '/race',    label: 'Race',           icon: Trophy },
+];
 
 function NavBarInner({ pulledAt }: { pulledAt?: string }) {
   const pathname = usePathname();
