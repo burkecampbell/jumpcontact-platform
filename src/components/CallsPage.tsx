@@ -550,6 +550,13 @@ function CallsPageInner() {
   }
 
   const agents = ['all', ...ACTIVE_AGENTS];
+
+  // Agent wrap-up lookup from KPI sheet (passed through API)
+  const agentWrap = useMemo(() => {
+    const raw = (data as unknown as Record<string, unknown>)?.agentWrap as Record<string, number> | undefined;
+    if (!raw) return new Map<string, number>();
+    return new Map(Object.entries(raw));
+  }, [data]);
   const totalCalls = data.calls.length;
   const recordingCount = data.calls.filter(c => c.recordingUrl).length;
 
@@ -654,7 +661,7 @@ function CallsPageInner() {
                       </button>
                     )}
                   </th>
-                  {['Time', 'Agent', 'Client', 'Phone', 'Duration', 'Ring', '', 'Recording'].map(h => (
+                  {['Time', 'Agent', 'Client', 'Phone', 'Duration', 'Ring', 'Wrap', '', 'Recording'].map(h => (
                     <th key={h} className="px-5 py-2.5 text-left text-xs font-medium" style={{ color: C.sub }}>{h}</th>
                   ))}
                 </tr>
@@ -688,6 +695,11 @@ function CallsPageInner() {
                       <td className="px-5 py-2.5 font-mono text-xs" style={{ color: C.text }}>{formatDuration(call.duration)}</td>
                       <td className="px-5 py-2.5 font-mono text-xs" style={{ color: call.ringTime ? C.cyan : C.border }}>
                         {call.ringTime ? call.ringTime + 's' : '—'}
+                      </td>
+                      <td className="px-5 py-2.5 font-mono text-xs" style={{ color: C.sub }}>
+                        {call.agent && agentWrap.get(call.agent.toLowerCase())
+                          ? Math.round(agentWrap.get(call.agent.toLowerCase())!) + 's'
+                          : '—'}
                       </td>
                       <td className="px-5 py-2.5">
                         {call.direction === 'inbound'
@@ -727,7 +739,7 @@ function CallsPageInner() {
                 })}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-5 py-12 text-center text-sm" style={{ color: C.sub }}>
+                    <td colSpan={10} className="px-5 py-12 text-center text-sm" style={{ color: C.sub }}>
                       No calls match the current filters
                     </td>
                   </tr>

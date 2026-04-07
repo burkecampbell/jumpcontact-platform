@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { fetchCallLegs, pairCallLegs, todayMST } from '@/lib/twilio';
 import { ACTIVE_AGENTS, capitalize, normalizeAgent } from '@/lib/constants';
 import { parseBrand, isAgentForBrand, MSC_ONLY_AGENTS, JC_ONLY_AGENTS, type Brand } from '@/lib/brand';
+import { fetchKPIForDate, type KPIAgentDay } from '@/lib/kpi-sheet';
 import { isMscPhone, getClientBrand } from '@/lib/clients';
 import { cached } from '@/lib/cache';
 import type { PairedCall } from '@/lib/types';
@@ -208,9 +209,23 @@ export async function GET(request: NextRequest) {
     const page = brandCalls.slice(offset, offset + limit);
     const hasMore = offset + limit < total;
 
+    // Fetch KPI sheet wrap-up per agent for the date range
+    const kpiDays = await Promise.all(
+      dates.slice(0, 7).map(d => fetchKPIForDate(d).catch(() => [] as KPIAgentDay[]))
+    );
+    const agentWrap: Record<string, number> = {};
+    for (const dayRows of kpiDays) {
+      for (const r of dayRows) {
+        if (r.avgWrapSec > 0 && !agentWrap[r.agent]) {
+          agentWrap[r.agent] = r.avgWrapSec;
+        }
+      }
+    }
+
     return NextResponse.json({
       calls: page,
       agents,
+      agentWrap,
       pulledAt: new Date().toISOString(),
       total,
       hasMore,
