@@ -551,11 +551,16 @@ function CallsPageInner() {
 
   const agents = ['all', ...ACTIVE_AGENTS];
 
-  // Agent wrap-up lookup from KPI sheet (passed through API)
+  // Agent wrap-up lookup from KPI sheet (passed through API as agentWrap field)
   const agentWrap = useMemo(() => {
-    const raw = (data as unknown as Record<string, unknown>)?.agentWrap as Record<string, number> | undefined;
-    if (!raw) return new Map<string, number>();
-    return new Map(Object.entries(raw));
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const raw = (data as any)?.agentWrap;
+      if (!raw || typeof raw !== 'object') return new Map<string, number>();
+      return new Map<string, number>(Object.entries(raw as Record<string, number>));
+    } catch {
+      return new Map<string, number>();
+    }
   }, [data]);
   const totalCalls = data.calls.length;
   const recordingCount = data.calls.filter(c => c.recordingUrl).length;
