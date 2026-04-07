@@ -11,6 +11,7 @@ import {
   fetchYticaMtdActivity,
 } from '@/lib/sheets';
 import { blendYticaIntoPerioData, buildBrandSummary, deriveBrandView } from '@/lib/blender';
+import { fetchKPIForDate, fetchKPIMtdSummary, type KPIAgentDay } from '@/lib/kpi-sheet';
 import { parseBrand, MSC_ONLY_AGENTS, JC_ONLY_AGENTS, BLENDED_AGENTS, type Brand } from '@/lib/brand';
 import {
   ACTIVE_AGENTS,
@@ -824,6 +825,14 @@ async function fetchDashboardData(): Promise<DashboardData> {
     cached('mtd-ytica', 30_000, () => fetchYticaMtdActivity(monthPrefix)),
   ]);
 
+  // ── KPI Sheet — primary source for agent metrics ────────────────
+  // Fetched separately (non-blocking) — overrides Ytica/CDR values
+  const [kpiToday, kpiYesterday, kpiMtd] = await Promise.all([
+    cached('kpi-today', 30_000, () => fetchKPIForDate(todayStr).catch(() => [] as KPIAgentDay[])),
+    cached('kpi-yesterday', 3_600_000, () => fetchKPIForDate(yesterdayStr).catch(() => [] as KPIAgentDay[])),
+    cached('kpi-mtd', 300_000, () => fetchKPIMtdSummary(monthPrefix).catch(() => ({ totalConversions: 0, totalCalls: 0, byAgent: [], byDate: [] }))),
+  ]);
+
   // ── Merge MSC (GHL) conversions into JC (Sheets) conversions ──
   // JC conversions come from Google Sheets. MSC conversions come from
   // GHL via ops-center. For Mixed view we need both combined.
@@ -878,22 +887,59 @@ async function fetchDashboardData(): Promise<DashboardData> {
     todayYtica,
     todayTeamStats,
   );
-  // Override daily Ytica speed/wrap with MTD weighted averages (more accurate)
-  if (mtdYtica.length > 0) {
-    const mtdLookup = new Map(mtdYtica.map(a => [a.agent.toLowerCase(), a]));
-    for (const agent of todayPeriod.repActivity.agents) {
-      const mtd = mtdLookup.get(agent.agent.toLowerCase());
-      if (mtd) {
-        if (mtd.avgSpeedSec != null) agent.speedSec = mtd.avgSpeedSec;
-        if (mtd.avgWrapUpSec != null) agent.wrapUpSec = mtd.avgWrapUpSec;
+  // ── Override agent metrics with KPI Sheet data (primary source) ──
+  // KPI Sheet has: ring time, pickup %, conversions, wrap-up, talk time — all pre-calculated with brand tags
+  function applyKPIOverrides(period: PeriodData, kpiRows: KPIAgentDay[]) {
+    if (kpiRows.length === 0) {
+      // Fallback: use MTD Ytica if no KPI data
+      if (mtdYtica.length > 0) {
+        const mtdLookup = new Map(mtdYtica.map(a => [a.agent.toLowerCase(), a]));
+        for (const agent of period.repActivity.agents) {
+          const mtd = mtdLookup.get(agent.agent.toLowerCase());
+          if (mtd) {
+            if (mtd.avgSpeedSec != null) agent.speedSec = mtd.avgSpeedSec;
+            if (mtd.avgWrapUpSec != null) agent.wrapUpSec = mtd.avgWrapUpSec;
+          }
+        }
+      }
+      return;
+    }
+
+    const kpiLookup = new Map(kpiRows.map(k => [k.agent.toLowerCase(), k]));
+    for (const agent of period.repActivity.agents) {
+      const kpi = kpiLookup.get(agent.agent.toLowerCase());
+      if (!kpi) continue;
+
+      // Speed: ring time from KPI sheet (THE metric Burke wants)
+      if (kpi.ringTimeSec > 0) agent.speedSec = kpi.ringTimeSec;
+      // Wrap-up
+      if (kpi.avgWrapSec > 0) agent.wrapUpSec = kpi.avgWrapSec;
+      // Pickup rate (from KPI sheet % picked up)
+      if (kpi.pickupPct > 0 && kpi.callsAvailable > 0) {
+        agent.pickupRate = kpi.pickupPct;
+        agent.reservationsCreated = kpi.callsAvailable;
+        agent.reservationsAccepted = kpi.callsPickedUp;
+      }
+      // Calls — use KPI if it has data and CDR doesn't
+      if (kpi.callsPickedUp > 0 && agent.calls === 0) {
+        agent.calls = kpi.callsPickedUp;
+      }
+      // Talk time
+      if (kpi.totalTalkMin > 0 && agent.talkMin === 0) {
+        agent.talkMin = kpi.totalTalkMin;
       }
     }
-    // Recompute team average from corrected values
-    const speedVals = todayPeriod.repActivity.agents.filter(a => a.speedSec != null && a.speedSec! > 0).map(a => a.speedSec!);
-    todayPeriod.repActivity.avgSpeedSec = speedVals.length > 0
+
+    // Recompute team average from KPI-corrected values
+    const speedVals = period.repActivity.agents
+      .filter(a => a.speedSec != null && a.speedSec! > 0)
+      .map(a => a.speedSec!);
+    period.repActivity.avgSpeedSec = speedVals.length > 0
       ? +(speedVals.reduce((s, v) => s + v, 0) / speedVals.length).toFixed(1)
       : null;
   }
+
+  applyKPIOverrides(todayPeriod, kpiToday);
   const today = addCallStats(todayPeriod, todayCalls, { includeConvPerHour: true }) as DashboardData['today'];
 
   // ── Yesterday ──────────────────────────────────────────────────
@@ -918,6 +964,7 @@ async function fetchDashboardData(): Promise<DashboardData> {
   // and blended agent sums must drive the headline numbers.
   yesterday = addCallStats(yesterday, yesterdayCalls);
   yesterday = reconcileWithYtica(yesterday);
+  applyKPIOverrides(yesterday, kpiYesterday);
 
   // ── Weekend (Monday only) ─────────────────────────────────────
   // On Monday, fetch Friday + Saturday from Ytica (source of truth for
