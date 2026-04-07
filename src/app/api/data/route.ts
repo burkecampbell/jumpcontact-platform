@@ -924,12 +924,12 @@ async function fetchDashboardData(): Promise<DashboardData> {
         agent.reservationsCreated = kpi.callsAvailable;
         agent.reservationsAccepted = kpi.callsPickedUp;
       }
-      // Calls — use KPI if it has data and CDR doesn't
-      if (kpi.callsPickedUp > 0 && agent.calls === 0) {
+      // Calls — KPI sheet is authoritative
+      if (kpi.callsPickedUp > 0) {
         agent.calls = kpi.callsPickedUp;
       }
-      // Talk time
-      if (kpi.totalTalkMin > 0 && agent.talkMin === 0) {
+      // Talk time — KPI sheet is authoritative
+      if (kpi.totalTalkMin > 0) {
         agent.talkMin = kpi.totalTalkMin;
       }
       // Conversions — KPI sheet has brand-accurate conversion counts
@@ -951,6 +951,16 @@ async function fetchDashboardData(): Promise<DashboardData> {
           total: kpiConvTotal,
           byAgent: kpiConvByAgent,
         };
+      }
+    }
+
+    // Cross-check missed calls: KPI available - picked up
+    const kpiTotalAvailable = kpiRows.reduce((s, k) => s + k.callsAvailable, 0);
+    const kpiTotalPicked = kpiRows.reduce((s, k) => s + k.callsPickedUp, 0);
+    if (kpiTotalAvailable > 0) {
+      const kpiMissed = kpiTotalAvailable - kpiTotalPicked;
+      if (kpiMissed >= 0 && kpiMissed > period.missedCalls.total) {
+        period.missedCalls = { ...period.missedCalls, total: kpiMissed };
       }
     }
 
