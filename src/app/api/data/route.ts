@@ -254,9 +254,12 @@ async function buildPeriodData(
 
   const missedCalls = calls.filter(c => c.direction === 'inbound' && c.duration === 0);
   const missedByAccount: Record<string, number> = {};
+  const missedHourly = new Array(24).fill(0);
   for (const c of missedCalls) {
     const acct = c.client || 'Unknown';
     missedByAccount[acct] = (missedByAccount[acct] || 0) + 1;
+    const h = new Date(c.time).getHours();
+    if (h >= 0 && h < 24) missedHourly[h]++;
   }
   const missedAcctArr: AcctStat[] = Object.entries(missedByAccount)
     .map(([account, count]) => ({ account, count }))
@@ -282,6 +285,7 @@ async function buildPeriodData(
     missedCalls: {
       total: missedCalls.length,
       byAccount: missedAcctArr,
+      hourly: missedHourly,
     },
     repActivity,
     teamStats: teamStats ? { ...teamStats, source: 'ytica' as const } : null,

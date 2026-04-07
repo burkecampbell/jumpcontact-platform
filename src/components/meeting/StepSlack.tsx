@@ -122,7 +122,7 @@ _Generated ${generatedAt} MST_`;
       <button
         onClick={handleCopy}
         className="w-full py-3.5 rounded-xl border-none font-bold text-[15px] cursor-pointer transition-colors duration-200"
-        style={{ background: copied ? '#22c55e' : C.lime, color: '#0A0E1A' }}
+        style={{ background: copied ? '#22c55e' : C.lime, color: C.contrast }}
       >
         {copied ? '✓ Copied to Clipboard' : '📋 Copy Slack Post'}
       </button>

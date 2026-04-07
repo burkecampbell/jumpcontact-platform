@@ -23,6 +23,8 @@
   --jc-pink-soft: color-mix(in srgb, #E63888 10%, transparent);
   /* Nav/chrome */
   --jc-nav-bg: rgba(10,14,26,0.82);
+  --jc-overlay: rgba(10,14,26,0.5);
+  --jc-contrast: #0A0E1A;
   --jc-table-hover: rgba(62,165,195,0.06);
   --jc-skeleton: rgba(139,146,168,0.2);
   --jc-scrollbar: rgba(62,165,195,0.3);
@@ -50,6 +52,8 @@ html.light {
   --jc-lime-hover: color-mix(in srgb, #059669 15%, transparent);
   --jc-pink-soft: color-mix(in srgb, #db2777 8%, transparent);
   --jc-nav-bg: rgba(248,250,252,0.92);
+  --jc-overlay: rgba(0,0,0,0.25);
+  --jc-contrast: #1e293b;
   --jc-table-hover: rgba(91,197,212,0.06);
   --jc-skeleton: rgba(100,116,139,0.12);
   --jc-scrollbar: rgba(91,197,212,0.3);

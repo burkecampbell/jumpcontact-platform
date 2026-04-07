@@ -47,7 +47,7 @@ export default function DraggableCard({
         willChange: 'transform',
         // Glass card styling
         background: state.isDragging
-          ? 'rgba(20,24,36,0.88)'
+          ? C.navBg
           : C.card,
         borderRadius: '16px',
         border: `1px solid ${state.isDragging ? C.cyanHover : C.border}`,

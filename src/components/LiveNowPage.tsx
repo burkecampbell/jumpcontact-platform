@@ -85,6 +85,12 @@ function LiveNowPageInner() {
   const yesterdayCalls= Math.max(data.yesterday.answeredCalls ?? 0, yestAgentSum);
   const todayMissed   = data.today.missedCalls.total;
   const yesterdayMissed= data.yesterday.missedCalls.total;
+
+  // Yesterday's missed calls up to this hour (for "by now" context)
+  const nowHourMST = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Edmonton' })).getHours();
+  const yesterdayMissedByNow = data.yesterday.missedCalls.hourly
+    ? data.yesterday.missedCalls.hourly.slice(0, nowHourMST + 1).reduce((s, v) => s + v, 0)
+    : null;
   const avgSpeed      = data.today.repActivity.avgSpeedSec;
   const grade         = speedGrade(avgSpeed);
   const activeAgentNames = data.today.repActivity.agents.map(a => capitalize(a.agent));
@@ -197,6 +203,7 @@ function LiveNowPageInner() {
             icon={<PhoneMissed size={18} />}
             delta={todayMissed - yesterdayMissed}
             inverse
+            subtitle={yesterdayMissedByNow != null ? `Yesterday by now: ${yesterdayMissedByNow}` : undefined}
           />
           <KPICard
             label="Avg Speed"

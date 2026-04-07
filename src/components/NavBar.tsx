@@ -95,7 +95,7 @@ export default function NavBar({ pulledAt }: { pulledAt?: string }) {
   return (
     <Suspense fallback={
       <nav className="fixed top-0 left-0 right-0 z-50 h-14 backdrop-blur-xl border-b"
-           style={{ background: 'rgba(10,14,26,0.82)', borderColor: 'rgba(62,165,195,0.18)' }} />
+           style={{ background: C.navBg, borderColor: C.border }} />
     }>
       <NavBarInner pulledAt={pulledAt} />
     </Suspense>

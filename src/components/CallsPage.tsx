@@ -322,7 +322,7 @@ function FilterDropdown({ value, onChange, options }: {
       }}
     >
       {options.map(o => (
-        <option key={o.value} value={o.value} style={{ background: '#141824', color: C.text }}>
+        <option key={o.value} value={o.value} style={{ background: C.bg, color: C.text }}>
           {o.label}
         </option>
       ))}
@@ -649,7 +649,7 @@ function CallsPageInner() {
         <Card padding={false}>
           <div className="overflow-x-auto max-h-[calc(100vh-320px)] overflow-y-auto">
             <table className="w-full text-sm">
-              <thead className="sticky top-0" style={{ background: '#141824' }}>
+              <thead className="sticky top-0" style={{ background: C.bg }}>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                   <th className="px-3 py-2.5 w-10">
                     {recordingsInView.length > 0 && (
@@ -756,7 +756,7 @@ function CallsPageInner() {
                 className="px-4 py-1.5 rounded-lg text-xs font-semibold border-none cursor-pointer transition-colors"
                 style={{
                   background: C.cyan,
-                  color: '#0A0E1A',
+                  color: C.contrast,
                   opacity: loadingMore ? 0.6 : 1,
                 }}
               >

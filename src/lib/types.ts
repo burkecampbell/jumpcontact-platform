@@ -192,6 +192,7 @@ export interface ConvPeriod {
 export interface MissedPeriod {
   total: number;
   byAccount: AcctStat[];
+  hourly?: number[];
 }
 
 export interface RepActivity {

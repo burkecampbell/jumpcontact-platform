@@ -170,7 +170,7 @@ function CalendarMonth({
             textColor = 'rgba(139,146,168,0.33)';
           } else if (isStart || isEnd) {
             bg = C.cyan;
-            textColor = '#0A0E1A';
+            textColor = C.contrast;
             fontWeight = '700';
             borderRadius = isStart && isEnd ? '6px' : isStart ? '6px 0 0 6px' : '0 6px 6px 0';
           } else if (inRange) {
@@ -341,7 +341,7 @@ export default function DateRangePicker({ value, onChange, maxDate }: Props) {
         <div
           className="absolute top-full left-0 mt-2 rounded-xl border shadow-2xl"
           style={{
-            background: '#0f1320',
+            background: C.bg,
             borderColor: C.border,
             boxShadow: '0 25px 50px -12px rgba(0,0,0,0.6)',
             minWidth: '640px',
@@ -459,7 +459,7 @@ export default function DateRangePicker({ value, onChange, maxDate }: Props) {
                     <button
                       onClick={() => { setSelecting('idle'); setRangeStart(null); }}
                       className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs border-none cursor-pointer"
-                      style={{ background: 'rgba(255,255,255,0.05)', color: C.sub }}
+                      style={{ background: C.overlay, color: C.sub }}
                     >
                       <X size={12} /> Cancel
                     </button>
@@ -467,7 +467,7 @@ export default function DateRangePicker({ value, onChange, maxDate }: Props) {
                   <button
                     onClick={() => { setOpen(false); setSelecting('idle'); setRangeStart(null); }}
                     className="px-3 py-1 rounded-md text-xs font-medium border-none cursor-pointer"
-                    style={{ background: C.cyan, color: '#0A0E1A' }}
+                    style={{ background: C.cyan, color: C.contrast }}
                   >
                     Done
                   </button>

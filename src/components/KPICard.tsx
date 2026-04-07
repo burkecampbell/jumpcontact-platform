@@ -9,9 +9,10 @@ interface KPIProps {
   suffix?: string;
   badge?: { label: string; color: string };
   inverse?: boolean; // lower is better (e.g. missed calls)
+  subtitle?: string;
 }
 
-export default function KPICard({ label, value, icon, delta, suffix, badge, inverse }: KPIProps) {
+export default function KPICard({ label, value, icon, delta, suffix, badge, inverse, subtitle }: KPIProps) {
   const isPositive = inverse ? (delta ?? 0) <= 0 : (delta ?? 0) >= 0;
   return (
     <Card className="flex-1 min-w-[160px]">
@@ -35,6 +36,11 @@ export default function KPICard({ label, value, icon, delta, suffix, badge, inve
           <span className="text-xs" style={{ color: isPositive ? '#4ade80' : '#f87171' }}>
             {delta >= 0 ? '\u25B2' : '\u25BC'} {Math.abs(delta)} vs yesterday
           </span>
+        </div>
+      )}
+      {subtitle && (
+        <div className="mt-1">
+          <span className="text-xs" style={{ color: C.sub }}>{subtitle}</span>
         </div>
       )}
     </Card>

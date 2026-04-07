@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { AlertTriangle, XCircle, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { C } from '@/lib/constants';
 
 const ADMIN_EMAIL = 'burke@jumpcontact.com';
 const POLL_INTERVAL = 60_000; // 60s
@@ -88,8 +89,8 @@ export default function HealthBanner() {
               key={i}
               className="flex items-start gap-2 text-xs rounded px-2 py-1.5"
               style={{
-                background: 'rgba(10,14,26,0.5)',
-                color: '#f1f5f9',
+                background: C.overlay,
+                color: C.text,
               }}
             >
               <span style={{ color: alert.severity === 'critical' ? '#E63888' : '#fbbf24' }}>

@@ -22,6 +22,8 @@ export const C = {
   limeHover: 'var(--jc-lime-hover)',
   pinkSoft:  'var(--jc-pink-soft)',
   navBg:     'var(--jc-nav-bg)',
+  overlay:   'var(--jc-overlay)',
+  contrast:  'var(--jc-contrast)',
 } as const;
 
 export const ACTIVITY_COLORS = {

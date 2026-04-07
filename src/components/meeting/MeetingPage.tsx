@@ -522,7 +522,7 @@ function MeetingPageInner() {
             className="px-4 py-2 rounded-lg text-sm font-bold transition-colors border-none cursor-pointer"
             style={{
               background: step < total - 1 ? C.cyan : 'transparent',
-              color: step < total - 1 ? '#0A0E1A' : C.sub,
+              color: step < total - 1 ? C.contrast : C.sub,
             }}
           >
             Next &rarr;
