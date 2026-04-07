@@ -211,8 +211,9 @@ export async function GET(request: NextRequest) {
     const agentWrapMap = new Map<string, number>();
     for (const dayRows of kpiDays) {
       for (const r of dayRows) {
-        if (r.avgWrapSec > 0 && !agentWrapMap.has(r.agent)) {
-          agentWrapMap.set(r.agent, r.avgWrapSec);
+        const key = r.agent.toLowerCase();
+        if (r.avgWrapSec > 0 && !agentWrapMap.has(key)) {
+          agentWrapMap.set(key, r.avgWrapSec);
         }
       }
     }
