@@ -236,15 +236,46 @@ function deriveSingleBrandView(
     };
   }
 
-  // ── 7. Conversion rate — use agent calls sum as denominator ───
+  // ── 7. Filter conversions by brand agents ──────────────────────
+  const visibleAgentNames = new Set(visibleAgents.map(a => a.agent.toLowerCase()));
+  const brandConvByAgent = period.conversions.byAgent
+    .filter(a => visibleAgentNames.has(a.agent.toLowerCase()))
+    .map(a => {
+      // For blended agents, split conversions proportionally
+      const lower = a.agent.toLowerCase();
+      if (BLENDED_AGENTS.has(lower)) {
+        const ratio = summary.agentRatios[lower];
+        if (ratio) {
+          const jcConv = Math.round(a.count * ratio.jc);
+          return { ...a, count: isJC ? jcConv : a.count - jcConv };
+        }
+        return { ...a, count: isJC ? Math.ceil(a.count / 2) : Math.floor(a.count / 2) };
+      }
+      return a;
+    })
+    .filter(a => a.count > 0);
+  const brandConvTotal = brandConvByAgent.reduce((s, a) => s + a.count, 0);
+
+  // Also update per-agent conversions on the repActivity agents
+  const convLookup = new Map(brandConvByAgent.map(a => [a.agent.toLowerCase(), a.count]));
+  for (const agent of visibleAgents) {
+    agent.conversions = convLookup.get(agent.agent.toLowerCase()) || 0;
+  }
+
+  // ── 8. Conversion rate — use agent calls sum as denominator ───
   const agentCallsSum = visibleAgents.reduce((s, a) => s + a.calls, 0);
   const convDenom = agentCallsSum > 0 ? agentCallsSum : answeredCalls;
-  const conversionRate = convDenom > 0 && period.conversions.total > 0
-    ? Math.round((period.conversions.total / convDenom) * 1000) / 10
-    : period.conversionRate;
+  const conversionRate = convDenom > 0 && brandConvTotal > 0
+    ? Math.round((brandConvTotal / convDenom) * 1000) / 10
+    : null;
 
   return {
     ...period,
+    conversions: {
+      ...period.conversions,
+      total: brandConvTotal,
+      byAgent: brandConvByAgent,
+    },
     repActivity: {
       agents: visibleAgents,
       outbound: filteredOutbound,

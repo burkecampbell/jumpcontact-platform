@@ -21,7 +21,7 @@ const MIXED_STEP_LABELS = ['Calls', 'Speed', 'Pickup Rate'];
 
 /** Main Meeting presentation shell — data fetch, step/tab state, keyboard nav */
 function MeetingPageInner() {
-  const { brand, isMixed } = useBrand();
+  const { brand, isMixed, fullName: brandName } = useBrand();
   const stepLabels = isMixed ? MIXED_STEP_LABELS : JC_STEP_LABELS;
   const total = stepLabels.length;
 
@@ -111,7 +111,7 @@ function MeetingPageInner() {
       : 'No pickup data';
 
     const msg = [
-      `🌅 *JUMP CONTACT — MORNING REPORT*`,
+      `🌅 *${brandName.toUpperCase()} — MORNING REPORT*`,
       `📅 ${data.date}`,
       ``,
       `━━━━━━━━━━━━━━━━━━━━━`,
