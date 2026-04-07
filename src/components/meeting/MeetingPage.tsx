@@ -157,71 +157,188 @@ function MeetingPageInner() {
     setTimeout(() => setSlackCopied(false), 2500);
   }, [data]);
 
-  // ── Download conversions report as CSV ────────────────────────────
-  const downloadReport = useCallback(() => {
+  // ── Download conversions report (ExcelJS, JC Document Standards) ──
+  const downloadReport = useCallback(async () => {
     if (!data) return;
+    const ExcelJS = await import('exceljs');
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Jump Contact';
+
+    const JC_TEAL = '3BA5B5';
+    const JC_DARK = '2C3E50';
+    const JC_TEXT = '1A1A1A';
+    const JC_LABEL = '495057';
+    const JC_BG = 'F8F9FA';
+    const JC_BORDER = 'DEE2E6';
+    const WHITE = 'FFFFFF';
+    const thin = (c: string) => ({ style: 'thin' as const, color: { argb: c } });
+    const docBorder = { bottom: thin(JC_BORDER), right: thin(JC_BORDER), left: thin(JC_BORDER), top: thin(JC_BORDER) };
+
     const mtd = data.mtd;
     const byAccount = mtd.byAccount ?? [];
     const agents = mtd.byAgent.map(a => a.agent);
     const cap = (s: string) => s.replace(/\b\w/g, c => c.toUpperCase());
-    const esc = (v: string | number) => {
-      const s = String(v);
-      return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
-    };
     const dom = mtd.dayOfMonth || 1;
     const dim = mtd.daysInMonth || 30;
     const dateStr = data.date || new Date().toISOString().slice(0, 10);
     const monthName = new Date(dateStr + 'T12:00:00').toLocaleString('en-US', { month: 'long', timeZone: 'America/Edmonton' });
     const year = new Date(dateStr + 'T12:00:00').getFullYear();
-    const rows: string[] = [];
 
-    // Header
-    rows.push('JUMP CONTACT');
-    rows.push('Conversions Report');
-    rows.push(`${monthName} ${year}`);
-    rows.push('');
-    rows.push(`Total Conversions,,${mtd.total},,Total Clients,,${byAccount.length}`);
-    rows.push('');
+    // ── Sheet 1: Agent Leaderboard ──
+    const ws1 = wb.addWorksheet('Agent Leaderboard', {
+      views: [{ state: 'frozen', ySplit: 8 }],
+      properties: { tabColor: { argb: JC_TEAL } },
+    });
+    ws1.columns = [{ width: 5 }, { width: 16 }, { width: 14 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }];
 
-    // AGENT LEADERBOARD
-    rows.push('AGENT LEADERBOARD');
-    rows.push('#,Agent,Conversions,Avg/Day,Conv/Hr,Projected,Best Day,Calls,Conv %');
+    // Title bar
+    ws1.mergeCells('A1:I1');
+    ws1.getCell('A1').value = 'JUMP CONTACT';
+    ws1.getCell('A1').font = { name: 'Arial', size: 20, bold: true, color: { argb: WHITE } };
+    ws1.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: JC_DARK } };
+    ws1.getCell('A1').border = { bottom: { style: 'medium', color: { argb: JC_TEAL } } };
+    ws1.getRow(1).height = 36;
+
+    ws1.mergeCells('A2:I2');
+    ws1.getCell('A2').value = `Conversions Report — ${monthName} ${year}`;
+    ws1.getCell('A2').font = { name: 'Arial', size: 12, bold: true, color: { argb: JC_DARK } };
+
+    // Summary strip
+    const infoFill = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: JC_BG } };
+    ws1.getCell('A4').value = 'Total Conversions'; ws1.getCell('A4').font = { name: 'Arial', size: 11, bold: true, color: { argb: JC_LABEL } };
+    ws1.getCell('B4').value = mtd.total; ws1.getCell('B4').font = { name: 'Arial', size: 13, bold: true, color: { argb: JC_TEXT } };
+    ws1.getCell('D4').value = 'Clients'; ws1.getCell('D4').font = { name: 'Arial', size: 11, bold: true, color: { argb: JC_LABEL } };
+    ws1.getCell('E4').value = byAccount.length; ws1.getCell('E4').font = { name: 'Arial', size: 13, bold: true, color: { argb: JC_TEXT } };
+    ws1.getCell('G4').value = 'Day'; ws1.getCell('G4').font = { name: 'Arial', size: 11, bold: true, color: { argb: JC_LABEL } };
+    ws1.getCell('H4').value = `${dom}/${dim}`; ws1.getCell('H4').font = { name: 'Arial', size: 13, bold: true, color: { argb: JC_TEXT } };
+    for (let c = 1; c <= 9; c++) { ws1.getRow(4).getCell(c).fill = infoFill; ws1.getRow(4).getCell(c).border = { top: thin(JC_BORDER), bottom: thin(JC_BORDER) }; }
+
+    // Headers
+    const h1 = ['#', 'AGENT', 'CONV', 'AVG/DAY', 'CONV/HR', 'PROJECTED', 'BEST DAY', 'CALLS', 'CONV %'];
+    h1.forEach((h, i) => {
+      const cell = ws1.getRow(6).getCell(i + 1);
+      cell.value = h;
+      cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: JC_DARK } };
+      cell.border = { bottom: { style: 'medium', color: { argb: JC_TEAL } } };
+      if (i >= 2) cell.alignment = { horizontal: 'right' };
+    });
+
+    ws1.autoFilter = { from: { row: 6, column: 1 }, to: { row: 6 + agents.length, column: 9 } };
+
     mtd.byAgent.forEach((a, i) => {
+      const row = ws1.getRow(7 + i);
       const daily = a.daily || {};
-      const avg = (a.count / Math.max(dom, 1)).toFixed(1);
+      const avg = +(a.count / Math.max(dom, 1)).toFixed(1);
       const projected = Math.round(a.count / Math.max(dom, 1) * dim);
       const best = Object.values(daily).length > 0 ? Math.max(...Object.values(daily)) : 0;
-      // Find calls from mtdRepActivity
-      const rep = (data.mtdRepActivity || []).find(r => r.agent === a.agent);
-      const calls = rep?.totalCalls ?? '';
-      const convPct = rep && rep.totalCalls > 0 ? ((a.count / rep.totalCalls) * 100).toFixed(1) + '%' : '';
-      rows.push(`${i + 1},${cap(a.agent)},${a.count},${avg},,${projected},${best},${calls},${convPct}`);
-    });
-    rows.push('');
-    rows.push('');
+      const rep = (data.mtdRepActivity || []).find((r: { agent: string }) => r.agent === a.agent);
+      const calls = (rep as { totalCalls?: number } | undefined)?.totalCalls ?? 0;
+      const convPct = calls > 0 ? ((a.count / calls) * 100).toFixed(1) + '%' : '';
+      const bg = i % 2 === 0 ? WHITE : JC_BG;
+      const fill = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: bg } };
+      const font = { name: 'Arial', size: 11, color: { argb: JC_TEXT } };
 
-    // CONVERSIONS PER CLIENT with agent columns
-    rows.push('CONVERSIONS PER CLIENT');
-    rows.push(['#', 'Client', 'Conversions', '% of Total', ...agents.map(a => cap(a))].join(','));
+      row.getCell(1).value = i < 3 ? ['🥇','🥈','🥉'][i] : i + 1; row.getCell(1).font = font;
+      row.getCell(2).value = cap(a.agent); row.getCell(2).font = { ...font, bold: true };
+      row.getCell(3).value = a.count; row.getCell(3).font = { ...font, bold: true, size: 13 }; row.getCell(3).alignment = { horizontal: 'right' };
+      row.getCell(4).value = avg; row.getCell(4).font = font; row.getCell(4).alignment = { horizontal: 'right' };
+      row.getCell(5).value = ''; row.getCell(5).font = font; row.getCell(5).alignment = { horizontal: 'right' };
+      row.getCell(6).value = projected; row.getCell(6).font = { ...font, color: { argb: projected >= Math.round(GOAL / agents.length) ? '27AE60' : JC_LABEL } }; row.getCell(6).alignment = { horizontal: 'right' };
+      row.getCell(7).value = best || ''; row.getCell(7).font = font; row.getCell(7).alignment = { horizontal: 'right' };
+      row.getCell(8).value = calls || ''; row.getCell(8).font = font; row.getCell(8).alignment = { horizontal: 'right' };
+      row.getCell(9).value = convPct; row.getCell(9).font = font; row.getCell(9).alignment = { horizontal: 'right' };
+      for (let c = 1; c <= 9; c++) { row.getCell(c).fill = fill; row.getCell(c).border = docBorder; }
+    });
+
+    // ── Sheet 2: Conversions Per Client (with agent pivot) ──
+    const ws2 = wb.addWorksheet('Per Client', {
+      views: [{ state: 'frozen', ySplit: 4, xSplit: 2 }],
+      properties: { tabColor: { argb: '27AE60' } },
+    });
+
+    const agentCols = agents.length;
+    const totalCols = 4 + agentCols; // #, Client, Conv, %, agent1, agent2, ...
+    ws2.columns = [
+      { width: 5 },   // #
+      { width: 30 },  // Client
+      { width: 12 },  // Conversions
+      { width: 10 },  // % of Total
+      ...agents.map(() => ({ width: 10 })), // agent columns
+    ];
+
+    // Title
+    ws2.mergeCells(1, 1, 1, totalCols);
+    ws2.getCell('A1').value = 'CONVERSIONS PER CLIENT — AGENT BREAKDOWN';
+    ws2.getCell('A1').font = { name: 'Arial', size: 14, bold: true, color: { argb: WHITE } };
+    ws2.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: JC_DARK } };
+    ws2.getCell('A1').border = { bottom: { style: 'medium', color: { argb: JC_TEAL } } };
+    ws2.getRow(1).height = 30;
+
+    ws2.mergeCells(2, 1, 2, totalCols);
+    ws2.getCell('A2').value = `${monthName} ${year} — ${mtd.total} total conversions across ${byAccount.length} clients`;
+    ws2.getCell('A2').font = { name: 'Arial', size: 10, italic: true, color: { argb: JC_LABEL } };
+
+    // Column headers
+    const headers = ['#', 'CLIENT', 'CONV', '%', ...agents.map(a => cap(a).toUpperCase())];
+    headers.forEach((h, i) => {
+      const cell = ws2.getRow(4).getCell(i + 1);
+      cell.value = h;
+      cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: JC_DARK } };
+      cell.border = { bottom: { style: 'medium', color: { argb: JC_TEAL } } };
+      if (i >= 2) cell.alignment = { horizontal: 'right' };
+    });
+
+    ws2.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4 + byAccount.length, column: totalCols } };
+
+    // Data rows
     byAccount.forEach((acct, i) => {
+      const row = ws2.getRow(5 + i);
       const bd = acct.agentBreakdown || {};
       const pct = mtd.total > 0 ? ((acct.count / mtd.total) * 100).toFixed(1) + '%' : '0%';
-      const agentVals = agents.map(a => (bd[a] || 0) > 0 ? bd[a] : '');
-      rows.push([i + 1, esc(cap(acct.account)), acct.count, pct, ...agentVals].join(','));
-    });
-    // Totals row
-    const agentTotals = agents.map(a =>
-      byAccount.reduce((s, ac) => s + ((ac.agentBreakdown || {})[a] || 0), 0)
-    );
-    rows.push(['', 'TOTAL', mtd.total, '100%', ...agentTotals].join(','));
+      const bg = i % 2 === 0 ? WHITE : JC_BG;
+      const fill = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: bg } };
+      const font = { name: 'Arial', size: 11, color: { argb: JC_TEXT } };
 
-    // Download
-    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      row.getCell(1).value = i + 1; row.getCell(1).font = { ...font, color: { argb: JC_LABEL } };
+      row.getCell(2).value = cap(acct.account); row.getCell(2).font = { ...font, bold: true };
+      row.getCell(3).value = acct.count; row.getCell(3).font = { ...font, bold: true, size: 12 }; row.getCell(3).alignment = { horizontal: 'right' };
+      row.getCell(4).value = pct; row.getCell(4).font = { ...font, color: { argb: JC_LABEL } }; row.getCell(4).alignment = { horizontal: 'right' };
+
+      agents.forEach((agent, j) => {
+        const val = bd[agent] || 0;
+        const cell = row.getCell(5 + j);
+        cell.value = val > 0 ? val : '';
+        cell.font = { ...font, bold: val > 0, color: { argb: val > 0 ? JC_TEXT : 'CCCCCC' } };
+        cell.alignment = { horizontal: 'right' };
+      });
+
+      for (let c = 1; c <= totalCols; c++) { row.getCell(c).fill = fill; row.getCell(c).border = docBorder; }
+    });
+
+    // Totals row
+    const totRow = ws2.getRow(5 + byAccount.length);
+    totRow.getCell(1).value = '';
+    totRow.getCell(2).value = 'TOTAL'; totRow.getCell(2).font = { name: 'Arial', size: 11, bold: true, color: { argb: JC_DARK } };
+    totRow.getCell(3).value = mtd.total; totRow.getCell(3).font = { name: 'Arial', size: 12, bold: true, color: { argb: JC_DARK } }; totRow.getCell(3).alignment = { horizontal: 'right' };
+    totRow.getCell(4).value = '100%'; totRow.getCell(4).font = { name: 'Arial', size: 11, bold: true, color: { argb: JC_DARK } }; totRow.getCell(4).alignment = { horizontal: 'right' };
+    agents.forEach((agent, j) => {
+      const total = byAccount.reduce((s, ac) => s + ((ac.agentBreakdown || {})[agent] || 0), 0);
+      const cell = totRow.getCell(5 + j);
+      cell.value = total; cell.font = { name: 'Arial', size: 11, bold: true, color: { argb: JC_DARK } }; cell.alignment = { horizontal: 'right' };
+    });
+    for (let c = 1; c <= totalCols; c++) {
+      totRow.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: JC_BG } };
+      totRow.getCell(c).border = { top: { style: 'medium', color: { argb: JC_TEAL } }, bottom: thin(JC_BORDER), left: thin(JC_BORDER), right: thin(JC_BORDER) };
+    }
+
+    // Save
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `JC-Conversions-${monthName}-${year}.csv`;
-    link.click();
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `JC_Conversions-Report_${monthName}-${year}.xlsx`;
+    a.click();
     URL.revokeObjectURL(url);
   }, [data]);
 
