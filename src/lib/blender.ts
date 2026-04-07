@@ -262,7 +262,26 @@ function deriveSingleBrandView(
     agent.conversions = convLookup.get(agent.agent.toLowerCase()) || 0;
   }
 
-  // ── 8. Conversion rate — use agent calls sum as denominator ───
+  // ── 8. Filter conversions by account — only show brand-relevant accounts ──
+  const brandConvByAccount = (period.conversions.byAccount || [])
+    .map(acct => {
+      if (!acct.agentBreakdown) return acct;
+      // Filter agent breakdown to only visible agents
+      const filteredBd: Record<string, number> = {};
+      let brandCount = 0;
+      for (const [agent, count] of Object.entries(acct.agentBreakdown)) {
+        if (visibleAgentNames.has(agent.toLowerCase())) {
+          filteredBd[agent] = count;
+          brandCount += count;
+        }
+      }
+      if (brandCount === 0) return null;
+      return { ...acct, agentBreakdown: filteredBd, count: brandCount };
+    })
+    .filter((a): a is NonNullable<typeof a> => a !== null)
+    .sort((a, b) => b.count - a.count);
+
+  // ── 9. Conversion rate — use agent calls sum as denominator ───
   const agentCallsSum = visibleAgents.reduce((s, a) => s + a.calls, 0);
   const convDenom = agentCallsSum > 0 ? agentCallsSum : answeredCalls;
   const conversionRate = convDenom > 0 && brandConvTotal > 0
@@ -275,6 +294,7 @@ function deriveSingleBrandView(
       ...period.conversions,
       total: brandConvTotal,
       byAgent: brandConvByAgent,
+      byAccount: brandConvByAccount,
     },
     repActivity: {
       agents: visibleAgents,
