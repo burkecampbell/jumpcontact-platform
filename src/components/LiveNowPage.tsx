@@ -16,7 +16,7 @@ import MixedInsights from './MixedInsights';
 import KPICard from './KPICard';
 import { shareRecording } from '@/lib/recording-utils';
 
-type SortKey = 'calls' | 'talkMin' | 'pickup' | 'wrapUp' | 'hoursScheduled' | 'convs' | 'convsPerHour' | 'pickupRate';
+type SortKey = 'calls' | 'talkMin' | 'pickup' | 'wrapUp' | 'hoursScheduled' | 'convs' | 'convPct' | 'pickupRate';
 
 function LiveNowPageInner() {
   const { brand, isMixed, fullName } = useBrand();
@@ -145,6 +145,7 @@ function LiveNowPageInner() {
   const sorted = [...rankRows].sort((a, b) => {
     const get = (r: RankRow) => {
       if (sortKey === 'convs') return r.convs;
+      if (sortKey === 'convPct') return r.calls > 0 ? r.convs / r.calls : -1;
       if (sortKey === 'pickup') return r.pickup ?? -1;
       if (sortKey === 'wrapUp') return r.wrapUp ?? -1;
       if (sortKey === 'pickupRate') return r.pickupRate ?? -1;
@@ -270,7 +271,7 @@ function LiveNowPageInner() {
                       ['wrapUp', 'Wrap-Up'],
                       ['pickupRate', 'Pickup %'],
                       ['hoursScheduled', 'Hrs'],
-                      ['convsPerHour', 'Conv/Hr'],
+                      ['convPct', 'Conv %'],
                     ] as [SortKey, string][]).map(([key, label]) => (
                       <th key={key}
                           className="px-5 py-2 text-right text-xs font-medium cursor-pointer select-none"
@@ -309,8 +310,8 @@ function LiveNowPageInner() {
                         {row.pickupRate != null ? `${row.pickupRate}%` : '—'}
                       </td>
                       <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: C.sub }}>{row.hoursScheduled}h</td>
-                      <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: row.convsPerHour != null && row.convsPerHour >= 2 ? '#4ade80' : C.text }}>
-                        {row.convsPerHour != null ? row.convsPerHour.toFixed(1) : '—'}
+                      <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: row.calls > 0 && row.conversions > 0 ? (row.conversions / row.calls >= 0.2 ? '#4ade80' : C.text) : C.sub }}>
+                        {row.calls > 0 ? ((row.conversions / row.calls) * 100).toFixed(1) + '%' : '—'}
                       </td>
                     </tr>
                   ))}
