@@ -652,9 +652,15 @@ export async function GET(request: NextRequest) {
     // Data quality from CDR pairing (informational only)
     const dataQuality = buildDataQuality(taggedToday);
 
-    // Recent calls filtered by brand
+    // Recent calls filtered by brand, with per-agent wrap-up from derived view
     const brandTodayCalls = filterCallsByBrand(taggedToday, brand);
-    const brandRecentCalls = buildRecentCalls(brandTodayCalls);
+    const brandWrapMap = new Map<string, number>();
+    for (const a of derivedToday.repActivity.agents) {
+      if (a.wrapUpSec != null && a.wrapUpSec > 0) {
+        brandWrapMap.set(a.agent.toLowerCase(), a.wrapUpSec);
+      }
+    }
+    const brandRecentCalls = buildRecentCalls(brandTodayCalls, brandWrapMap);
 
     // Brand-specific conversion overrides:
     // - Mixed: uses merged JC+MSC (already in canonical period from todayConvMerged)
