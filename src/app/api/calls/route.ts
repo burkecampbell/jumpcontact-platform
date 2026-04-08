@@ -3,6 +3,7 @@ import { fetchCallLegs, pairCallLegs, todayMST } from '@/lib/twilio';
 import { ACTIVE_AGENTS, capitalize, normalizeAgent } from '@/lib/constants';
 import { parseBrand, isAgentForBrand, MSC_ONLY_AGENTS, JC_ONLY_AGENTS, type Brand } from '@/lib/brand';
 import { fetchKPIForRange, type KPIAgentDay } from '@/lib/kpi-sheet';
+import { fetchYticaRepActivity, fetchYticaMtdActivity } from '@/lib/sheets';
 import { isMscPhone, getClientBrand } from '@/lib/clients';
 import { cached } from '@/lib/cache';
 import type { PairedCall } from '@/lib/types';
@@ -52,7 +53,7 @@ function toRawCall(c: PairedCall, agentWrapMap?: Map<string, number>): RawCall {
     account: c.client || undefined,
     ringTime: c.ringTime > 0 ? c.ringTime : undefined,
     totalDuration: c.totalDuration > 0 ? c.totalDuration : undefined,
-    wrapUpSec: agentWrapMap?.get(`${dateKey}|${agentKey}`),
+    wrapUpSec: agentWrapMap?.get(`${dateKey}|${agentKey}`) ?? agentWrapMap?.get(`mtd|${agentKey}`),
   };
 }
 
@@ -210,13 +211,39 @@ export async function GET(request: NextRequest) {
     const brand = parseBrand(searchParams.get('brand'));
     const brandPaired = clientPaired.filter(c => isCallForBrand(c, brand));
 
-    // Build agent wrap-up map from KPI sheet BEFORE converting calls
-    // Key: "YYYY-MM-DD|agent" so each call gets its own date's wrap-up
-    const kpiRows = await fetchKPIForRange(dates[0], dates[dates.length - 1]).catch(() => [] as KPIAgentDay[]);
+    // Build agent wrap-up map: KPI daily → Ytica daily → Ytica MTD fallback
+    // Key: "YYYY-MM-DD|agent" for date-specific, "mtd|agent" for fallback
     const agentWrapMap = new Map<string, number>();
+
+    // 1. Primary: KPI sheet (date+agent granularity)
+    const kpiRows = await fetchKPIForRange(dates[0], dates[dates.length - 1]).catch(() => [] as KPIAgentDay[]);
     for (const r of kpiRows) {
       if (r.avgWrapSec > 0) {
         agentWrapMap.set(`${r.date}|${r.agent.toLowerCase()}`, r.avgWrapSec);
+      }
+    }
+
+    // 2. Fallback: Ytica daily data for dates missing KPI wrap-up
+    const yticaDays = await Promise.all(
+      dates.slice(0, 7).map(d => fetchYticaRepActivity(d).catch(() => null))
+    );
+    for (let i = 0; i < yticaDays.length; i++) {
+      const ytica = yticaDays[i];
+      if (!ytica) continue;
+      for (const a of ytica.agents) {
+        const key = `${dates[i]}|${a.agent.toLowerCase()}`;
+        if (!agentWrapMap.has(key) && a.wrapUpSec != null && a.wrapUpSec > 0) {
+          agentWrapMap.set(key, a.wrapUpSec);
+        }
+      }
+    }
+
+    // 3. Last resort: Ytica MTD average (not date-specific, but always available)
+    const monthPrefix = dates[0].slice(0, 7);
+    const yticaMtd = await fetchYticaMtdActivity(monthPrefix).catch(() => []);
+    for (const a of yticaMtd) {
+      if (a.avgWrapUpSec != null && a.avgWrapUpSec > 0) {
+        agentWrapMap.set(`mtd|${a.agent.toLowerCase()}`, a.avgWrapUpSec);
       }
     }
 
