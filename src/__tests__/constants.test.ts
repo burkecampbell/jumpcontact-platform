@@ -514,7 +514,11 @@ describe('constants', () => {
     expect(OUTBOUND_AGENTS).toContain('joseph');
   });
 
-  it('EXCLUDED_AGENTS includes sara', () => {
-    expect(EXCLUDED_AGENTS).toContain('sara');
+  it('EXCLUDED_AGENTS includes sue', () => {
+    expect(EXCLUDED_AGENTS).toContain('sue');
+  });
+
+  it('EXCLUDED_AGENTS does not include sara (blended agent)', () => {
+    expect(EXCLUDED_AGENTS).not.toContain('sara');
   });
 });
