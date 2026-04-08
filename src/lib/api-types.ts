@@ -47,3 +47,7 @@ export interface RecordingError {
 export interface ApiError {
   error: string;
 }
+
+// ── /api/outbound ───────────────────────────────────────────────────────────
+
+export type { OutboundDashboardData } from './outbound-types';
