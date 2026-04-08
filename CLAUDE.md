@@ -8,7 +8,7 @@ tags: [client/msc, ghl, google-sheets, jump-contact, platform, twilio, type/cred
 
 ## What This Is
 
-Internal operations dashboard for Jump Contact + Med Spa Communications (24/7 virtual receptionist). Six pages: Live Now, Call Log, Meeting, Morning, Race, Play. Three-position brand toggle (JC | Mixed | MSC). Deployed on Vercel. Built by Burke Campbell.
+Internal operations dashboard for Jump Contact + Med Spa Communications (24/7 virtual receptionist). Seven pages: Live Now, Call Log, Outbound, Meeting, Morning, Race, Play. Three-position brand toggle (JC | Mixed | MSC). Deployed on Vercel. Built by Burke Campbell.
 
 ## Tech Stack
 
@@ -26,6 +26,7 @@ Internal operations dashboard for Jump Contact + Med Spa Communications (24/7 vi
 | Data: MSC Calls | MSC Client Calls Sheet | Call records, dispositions, conversion tracking |
 | Data: Schedule | Google Sheets | Agent hours, shift parsing |
 | Data: Snapshots | Neon Postgres (drizzle-orm) | Daily immutable snapshots via cron |
+| Data: Outbound | HubSpot CRM API (PAT) | Portal YOUR_PORTAL_ID — calls, deals, tasks, notes, emails via `HUBSPOT_PAT` |
 | Export | ExcelJS | Branded XLSX per JC Document Standards |
 | Cache | In-memory TTL | 30s-1hr depending on data freshness needs |
 | Icons | lucide-react | |
@@ -70,6 +71,7 @@ src/
 │   ├── meeting/page.tsx              # /meeting → MeetingPage
 │   ├── morning/page.tsx              # /morning → MorningDashboard
 │   ├── race/page.tsx                 # /race → RacePage
+│   ├── outbound/page.tsx              # /outbound → OutboundPage (HubSpot sales)
 │   ├── play/page.tsx                 # /play → Recording player (standalone)
 │   ├── sign-in/[[...sign-in]]/       # Clerk sign-in
 │   ├── sign-up/[[...sign-up]]/       # Clerk sign-up
@@ -82,11 +84,17 @@ src/
 │       ├── snapshots/route.ts        # GET /api/snapshots — Neon daily data
 │       ├── cron/snapshot/route.ts    # Neon daily snapshot cron
 │       ├── cron/health-check/route.ts # Health check cron
+│       ├── outbound/route.ts          # GET /api/outbound — HubSpot outbound data (60s cache)
 │       └── cron/sync-recordings/route.ts # Recording map sync cron
 │
 ├── components/
 │   ├── LiveNowPage.tsx               # / — KPIs, agent ranking, recent calls
 │   ├── CallsPage.tsx                 # /calls — call log, date range picker, ExcelJS export
+│   ├── OutboundPage.tsx              # /outbound — HubSpot outbound sales tracker
+│   ├── outbound/                     # /outbound sub-components
+│   │   ├── AgentStatCard.tsx         # Per-agent stat card with call bar
+│   │   ├── ActivityFeed.tsx          # Rolling color-coded activity feed
+│   │   └── PipelineView.tsx          # Deal pipeline visualization (4 pipelines)
 │   ├── RacePage.tsx                  # /race — MTD leaderboard + monthly awards
 │   ├── MorningDashboard.tsx          # /morning — light theme, TV carousel, spring animations
 │   ├── meeting/                      # /meeting — step-based huddle presentation
@@ -137,6 +145,8 @@ src/
 │   ├── msc-calls.ts                 # MSC Client Calls Sheet fetcher (dispositions, conversion tracking)
 │   ├── recording-map.ts              # Static CA→RE pairs (26,091 entries)
 │   ├── recording-utils.ts            # buildPlayerUrl(), shareRecording()
+│   ├── hubspot.ts                    # HubSpot API client (HUBSPOT_TEAM config, fetchers)
+│   ├── outbound-types.ts             # TypeScript interfaces for outbound dashboard
 │   ├── theme.ts                      # Clerk theme variables derived from C palette
 │   ├── getDashboard.ts               # Barrel re-export (backward compat)
 │   └── auth/twilio.ts                # twilioAuth(), twilioAccountSid(), WORKSPACE_SID
@@ -251,6 +261,17 @@ npm run backfill     # backfill Neon snapshots
 - MTD leaderboard + monthly awards (Most Conversions, Best Conv/Hr, etc.)
 - Daily performance from today's `repActivity.agents`
 - Daily grid: conversions per agent per day this month
+
+### OutboundPage (/outbound)
+- HubSpot CRM data — separate from Twilio/Sheets pipeline
+- Team: Anthony (263706316), Angel M (264612211), William (263685131) + Jose (89367067) observer
+- `HUBSPOT_TEAM` config in `hubspot.ts` — NOT connected to `ACTIVE_AGENTS`/`OUTBOUND_AGENTS`/`MSC_ONLY_AGENTS`
+- Anthony appears in BOTH `MSC_ONLY_AGENTS` (Twilio inbound) and `HUBSPOT_TEAM` (HubSpot outbound) — same person, dual role
+- 4 deal pipelines: Full Send, Steady Close, Long Game, Sales Pipeline (default)
+- Activity feed: calls + tasks + notes + emails, color-coded by type
+- 60s API cache, 120s polling interval
+- Brand toggle has no effect (HubSpot is JC-only)
+- Auth: `HUBSPOT_PAT` env var (Private App token, Portal YOUR_PORTAL_ID)
 
 ### Play (/play)
 - Standalone recording player (shareable URL with call metadata)

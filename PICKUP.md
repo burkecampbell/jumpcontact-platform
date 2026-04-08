@@ -1,58 +1,80 @@
 ---
-tags: [client/msc, ghl, google-sheets, jump-contact, platform, twilio, type/integration, type/spec, type/tool]
+tags: [hubspot, jump-contact, platform, type/integration, type/tool]
 ---
 
-# Pickup Prompt — April 7 Evening Session Handoff
+# Pickup Prompt — April 8 Evening Session Handoff
 
-> Read CLAUDE.md first, then this file. Handoff from April 7 session (4 commits).
+> Read CLAUDE.md first, then this file. Handoff from April 8 session (2 commits).
 
 ## What Shipped Today
 
-- **Wrap-up column** in Call Log + ExcelJS export — server-side enrichment via `toRawCall()`, no more useMemo crash
-- **"Yesterday by now"** context on Missed Calls KPI card — hourly missed data from CDR
-- **Light mode sweep** — 18 hardcoded dark hex values replaced with CSS vars (`C.bg`, `C.contrast`, `C.overlay`, `C.navBg`). DateRangePicker popup, sticky thead, dropdowns, buttons all fixed. Sign-in/sign-up and play/page.tsx intentionally kept dark.
-- **KPI sheet as primary** — removed CDR-only guards on call counts and talk time. KPI values always win when present. Added missed calls cross-check (available - picked up).
-- **Cleanup** — debug-kpi route deleted, favicon.ico added
-- **CSS vars added** — `--jc-contrast` (text on bright buttons), `--jc-overlay` (semi-transparent backdrop) for both themes
+### HubSpot Outbound Sales Dashboard (`/outbound`)
+New page tracking the outbound sales team via HubSpot CRM (Portal YOUR_PORTAL_ID).
+
+**Team monitored:**
+- Anthony (Anto Saenz, owner 263706316) — core team
+- Angel M (264612211, created today) — core team
+- William C (263685131) — core team
+- Jose Saenz (89367067) — observer
+
+**Features:**
+- KPI strip: total calls, connected, no answer, talk time
+- Per-agent stat cards with call progress bars and connect rate
+- Rolling activity feed: calls, emails, notes, tasks — color-coded by type, sorted newest-first
+- Deal pipeline visualization for all 4 pipelines (Full Send, Steady Close, Long Game, default)
+- 60s API cache, 120s client polling
+- Same dark theme as all other pages (C color object, Card components, font-mono data)
+
+**Files created (8):**
+- `src/lib/hubspot.ts` — API client, HUBSPOT_TEAM config, all fetch functions
+- `src/lib/outbound-types.ts` — TypeScript interfaces
+- `src/app/api/outbound/route.ts` — GET /api/outbound (60s cache)
+- `src/app/outbound/page.tsx` — page entry
+- `src/components/OutboundPage.tsx` — main page component
+- `src/components/outbound/AgentStatCard.tsx`
+- `src/components/outbound/ActivityFeed.tsx`
+- `src/components/outbound/PipelineView.tsx`
+
+**Files modified (3):**
+- NavBar.tsx — added "Outbound" tab with PhoneOutgoing icon
+- api-types.ts — re-exported OutboundDashboardData
+- .env.example — added HUBSPOT_PAT placeholder
+
+**Auth:** `HUBSPOT_PAT` env var (Private App token). Set in `.env.local` + Vercel production.
+
+### Agent League (from previous unpushed commit)
+EA Sports-style OVR rating system. Already in git, pushed alongside outbound.
 
 ## What's Working
 
-- **Brand toggle** (JC/Mixed/MSC) via `?brand=` — all pages respond
-- **KPI Sheet is PRIMARY** — speed, wrap-up, pickup %, conversions, call counts, talk time all come from KPI sheet when available. CDR fills gaps only.
-- **Call Log** — pagination, Export All, Ring Time, Wrap column, date range picker
-- **Meeting page** — 5 steps, Monday mode
-- **Recording map** — 29,707 CA→RE pairs, midnight cron
-- **316 tests pass**, build clean, production live
+- **All 7 pages render** — Live Now, Call Log, Outbound, League, Meeting, Race, Play
+- **317 tests pass**, build clean
+- **API verified** — William had 78 calls today (50% connect), Anthony had 2 (booked a demo!)
+- **HUBSPOT_PAT on Vercel production** — deployed
 
-## Unfinished (Priority Order)
+## What's NOT Done Yet (Carry Forward)
 
-### 1. OUTBOUND CALLS — No agent
-All outbound calls show blank agent in Call Log. Was marked resolved Apr 2 but still broken. Needs investigation in `pairCallLegs()` in `src/lib/twilio.ts`. This is the #1 bug.
+### From previous sessions (still open):
+1. **Outbound calls — no agent** in Call Log (Twilio issue, not HubSpot)
+2. **Wrap-up column dashes** — date format mismatch in KPI sheet
+3. **Light mode untested visually**
+4. **MSC agent hours → Conv/Hr**
+5. **CEO build report** — built, not wired to UI
+6. **Recording persistence → Neon**
+7. **MSC Client Calls Sheet** — fetcher built, not wired
 
-### 2. WRAP-UP COLUMN — Dashes showing
-Code is correct (case mismatch fixed), but daily average per agent still shows "—" for all calls. Likely date format mismatch between `fetchKPIForDate('2026-04-07')` and how the KPI sheet stores today's date. Debug needed. Note: wrap-up is daily average per agent, NOT per-call (per-call would require TaskRouter reservation API, too expensive).
+### New from today:
+8. **HubSpot rate limiting** — sequential fetches work but the activity feed is slow (~5s). Could pre-cache or paginate differently.
+9. **Angel M has 0 calls** — just onboarded. Dashboard shows her but no data yet.
+10. **0 deals in pipeline** — pipeline stages display correctly, deals list shows empty state. Will populate as team creates deals.
+11. **Vercel preview env** — HUBSPOT_PAT only set for production. Preview deploys won't have HubSpot data.
 
-### 3. LIGHT MODE — Needs end-to-end test
-CSS vars are in place, hardcoded hex replaced in components. But untested visually. Toggle the theme (gear icon → sun/moon) and verify all pages look correct.
+## Key Architecture Decisions
 
-### 4. MSC AGENT HOURS → Conv/Hr
-File: `C:\Users\fuzzy\Downloads\All AGENT HOURS - MSC MST _ Mountain Time (Shared) (4).xlsx`
-Monthly tabs, shift strings like "6am-5pm". Parse to hours, compute conv/hr.
+- `HUBSPOT_TEAM` in `hubspot.ts` is SEPARATE from `ACTIVE_AGENTS`/`OUTBOUND_AGENTS`/`MSC_ONLY_AGENTS` in constants.ts. Anthony appears in both systems (MSC inbound + HubSpot outbound) — same person, dual role. No constants.ts edits.
+- HubSpot fetches are sequential (not parallel) to avoid per-second rate limits. Cached at 60s.
+- HUBSPOT-INTEGRATION.md says ops-center should be the backend. Burke chose jumpcontact-platform directly. Deliberate architectural override.
 
-### 5. CEO BUILD REPORT
-`src/lib/ceo-report.ts` written (5-sheet ExcelJS). Not wired to any UI button.
+## Env Vars (New)
 
-### 6. RECORDING PERSISTENCE → Neon
-Cron discovers pairs but only caches in-memory (~15 min). Need Neon `recordings` table.
-
-### 7. MSC CLIENT CALLS SHEET
-`src/lib/msc-calls.ts` reads Sheet ID 15sZ-T-y1lre... Not wired to any page.
-
-## Key Architecture Decision (This Session)
-
-KPI sheet is now the **authority** for agent metrics, not a fallback. `applyKPIOverrides()` always prefers KPI data when present. CDR is used for per-call detail only (recordings, phone numbers, timestamps, client resolution). This simplifies the data pipeline and produces more reliable numbers.
-
-## Env Vars (Production)
-
-- `MSC_KPI_SHEET_ID` = `15d--jXhaWvWk_QuMJcsxV1Oirlc7bjtieS1p4ClZnec`
-- `MSC_CALLS_SHEET_ID` = `YOUR_SHEET_ID`
+- `HUBSPOT_PAT` = `pat-xxx-REDACTED` (Private App, JC Portal YOUR_PORTAL_ID)
