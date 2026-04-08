@@ -9,7 +9,7 @@ import { generateCallouts } from './callouts';
 
 /** Step 3: Conversions — agent breakdown, top accounts with top agent, hourly chart */
 export default function StepConversions({ period, label, data }: { period: PeriodData; label: string; data: DashboardData }) {
-  const convAgents = period.conversions.byAgent;
+  const convAgents = [...period.conversions.byAgent].sort((a, b) => b.count - a.count);
   const convAccounts = period.conversions.byAccount;
   const repAgents = period.repActivity.agents;
 
