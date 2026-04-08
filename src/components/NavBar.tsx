@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { Suspense } from 'react';
-import { Activity, Phone, Presentation, Trophy } from 'lucide-react';
+import { Activity, Phone, Presentation, Trophy, Shield } from 'lucide-react';
 import { UserButton } from '@clerk/nextjs';
 import BrandToggle from './BrandToggle';
 import ThemeToggle from './ThemeToggle';
@@ -18,6 +18,7 @@ function getMeetingLabel(): string {
 const NAV_ITEMS = [
   { href: '/',        label: 'Live Now',       icon: Activity },
   { href: '/calls',   label: 'Call Log',       icon: Phone },
+  { href: '/league',  label: 'League',         icon: Shield },
   { href: '/meeting', label: getMeetingLabel(), icon: Presentation },
   { href: '/race',    label: 'Race',           icon: Trophy },
 ];

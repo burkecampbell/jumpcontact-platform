@@ -1,0 +1,13 @@
+{
+  "months": {
+    "2026-03": {
+      "omar":   { "calls": 899, "conversions": 0, "avgSpeedSec": 7, "talkMin": 1272.6, "avgWrapUpSec": 30, "avgPickupRate": null, "avgDeclineRate": null, "workingDays": 19 },
+      "burke":  { "calls": 571, "conversions": 0, "avgSpeedSec": 8, "talkMin": 1062.1, "avgWrapUpSec": 65, "avgPickupRate": null, "avgDeclineRate": null, "workingDays": 23 },
+      "ian":    { "calls": 657, "conversions": 0, "avgSpeedSec": 8, "talkMin": 723.5,  "avgWrapUpSec": 62, "avgPickupRate": null, "avgDeclineRate": null, "workingDays": 27 },
+      "danny":  { "calls": 394, "conversions": 0, "avgSpeedSec": 8, "talkMin": 851.1,  "avgWrapUpSec": 17, "avgPickupRate": null, "avgDeclineRate": null, "workingDays": 22 },
+      "chris":  { "calls": 297, "conversions": 0, "avgSpeedSec": 8, "talkMin": 796.7,  "avgWrapUpSec": 36, "avgPickupRate": null, "avgDeclineRate": null, "workingDays": 22 },
+      "george": { "calls": 371, "conversions": 0, "avgSpeedSec": 8, "talkMin": 902.1,  "avgWrapUpSec": 22, "avgPickupRate": null, "avgDeclineRate": null, "workingDays": 21 },
+      "wendy":  { "calls": 567, "conversions": 0, "avgSpeedSec": 7, "talkMin": 1281.5, "avgWrapUpSec": 50, "avgPickupRate": null, "avgDeclineRate": null, "workingDays": 24 }
+    }
+  }
+}

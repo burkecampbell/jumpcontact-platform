@@ -14,9 +14,13 @@ import { useBrand } from '@/hooks/useBrand';
 import MixedInsights from './MixedInsights';
 
 import KPICard from './KPICard';
+import OvrBadge from './OvrBadge';
 import { shareRecording } from '@/lib/recording-utils';
+import { computeOVRFromInput, computeBaselineOVR } from '@/lib/ratings';
+import type { AgentBaseline } from '@/lib/types';
+import agentHistoryData from '@/data/agent-history.json';
 
-type SortKey = 'calls' | 'talkMin' | 'pickup' | 'wrapUp' | 'hoursScheduled' | 'convs' | 'convPct' | 'pickupRate';
+type SortKey = 'calls' | 'talkMin' | 'pickup' | 'wrapUp' | 'hoursScheduled' | 'convs' | 'convPct' | 'pickupRate' | 'ovr';
 
 function LiveNowPageInner() {
   const { brand, isMixed, fullName } = useBrand();
@@ -118,7 +122,25 @@ function LiveNowPageInner() {
   const convByAgent: Record<string, number> = {};
   for (const a of data.today.conversions.byAgent) convByAgent[a.agent.toLowerCase()] = a.count;
 
-  type RankRow = RepAgent & { convs: number; pickup: number | null; wrapUp: number | null };
+  // Load baselines from accumulator for OVR trend arrows
+  const history = agentHistoryData as { months: Record<string, Record<string, {
+    calls: number; conversions: number; avgSpeedSec: number; talkMin: number;
+    avgWrapUpSec: number; avgPickupRate: number | null; avgDeclineRate: number | null; workingDays: number;
+  }>> };
+  const baselineMap: Record<string, number> = {};
+  for (const [, agentsInMonth] of Object.entries(history.months)) {
+    for (const [agentName, d] of Object.entries(agentsInMonth)) {
+      if (!baselineMap[agentName] && d.calls > 0) {
+        baselineMap[agentName] = computeBaselineOVR({
+          agent: agentName, totalCalls: d.calls, totalConversions: d.conversions,
+          avgSpeedSec: d.avgSpeedSec, talkMin: d.talkMin, avgWrapUpSec: d.avgWrapUpSec,
+          avgPickupRate: d.avgPickupRate, avgDeclineRate: d.avgDeclineRate, workingDays: d.workingDays,
+        });
+      }
+    }
+  }
+
+  type RankRow = RepAgent & { convs: number; pickup: number | null; wrapUp: number | null; ovr: number; baselineOvr: number };
   const rankRows: RankRow[] = agents.map(a => {
     const yt = yticaMtd[a.agent.toLowerCase()];
     // Pickup: prefer Ytica MTD when CDR is inflated (>10s), otherwise CDR
@@ -129,11 +151,24 @@ function LiveNowPageInner() {
     const wrapUp = (a.wrapUpSec != null && a.wrapUpSec > 0)
       ? a.wrapUpSec
       : (yt?.avgWrapUpSec ?? null);
+    const convs = convByAgent[a.agent.toLowerCase()] || 0;
+    const { ovr } = computeOVRFromInput({
+      calls: a.calls,
+      conversions: convs,
+      speedSec: pickup,
+      convsPerHour: a.convsPerHour ?? null,
+      pickupRate: a.pickupRate ?? null,
+      talkMin: a.talkMin,
+      wrapUpSec: wrapUp,
+      declineRate: a.declineRate ?? null,
+    });
     return {
       ...a,
-      convs: convByAgent[a.agent.toLowerCase()] || 0,
+      convs,
       pickup,
       wrapUp,
+      ovr,
+      baselineOvr: baselineMap[a.agent.toLowerCase()] || 0,
     };
   });
 
@@ -144,6 +179,7 @@ function LiveNowPageInner() {
   };
   const sorted = [...rankRows].sort((a, b) => {
     const get = (r: RankRow) => {
+      if (sortKey === 'ovr') return r.ovr;
       if (sortKey === 'convs') return r.convs;
       if (sortKey === 'convPct') return r.calls > 0 ? r.convs / r.calls : -1;
       if (sortKey === 'pickup') return r.pickup ?? -1;
@@ -263,6 +299,11 @@ function LiveNowPageInner() {
                 <thead>
                   <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                     <th className="px-5 py-2 text-left text-xs font-medium" style={{ color: C.sub }}>Agent</th>
+                    <th className="px-3 py-2 text-center text-xs font-medium cursor-pointer select-none"
+                        style={{ color: sortKey === 'ovr' ? C.cyan : C.sub }}
+                        onClick={() => handleSort('ovr')}>
+                      <span className="inline-flex items-center gap-0.5">OVR <SortIcon col={'ovr' as SortKey} /></span>
+                    </th>
                     {([
                       ['convs', 'Conv'],
                       ['calls', 'Calls'],
@@ -292,6 +333,9 @@ function LiveNowPageInner() {
                           <span className="w-2 h-2 rounded-full" style={{ background: agentColor(row.agent) }} />
                           <span className="font-medium" style={{ color: C.text }}>{capitalize(row.agent)}</span>
                         </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <OvrBadge ovr={row.ovr} baselineOvr={row.baselineOvr} size="sm" />
                       </td>
                       <td className="px-5 py-2.5 text-right font-mono text-xs font-bold" style={{ color: C.lime }}>{row.convs}</td>
                       <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: C.text }}>{row.calls}</td>

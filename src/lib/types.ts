@@ -337,6 +337,41 @@ export interface YticaMtdAgent {
   avgWrapUpSec: number | null;
 }
 
+// ── Agent Ratings (EA Sports OVR System) ────────────────────────────
+
+export interface AgentBaseline {
+  agent: string;
+  totalCalls: number;
+  totalConversions: number;
+  avgSpeedSec: number;
+  talkMin: number;
+  avgWrapUpSec: number;
+  avgPickupRate: number | null;
+  avgDeclineRate: number | null;
+  workingDays: number;
+}
+
+export interface AgentSubRatings {
+  conversions: number;
+  convPct: number;
+  volume: number;
+  speed: number;
+  convPerHr: number;
+  pickupRate: number;
+  talkTime: number;
+  wrapUp: number;
+  declineRate: number;
+}
+
+export interface AgentRating {
+  agent: string;
+  ovr: number;
+  baselineOvr: number;
+  trend: 'up' | 'down' | 'same';
+  trendDelta: number;
+  subRatings: AgentSubRatings;
+}
+
 export interface DashboardData {
   today: PeriodData & {
     totalCalls: number;
