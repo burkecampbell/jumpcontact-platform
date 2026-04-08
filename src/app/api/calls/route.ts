@@ -6,6 +6,7 @@ import { fetchKPIForRange, type KPIAgentDay } from '@/lib/kpi-sheet';
 import { fetchYticaRepActivity, fetchYticaMtdActivity } from '@/lib/sheets';
 import { isMscPhone, getClientBrand } from '@/lib/clients';
 import { cached } from '@/lib/cache';
+import { fetchCallWrapUp } from '@/lib/call-records';
 import type { PairedCall } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -36,9 +37,17 @@ function callDateMST(isoTime: string): string {
   return new Date(isoTime).toLocaleDateString('en-CA', { timeZone: 'America/Edmonton' });
 }
 
-function toRawCall(c: PairedCall, agentWrapMap?: Map<string, number>): RawCall {
+function toRawCall(
+  c: PairedCall,
+  agentWrapMap?: Map<string, number>,
+  perCallWrap?: Map<string, number>,
+): RawCall {
   const agentKey = (c.agent || '').toLowerCase();
   const dateKey = c.time ? callDateMST(c.time) : '';
+  // Priority: 1) real per-call from Neon  2) KPI daily  3) Ytica MTD
+  const wrapUp = perCallWrap?.get(c.id)
+    ?? agentWrapMap?.get(`${dateKey}|${agentKey}`)
+    ?? agentWrapMap?.get(`mtd|${agentKey}`);
   return {
     time: c.time,
     agent: c.agent,
@@ -53,7 +62,7 @@ function toRawCall(c: PairedCall, agentWrapMap?: Map<string, number>): RawCall {
     account: c.client || undefined,
     ringTime: c.ringTime > 0 ? c.ringTime : undefined,
     totalDuration: c.totalDuration > 0 ? c.totalDuration : undefined,
-    wrapUpSec: agentWrapMap?.get(`${dateKey}|${agentKey}`) ?? agentWrapMap?.get(`mtd|${agentKey}`),
+    wrapUpSec: wrapUp,
   };
 }
 
@@ -247,8 +256,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // 4. Best source: real per-call wrap-up from Neon (TaskRouter events)
+    const perCallWrap = await fetchCallWrapUp(dates[0], dates[dates.length - 1]);
+
     // Convert to RawCall with wrap-up embedded per call
-    const brandCalls = brandPaired.map(c => toRawCall(c, agentWrapMap));
+    const brandCalls = brandPaired.map(c => toRawCall(c, agentWrapMap, perCallWrap));
 
     const agents = buildAgentSummaries(brandCalls, brand);
     const total = brandCalls.length;

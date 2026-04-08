@@ -25,6 +25,7 @@ import {
   isMonday,
 } from '@/lib/constants';
 import { cached } from '@/lib/cache';
+import { fetchCallWrapUp } from '@/lib/call-records';
 import { resolveClient, isMscPhone, getClientBrand } from '@/lib/clients';
 
 /** Resolve the brand of each call and tag it with the source of that determination.
@@ -428,7 +429,11 @@ function reconcileWithYtica(period: PeriodData): PeriodData {
 
 // ── Build recentCalls (last 20 paired calls) ───────────────────────
 
-function buildRecentCalls(calls: PairedCall[], agentWrapMap?: Map<string, number>): RawCall[] {
+function buildRecentCalls(
+  calls: PairedCall[],
+  agentWrapMap?: Map<string, number>,
+  perCallWrap?: Map<string, number>,
+): RawCall[] {
   return calls
     .filter(c => {
       // Show paired inbound calls (have agent + caller phone)
@@ -447,7 +452,8 @@ function buildRecentCalls(calls: PairedCall[], agentWrapMap?: Map<string, number
       recordingUrl: c.agentLegSid ? `/api/calls/recording?sid=${c.id}&agent_sid=${c.agentLegSid}` : undefined,
       account: c.client || undefined,
       ringTime: c.ringTime > 0 ? c.ringTime : undefined,
-      wrapUpSec: agentWrapMap?.get((c.agent || '').toLowerCase()),
+      // Priority: real per-call (Neon) → agent daily avg (fallback)
+      wrapUpSec: perCallWrap?.get(c.id) ?? agentWrapMap?.get((c.agent || '').toLowerCase()),
     }));
 }
 
@@ -652,7 +658,7 @@ export async function GET(request: NextRequest) {
     // Data quality from CDR pairing (informational only)
     const dataQuality = buildDataQuality(taggedToday);
 
-    // Recent calls filtered by brand, with per-agent wrap-up from derived view
+    // Recent calls filtered by brand, with per-call + per-agent wrap-up
     const brandTodayCalls = filterCallsByBrand(taggedToday, brand);
     const brandWrapMap = new Map<string, number>();
     for (const a of derivedToday.repActivity.agents) {
@@ -660,7 +666,9 @@ export async function GET(request: NextRequest) {
         brandWrapMap.set(a.agent.toLowerCase(), a.wrapUpSec);
       }
     }
-    const brandRecentCalls = buildRecentCalls(brandTodayCalls, brandWrapMap);
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: TZ });
+    const perCallWrap = await fetchCallWrapUp(todayStr, todayStr);
+    const brandRecentCalls = buildRecentCalls(brandTodayCalls, brandWrapMap, perCallWrap);
 
     // Brand-specific conversion overrides:
     // - Mixed: uses merged JC+MSC (already in canonical period from todayConvMerged)
@@ -1088,7 +1096,9 @@ async function fetchDashboardData(): Promise<DashboardData> {
       agentWrapMap.set(a.agent.toLowerCase(), a.wrapUpSec);
     }
   }
-  const recentCalls = buildRecentCalls(todayCalls, agentWrapMap);
+  const rawTodayStr = new Date().toLocaleDateString('en-CA', { timeZone: TZ });
+  const rawPerCallWrap = await fetchCallWrapUp(rawTodayStr, rawTodayStr);
+  const recentCalls = buildRecentCalls(todayCalls, agentWrapMap, rawPerCallWrap);
 
   // ── Schedule ───────────────────────────────────────────────────
   const scheduleData = buildScheduleData(schedule);
