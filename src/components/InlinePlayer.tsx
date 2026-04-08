@@ -42,13 +42,37 @@ export default function InlinePlayer({ callSid, recordingUrl }: { callSid: strin
     setCurrentTime(0);
   };
 
-  const seek = (e: React.MouseEvent<HTMLDivElement>) => {
+  const barRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const seekFromEvent = (clientX: number) => {
     const audio = audioRef.current;
-    if (!audio || !audio.duration || !isFinite(audio.duration)) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const bar = barRef.current;
+    if (!audio || !bar || !audio.duration || !isFinite(audio.duration)) return;
+    const rect = bar.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     audio.currentTime = pct * audio.duration;
   };
+
+  const seek = (e: React.MouseEvent<HTMLDivElement>) => seekFromEvent(e.clientX);
+
+  // Drag-to-seek: mouse down on bar starts tracking, mouse up ends
+  const onDragStart = (e: React.MouseEvent<HTMLDivElement>) => {
+    setDragging(true);
+    seekFromEvent(e.clientX);
+  };
+
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (e: MouseEvent) => seekFromEvent(e.clientX);
+    const onUp = () => setDragging(false);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [dragging]);
 
   const fmtTime = (s: number) => {
     if (!isFinite(s) || isNaN(s)) return '0:00';
@@ -109,21 +133,25 @@ export default function InlinePlayer({ callSid, recordingUrl }: { callSid: strin
       {(state === 'playing' || state === 'paused') && (
         <>
           <div
-            onClick={seek}
-            className="w-20 h-2 rounded-full overflow-hidden cursor-pointer group relative"
+            ref={barRef}
+            onMouseDown={onDragStart}
+            onTouchStart={(e) => { setDragging(true); seekFromEvent(e.touches[0].clientX); }}
+            onTouchMove={(e) => { if (dragging) seekFromEvent(e.touches[0].clientX); }}
+            onTouchEnd={() => setDragging(false)}
+            className="flex-1 min-w-[100px] h-3 rounded-full overflow-hidden cursor-pointer group relative select-none"
             style={{ background: C.border }}
             title={`${fmtTime(currentTime)} / ${fmtTime(duration)}`}
           >
             <div
-              className="h-full rounded-full transition-all"
-              style={{ width: `${progress}%`, background: C.cyan }}
+              className="h-full rounded-full"
+              style={{ width: `${progress}%`, background: C.cyan, transition: dragging ? 'none' : 'width 0.1s linear' }}
             />
             <div
-              className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full transition-opacity"
               style={{
-                left: `calc(${progress}% - 5px)`,
+                left: `calc(${progress}% - 7px)`,
                 background: C.cyan,
-                boxShadow: `0 0 6px ${C.cyan}80`,
+                opacity: dragging ? 1 : undefined,
               }}
             />
           </div>
