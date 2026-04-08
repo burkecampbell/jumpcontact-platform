@@ -671,25 +671,25 @@ export async function GET(request: NextRequest) {
     const brandRecentCalls = buildRecentCalls(brandTodayCalls, brandWrapMap, perCallWrap);
 
     // Brand-specific conversion overrides:
-    // - Mixed: uses merged JC+MSC (already in canonical period from todayConvMerged)
-    // - JC: override with Sheets-only conversions (strip MSC)
-    // - MSC: override with GHL-only conversions (strip JC)
-    const jcConv = raw._todayConversions;
-    const mscConv = raw._mscConvToday;
-    if (brand === 'jc' && jcConv) {
-      // JC view: only Google Sheets conversions
-      derivedToday = {
-        ...derivedToday,
-        conversions: {
-          total: jcConv.total,
-          byAgent: Object.entries(jcConv.byAgent).map(([agent, count]) => ({ agent, count: count as number })),
-          byAccount: jcConv.byAccount,
-          hourly: jcConv.byHour,
-        },
-      };
-    } else if (brand === 'msc') {
-      // MSC view: GHL conversions only. If GHL unavailable, show 0 (not JC's data).
-      if (mscConv) {
+    // KPI sheet is authoritative. Only fall back to Sheets/GHL if KPI has no data.
+    const kpiConvTotal = derivedToday.repActivity.agents.reduce((s, a) => s + a.conversions, 0);
+    const kpiHasConversions = kpiConvTotal > 0;
+
+    if (!kpiHasConversions) {
+      // KPI sheet has no conversions — fall back to source-specific data
+      const jcConv = raw._todayConversions;
+      const mscConv = raw._mscConvToday;
+      if (brand === 'jc' && jcConv && jcConv.total > 0) {
+        derivedToday = {
+          ...derivedToday,
+          conversions: {
+            total: jcConv.total,
+            byAgent: Object.entries(jcConv.byAgent).map(([agent, count]) => ({ agent, count: count as number })),
+            byAccount: jcConv.byAccount,
+            hourly: jcConv.byHour,
+          },
+        };
+      } else if (brand === 'msc' && mscConv && mscConv.total > 0) {
         derivedToday = {
           ...derivedToday,
           conversions: {
@@ -699,14 +699,11 @@ export async function GET(request: NextRequest) {
             hourly: mscConv.byHour,
           },
         };
-      } else {
-        derivedToday = {
-          ...derivedToday,
-          conversions: { total: 0, byAgent: [], byAccount: [], hourly: new Array(24).fill(0) },
-        };
       }
+      // If neither source has data, derivedToday.conversions stays as-is (from buildPeriodData)
     }
-    // Mixed: derivedToday already has merged conversions from buildPeriodData(todayConvMerged)
+    // When KPI has conversions, derivedToday already has the correct values from applyKPIOverrides()
+    // + brand filtering in deriveBrandView(). Don't overwrite.
 
     // Strip internal fields from response
     const { _todayCalls, _yesterdayCalls, _schedule, _workerStats, _yesterdayWorkerStats, _todayConversions, _yesterdayConv, _mscConvToday, _mscConvYesterday, ...cleanRaw } = raw;
