@@ -700,8 +700,8 @@ function CallsPageInner() {
                       </td>
                       <td className="px-5 py-2.5">
                         {call.direction === 'inbound'
-                          ? <ArrowDown size={14} style={{ color: '#4ade80' }} />
-                          : <ArrowUp size={14} style={{ color: '#38bdf8' }} />}
+                          ? <ArrowDown size={14} style={{ color: C.good }} />
+                          : <ArrowUp size={14} style={{ color: C.info }} />}
                       </td>
                       <td className="px-5 py-2.5">
                         <div className="flex items-center gap-2">

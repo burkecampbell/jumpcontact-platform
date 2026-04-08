@@ -332,7 +332,7 @@ function LiveNowPageInner() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                  {['Time', 'Agent', 'Client', 'Phone', 'Duration', '', 'Recording'].map(h => (
+                  {['Time', 'Agent', 'Client', 'Phone', 'Duration', 'Ring', 'Wrap', '', 'Recording'].map(h => (
                     <th key={h} className="px-5 py-2 text-left text-xs font-medium" style={{ color: C.sub }}>
                       {h}
                     </th>
@@ -346,7 +346,10 @@ function LiveNowPageInner() {
                       {formatTime(call.time)}
                     </td>
                     <td className="px-5 py-2.5">
-                      <span className="font-medium" style={{ color: C.text }}>{capitalize(call.agent)}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: agentColor(call.agent) }} />
+                        <span className="font-medium" style={{ color: C.text }}>{capitalize(call.agent)}</span>
+                      </div>
                     </td>
                     <td className="px-5 py-2.5 text-xs" style={{ color: call.account ? C.text : C.border }}>
                       {call.account || '—'}
@@ -357,12 +360,16 @@ function LiveNowPageInner() {
                     <td className="px-5 py-2.5 font-mono text-xs" style={{ color: C.text }}>
                       {formatDuration(call.duration)}
                     </td>
+                    <td className="px-5 py-2.5 font-mono text-xs" style={{ color: call.ringTime ? C.cyan : C.border }}>
+                      {call.ringTime ? call.ringTime + 's' : '—'}
+                    </td>
+                    <td className="px-5 py-2.5 font-mono text-xs" style={{ color: call.wrapUpSec ? C.sub : C.border }}>
+                      {call.wrapUpSec ? Math.round(call.wrapUpSec) + 's' : '—'}
+                    </td>
                     <td className="px-5 py-2.5">
-                      {call.direction === 'inbound' ? (
-                        <ArrowDown size={14} style={{ color: '#4ade80' }} />
-                      ) : (
-                        <ArrowUp size={14} style={{ color: '#38bdf8' }} />
-                      )}
+                      {call.direction === 'inbound'
+                        ? <ArrowDown size={14} style={{ color: C.good }} />
+                        : <ArrowUp size={14} style={{ color: C.info }} />}
                     </td>
                     <td className="px-5 py-2.5">
                       {call.recordingUrl ? (
@@ -392,7 +399,7 @@ function LiveNowPageInner() {
                 ))}
                 {(!data.recentCalls || data.recentCalls.length === 0) && (
                   <tr>
-                    <td colSpan={7} className="px-5 py-8 text-center text-sm" style={{ color: C.sub }}>
+                    <td colSpan={9} className="px-5 py-8 text-center text-sm" style={{ color: C.sub }}>
                       No calls yet today
                     </td>
                   </tr>

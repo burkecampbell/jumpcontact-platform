@@ -428,7 +428,7 @@ function reconcileWithYtica(period: PeriodData): PeriodData {
 
 // ── Build recentCalls (last 20 paired calls) ───────────────────────
 
-function buildRecentCalls(calls: PairedCall[]): RawCall[] {
+function buildRecentCalls(calls: PairedCall[], agentWrapMap?: Map<string, number>): RawCall[] {
   return calls
     .filter(c => {
       // Show paired inbound calls (have agent + caller phone)
@@ -446,6 +446,8 @@ function buildRecentCalls(calls: PairedCall[]): RawCall[] {
       callSid: c.id,
       recordingUrl: c.agentLegSid ? `/api/calls/recording?sid=${c.id}&agent_sid=${c.agentLegSid}` : undefined,
       account: c.client || undefined,
+      ringTime: c.ringTime > 0 ? c.ringTime : undefined,
+      wrapUpSec: agentWrapMap?.get((c.agent || '').toLowerCase()),
     }));
 }
 
@@ -1074,7 +1076,13 @@ async function fetchDashboardData(): Promise<DashboardData> {
   }
 
   // ── Recent calls ───────────────────────────────────────────────
-  const recentCalls = buildRecentCalls(todayCalls);
+  const agentWrapMap = new Map<string, number>();
+  for (const a of todayPeriod.repActivity.agents) {
+    if (a.wrapUpSec != null && a.wrapUpSec > 0) {
+      agentWrapMap.set(a.agent.toLowerCase(), a.wrapUpSec);
+    }
+  }
+  const recentCalls = buildRecentCalls(todayCalls, agentWrapMap);
 
   // ── Schedule ───────────────────────────────────────────────────
   const scheduleData = buildScheduleData(schedule);
