@@ -33,7 +33,7 @@ export default function KPICard({ label, value, icon, delta, suffix, badge, inve
       </div>
       {delta !== undefined && delta !== null && (
         <div className="flex items-center gap-1 mt-1">
-          <span className="text-xs" style={{ color: isPositive ? '#4ade80' : '#f87171' }}>
+          <span className="text-xs" style={{ color: isPositive ? C.good : C.bad }}>
             {delta >= 0 ? '\u25B2' : '\u25BC'} {Math.abs(delta)} vs yesterday
           </span>
         </div>

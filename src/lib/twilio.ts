@@ -1,6 +1,6 @@
 import { twilioAuth, twilioAccountSid } from './auth/twilio';
 import { normalizeAgent, decodeAgent, TZ } from './constants';
-import { resolveClient, isJCPhone, isMscPhone } from './clients';
+import { resolveClient, isMscPhone } from './clients';
 import { MSC_ONLY_AGENTS, JC_ONLY_AGENTS } from './brand';
 import type { CallLeg, PairedCall } from './types';
 
@@ -154,7 +154,6 @@ export function pairCallLegs(legs: CallLeg[]): PairedCall[] {
 
     if (bestMatch && bestDelta <= PAIR_WINDOW_MS) {
       pairedInboundSids.add(bestMatch.sid);
-      if (!isJCPhone(bestMatch.to)) continue;
 
       const inboundMs = new Date(bestMatch.startTime).getTime();
       const ringTime = agentTime > inboundMs ? Math.round((agentTime - inboundMs) / 1000) : 0;
@@ -256,7 +255,6 @@ export function pairCallLegs(legs: CallLeg[]): PairedCall[] {
 
     if (parentInbound && !pairedInboundSids.has(parentInbound.sid)) {
       pairedInboundSids.add(parentInbound.sid);
-      if (!isJCPhone(parentInbound.to)) continue;
 
       const inboundMs = new Date(parentInbound.startTime).getTime();
       const ringTime = agentTime > inboundMs ? Math.round((agentTime - inboundMs) / 1000) : 0;
@@ -280,7 +278,6 @@ export function pairCallLegs(legs: CallLeg[]): PairedCall[] {
     }
 
     // ── Strategy 3: Fallback — use whatever phone we found ─────────
-    if (!isJCPhone(agentLeg.from)) continue;
 
     // If parent gave us a caller phone, use it
     if (!callerPhone && parentInbound) {
@@ -307,7 +304,6 @@ export function pairCallLegs(legs: CallLeg[]): PairedCall[] {
   // Unmatched inbound legs (missed/unanswered)
   for (const leg of inboundLegs) {
     if (pairedInboundSids.has(leg.sid)) continue;
-    if (!isJCPhone(leg.to)) continue;
 
     paired.push({
       id: leg.sid,
@@ -339,19 +335,37 @@ export function pairCallLegs(legs: CallLeg[]): PairedCall[] {
       !leg.parentCallSid &&
       !usedSids.has(leg.sid)
     ) {
-      if (!isJCPhone(leg.from)) continue;
       const client = resolveClient(leg.from) || '';
 
-      // Find the agent by looking for child legs with client: URI
+      // Find the agent by looking for child/grandchild legs with client: URI
+      // Flex outbound calls may nest: outbound-api → conference → client:agent
       let agentName = '';
-      for (const child of legs) {
-        if (child.parentCallSid === leg.sid && child.from.startsWith('client:')) {
+      const directChildren = legs.filter(child => child.parentCallSid === leg.sid);
+      for (const child of directChildren) {
+        if (child.from.startsWith('client:')) {
           agentName = normalizeAgent(decodeAgent(child.from));
           break;
         }
-        if (child.parentCallSid === leg.sid && child.to.startsWith('client:')) {
+        if (child.to.startsWith('client:')) {
           agentName = normalizeAgent(decodeAgent(child.to));
           break;
+        }
+      }
+      // Check grandchildren if direct search failed (conference intermediate)
+      if (!agentName) {
+        for (const child of directChildren) {
+          for (const gc of legs) {
+            if (gc.parentCallSid !== child.sid) continue;
+            if (gc.from.startsWith('client:')) {
+              agentName = normalizeAgent(decodeAgent(gc.from));
+              break;
+            }
+            if (gc.to.startsWith('client:')) {
+              agentName = normalizeAgent(decodeAgent(gc.to));
+              break;
+            }
+          }
+          if (agentName) break;
         }
       }
 

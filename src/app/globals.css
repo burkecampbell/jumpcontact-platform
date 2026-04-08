@@ -21,6 +21,9 @@
   --jc-lime-soft: color-mix(in srgb, #BCFD4C 10%, transparent);
   --jc-lime-hover: color-mix(in srgb, #BCFD4C 27%, transparent);
   --jc-pink-soft: color-mix(in srgb, #E63888 10%, transparent);
+  --jc-good-soft: color-mix(in srgb, #4ade80 6%, transparent);
+  --jc-warn-soft: color-mix(in srgb, #fbbf24 6%, transparent);
+  --jc-bad-soft: color-mix(in srgb, #f87171 6%, transparent);
   /* Nav/chrome */
   --jc-nav-bg: rgba(10,14,26,0.82);
   --jc-overlay: rgba(10,14,26,0.5);
@@ -51,6 +54,9 @@ html.light {
   --jc-lime-soft: color-mix(in srgb, #059669 8%, transparent);
   --jc-lime-hover: color-mix(in srgb, #059669 15%, transparent);
   --jc-pink-soft: color-mix(in srgb, #db2777 8%, transparent);
+  --jc-good-soft: color-mix(in srgb, #16a34a 6%, transparent);
+  --jc-warn-soft: color-mix(in srgb, #d97706 6%, transparent);
+  --jc-bad-soft: color-mix(in srgb, #dc2626 6%, transparent);
   --jc-nav-bg: rgba(248,250,252,0.92);
   --jc-overlay: rgba(0,0,0,0.25);
   --jc-contrast: #1e293b;
@@ -73,12 +79,20 @@ html.light {
 }
 
 body {
-  background: var(--jc-bg);
+  background:
+    linear-gradient(rgba(10,14,26,0.72), rgba(10,14,26,0.72)),
+    url('/hero-bg.jpg') center/cover no-repeat fixed;
+  background-color: var(--jc-bg);
   color: var(--jc-text);
   font-family: "Inter", system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Light mode: solid background, no image */
+html.light body {
+  background: var(--jc-bg);
 }
 
 .glass-card {

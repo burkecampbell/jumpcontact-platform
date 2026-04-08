@@ -166,8 +166,8 @@ function LiveNowPageInner() {
         {/* Mixed: Cross-brand insights */}
         {isMixed && data.brandBreakdown && <MixedInsights breakdown={data.brandBreakdown} />}
 
-        {/* Pace Comparison Line (hidden in Mixed — conversions don't apply) */}
-        {!isMixed && yesterdayConv > 0 && (
+        {/* Pace Comparison Line */}
+        {yesterdayConv > 0 && (
           <div className="flex items-center gap-2 mb-3 px-1">
             <span className="text-xs" style={{ color: C.sub }}>
               Yesterday at this time: <span className="font-mono font-semibold" style={{ color: C.text }}>{yesterdayConv}</span> conversions
@@ -182,15 +182,13 @@ function LiveNowPageInner() {
 
         {/* KPI Cards */}
         <ErrorBoundary section="KPI Cards">
-        <div className={`grid grid-cols-2 md:grid-cols-4 ${isMixed ? 'lg:grid-cols-6' : 'lg:grid-cols-8'} gap-4 mb-6`}>
-          {!isMixed && (
-            <KPICard
-              label="Conversions"
-              value={todayConv}
-              icon={<TrendingUp size={18} />}
-              delta={todayConv - yesterdayConv}
-            />
-          )}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-6">
+          <KPICard
+            label="Conversions"
+            value={todayConv}
+            icon={<TrendingUp size={18} />}
+            delta={todayConv - yesterdayConv}
+          />
           <KPICard
             label="Calls Answered"
             value={todayCalls}
@@ -225,15 +223,13 @@ function LiveNowPageInner() {
             value={fmtSpeed(avgWrap)}
             icon={<Clock size={18} />}
           />
-          {!isMixed && (
-            <KPICard
-              label="Conv Rate"
-              value={convRate != null ? convRate : '—'}
-              suffix={convRate != null ? '%' : ''}
-              icon={<Percent size={18} />}
-              delta={convRate != null && yesterdayRate != null ? +(convRate - yesterdayRate).toFixed(1) : undefined}
-            />
-          )}
+          <KPICard
+            label="Conv Rate"
+            value={convRate != null ? convRate : '—'}
+            suffix={convRate != null ? '%' : ''}
+            icon={<Percent size={18} />}
+            delta={convRate != null && yesterdayRate != null ? +(convRate - yesterdayRate).toFixed(1) : undefined}
+          />
           <Card className="flex-1 min-w-[160px]">
             <div className="flex items-start justify-between mb-2">
               <span className="text-xs font-medium" style={{ color: C.sub }}>Active Agents</span>

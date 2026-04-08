@@ -101,7 +101,7 @@ export default function InlinePlayer({ callSid, recordingUrl }: { callSid: strin
         ) : state === 'playing' ? (
           <Pause size={14} style={{ color: C.cyan }} />
         ) : state === 'error' ? (
-          <Volume2 size={14} style={{ color: '#f87171' }} />
+          <Volume2 size={14} style={{ color: C.bad }} />
         ) : (
           <Play size={14} style={{ color: C.cyan }} />
         )}

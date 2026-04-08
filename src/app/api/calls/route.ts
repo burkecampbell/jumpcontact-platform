@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { fetchCallLegs, pairCallLegs, todayMST } from '@/lib/twilio';
 import { ACTIVE_AGENTS, capitalize, normalizeAgent } from '@/lib/constants';
 import { parseBrand, isAgentForBrand, MSC_ONLY_AGENTS, JC_ONLY_AGENTS, type Brand } from '@/lib/brand';
-import { fetchKPIForDate, type KPIAgentDay } from '@/lib/kpi-sheet';
+import { fetchKPIForRange, type KPIAgentDay } from '@/lib/kpi-sheet';
 import { isMscPhone, getClientBrand } from '@/lib/clients';
 import { cached } from '@/lib/cache';
 import type { PairedCall } from '@/lib/types';
@@ -30,8 +30,14 @@ interface AgentCallSummary {
   talkMin: number;
 }
 
+/** Convert call time (UTC ISO) to MST date string for KPI lookup */
+function callDateMST(isoTime: string): string {
+  return new Date(isoTime).toLocaleDateString('en-CA', { timeZone: 'America/Edmonton' });
+}
+
 function toRawCall(c: PairedCall, agentWrapMap?: Map<string, number>): RawCall {
   const agentKey = (c.agent || '').toLowerCase();
+  const dateKey = c.time ? callDateMST(c.time) : '';
   return {
     time: c.time,
     agent: c.agent,
@@ -46,7 +52,7 @@ function toRawCall(c: PairedCall, agentWrapMap?: Map<string, number>): RawCall {
     account: c.client || undefined,
     ringTime: c.ringTime > 0 ? c.ringTime : undefined,
     totalDuration: c.totalDuration > 0 ? c.totalDuration : undefined,
-    wrapUpSec: agentWrapMap?.get(agentKey),
+    wrapUpSec: agentWrapMap?.get(`${dateKey}|${agentKey}`),
   };
 }
 
@@ -205,16 +211,12 @@ export async function GET(request: NextRequest) {
     const brandPaired = clientPaired.filter(c => isCallForBrand(c, brand));
 
     // Build agent wrap-up map from KPI sheet BEFORE converting calls
-    const kpiDays = await Promise.all(
-      dates.slice(0, 7).map(d => fetchKPIForDate(d).catch(() => [] as KPIAgentDay[]))
-    );
+    // Key: "YYYY-MM-DD|agent" so each call gets its own date's wrap-up
+    const kpiRows = await fetchKPIForRange(dates[0], dates[dates.length - 1]).catch(() => [] as KPIAgentDay[]);
     const agentWrapMap = new Map<string, number>();
-    for (const dayRows of kpiDays) {
-      for (const r of dayRows) {
-        const key = r.agent.toLowerCase();
-        if (r.avgWrapSec > 0 && !agentWrapMap.has(key)) {
-          agentWrapMap.set(key, r.avgWrapSec);
-        }
+    for (const r of kpiRows) {
+      if (r.avgWrapSec > 0) {
+        agentWrapMap.set(`${r.date}|${r.agent.toLowerCase()}`, r.avgWrapSec);
       }
     }
 

@@ -17,7 +17,7 @@ import { useBrand } from '@/hooks/useBrand';
 // Meeting cadence matches Burke's speaking flow:
 // "Yesterday's numbers" → Speed → Pickup Rate → Conversions → MTD
 const JC_STEP_LABELS = ['Calls', 'Speed', 'Pickup Rate', 'Conversions', 'MTD'];
-const MIXED_STEP_LABELS = ['Calls', 'Speed', 'Pickup Rate'];
+const MIXED_STEP_LABELS = ['Calls', 'Speed', 'Pickup Rate', 'Conversions', 'MTD'];
 
 /** Main Meeting presentation shell — data fetch, step/tab state, keyboard nav */
 function MeetingPageInner() {
@@ -389,7 +389,7 @@ function MeetingPageInner() {
     periodLabel = activeDay.toUpperCase();
   }
 
-  // Map step index to the right component (Mixed skips conversions/MTD)
+  // Map step index to the right component
   const currentLabel = stepLabels[step];
 
   function renderStep() {
