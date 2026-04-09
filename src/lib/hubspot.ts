@@ -53,12 +53,19 @@ async function fetchHubSpotTeamFromSheet(): Promise<HubSpotOwner[]> {
 
     const owners: HubSpotOwner[] = [];
     for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
+      let row = rows[i];
       if (!row[0]) continue;
+      // Handle CSV pasted into single column — split if only 1 cell with commas
+      if (row.length === 1 && row[0].includes(',')) {
+        row = row[0].split(',').map((s: string) => s.trim());
+      }
+      const key = (row[0] || '').trim().toLowerCase();
+      const ownerId = (row[2] || '').trim();
+      if (!key || !ownerId) continue;
       owners.push({
-        key: (row[0] || '').trim().toLowerCase(),
+        key,
         name: (row[1] || '').trim(),
-        ownerId: (row[2] || '').trim(),
+        ownerId,
         role: ((row[3] || '').trim().toLowerCase() === 'observer' ? 'observer' : 'outbound') as 'outbound' | 'observer',
       });
     }
