@@ -74,6 +74,26 @@ if (kpi.conversions > 0 && !isBlended) agent.conversions = kpi.conversions;
 
 Also: the `if (kpiRows.length > 0)` block that rebuilds `conversions.byAgent` should skip blended agents too.
 
+### CRITICAL: Call Log is broken as a reporting tool
+Burke needs the Call Log to function as a **minute counter and reporting tool**, not just a call list. Full audit required. Here's what's wrong and what Burke expects:
+
+**What's broken:**
+- Pagination (Load 50 more) is useless for reporting — if Omar has 833 calls in March, you can't scroll through 50 at a time
+- No summary stats for the filtered view — when you filter to Omar + Inbound, there's no total showing "Omar: 34 inbound calls, 2h 15m talk time for this period"
+- No per-client subtotals — filter to Omar + Jacob Sapochnick should show "Omar had X calls to Jacob Sapochnick totaling Y minutes"
+- Agent filter is hardcoded to ACTIVE_AGENTS — should include ALL agents in the data
+- Export requires loading all data first — should export the full filtered dataset directly
+
+**What Burke wants:**
+1. **Filter summary bar** — when any filter is active, show: "Omar | Inbound | Mar 1-31 → 34 calls, 2h 15m, 12 conversions"
+2. **Per-client breakdown** — when agent+client are both filtered, show subtotals
+3. **Load All for single-agent** — when filtering to one agent, load all their calls automatically (not 200+50+50...)
+4. **Sortable totals** — the agent strip at top should update to show only the filtered agent's stats
+5. **Minute counter** — prominently display total talk time for the current filter combination
+6. **Export filtered** — "Export All" exports the FILTERED view with correct totals, not everything
+
+**Architecture note:** The API already supports `from`, `to`, `brand`, `limit`, `offset`. The issue is the frontend UX — it paginates when it should aggregate. For single-agent views, fetch everything and show summary stats.
+
 ### From previous sessions (still open):
 1. **Outbound calls — no agent** in Call Log (Twilio issue, not HubSpot)
 2. **Wrap-up column dashes** — date format mismatch in KPI sheet
