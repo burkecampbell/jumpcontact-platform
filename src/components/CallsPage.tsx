@@ -444,6 +444,70 @@ function CallsPageInner() {
     return result; // API already returns newest-first
   }, [data, agentFilter, clientFilter, dirFilter, sortOrder]);
 
+  // Dynamic agent list from sheet data (not hardcoded ACTIVE_AGENTS)
+  // Must be before early returns to satisfy Rules of Hooks
+  const agentOptions = useMemo(() => {
+    if (!data?.agents) return ['all'];
+    const names = data.agents
+      .filter(a => a.calls > 0)
+      .map(a => a.agent.toLowerCase());
+    return ['all', ...names];
+  }, [data?.agents]);
+
+  // Filter stats — computed from loaded+filtered CDR data
+  const hasFilter = agentFilter !== 'all' || clientFilter !== 'all' || dirFilter !== 'all';
+  const filterStats = useMemo(() => {
+    const totalSec = filtered.reduce((s, c) => s + c.duration, 0);
+    const inbound = filtered.filter(c => c.direction === 'inbound').length;
+    return {
+      calls: filtered.length,
+      talkMin: +(totalSec / 60).toFixed(1),
+      inbound,
+      outbound: filtered.length - inbound,
+    };
+  }, [filtered]);
+
+  // Per-client breakdown when agent is filtered
+  const clientBreakdown = useMemo(() => {
+    if (agentFilter === 'all') return [];
+    const map = new Map<string, { calls: number; talkSec: number }>();
+    for (const c of filtered) {
+      const client = c.account || 'Unknown';
+      const entry = map.get(client) || { calls: 0, talkSec: 0 };
+      entry.calls += 1;
+      entry.talkSec += c.duration;
+      map.set(client, entry);
+    }
+    return [...map.entries()]
+      .map(([name, e]) => ({ client: name, calls: e.calls, talkMin: +(e.talkSec / 60).toFixed(1) }))
+      .sort((a, b) => b.calls - a.calls);
+  }, [filtered, agentFilter]);
+
+  // Auto-load all calls when filtering to a single agent
+  const [autoLoading, setAutoLoading] = useState(false);
+  useEffect(() => {
+    if (agentFilter !== 'all' && data?.hasMore && !autoLoading && !loadingMore) {
+      setAutoLoading(true);
+      (async () => {
+        let offset = data!.calls.length;
+        while (true) {
+          const isSingleDay = dateRange.from === dateRange.to;
+          const base = isSingleDay
+            ? `/api/calls?date=${dateRange.from}`
+            : `/api/calls?from=${dateRange.from}&to=${dateRange.to}`;
+          const res = await fetch(`${base}&limit=2000&offset=${offset}&brand=${brand}`);
+          if (!res.ok) break;
+          const json = await res.json();
+          if (!json.calls?.length) break;
+          setData(prev => prev ? { ...prev, calls: [...prev.calls, ...json.calls], hasMore: json.hasMore } : prev);
+          if (!json.hasMore) break;
+          offset += json.calls.length;
+        }
+        setAutoLoading(false);
+      })();
+    }
+  }, [agentFilter, data?.hasMore, data?.calls.length, dateRange, brand, autoLoading, loadingMore]);
+
   const [exporting, setExporting] = useState(false);
 
   const handleDownload = async () => {
@@ -559,71 +623,8 @@ function CallsPageInner() {
     );
   }
 
-  // Dynamic agent list from sheet data (not hardcoded ACTIVE_AGENTS)
-  const agentOptions = useMemo(() => {
-    if (!data?.agents) return ['all'];
-    const names = data.agents
-      .filter(a => a.calls > 0)
-      .map(a => a.agent.toLowerCase());
-    return ['all', ...names];
-  }, [data?.agents]);
-
   const totalCalls = data.calls.length;
   const recordingCount = data.calls.filter(c => c.recordingUrl).length;
-
-  // Filter stats — computed from loaded+filtered CDR data
-  const hasFilter = agentFilter !== 'all' || clientFilter !== 'all' || dirFilter !== 'all';
-  const filterStats = useMemo(() => {
-    const totalSec = filtered.reduce((s, c) => s + c.duration, 0);
-    const inbound = filtered.filter(c => c.direction === 'inbound').length;
-    return {
-      calls: filtered.length,
-      talkMin: +(totalSec / 60).toFixed(1),
-      inbound,
-      outbound: filtered.length - inbound,
-    };
-  }, [filtered]);
-
-  // Per-client breakdown when agent is filtered
-  const clientBreakdown = useMemo(() => {
-    if (agentFilter === 'all') return [];
-    const map = new Map<string, { calls: number; talkSec: number }>();
-    for (const c of filtered) {
-      const client = c.account || 'Unknown';
-      const entry = map.get(client) || { calls: 0, talkSec: 0 };
-      entry.calls += 1;
-      entry.talkSec += c.duration;
-      map.set(client, entry);
-    }
-    return [...map.entries()]
-      .map(([name, e]) => ({ client: name, calls: e.calls, talkMin: +(e.talkSec / 60).toFixed(1) }))
-      .sort((a, b) => b.calls - a.calls);
-  }, [filtered, agentFilter]);
-
-  // Auto-load all calls when filtering to a single agent
-  const [autoLoading, setAutoLoading] = useState(false);
-  useEffect(() => {
-    if (agentFilter !== 'all' && data?.hasMore && !autoLoading && !loadingMore) {
-      setAutoLoading(true);
-      (async () => {
-        let offset = data.calls.length;
-        while (true) {
-          const isSingleDay = dateRange.from === dateRange.to;
-          const base = isSingleDay
-            ? `/api/calls?date=${dateRange.from}`
-            : `/api/calls?from=${dateRange.from}&to=${dateRange.to}`;
-          const res = await fetch(`${base}&limit=2000&offset=${offset}&brand=${brand}`);
-          if (!res.ok) break;
-          const json = await res.json();
-          if (!json.calls?.length) break;
-          setData(prev => prev ? { ...prev, calls: [...prev.calls, ...json.calls], hasMore: json.hasMore } : prev);
-          if (!json.hasMore) break;
-          offset += json.calls.length;
-        }
-        setAutoLoading(false);
-      })();
-    }
-  }, [agentFilter, data?.hasMore, data?.calls.length, dateRange, brand, autoLoading, loadingMore]);
 
   return (
     <>
