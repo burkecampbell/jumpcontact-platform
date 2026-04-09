@@ -174,6 +174,20 @@ function buildSheetAgentSummaries(
     }
   }
 
+  // Last resort: if sheets have nothing (e.g. today before KPI/Ytica update),
+  // derive agent summaries from CDR data directly
+  if (map.size === 0) {
+    for (const call of cdrCalls) {
+      const key = normalizeAgent(call.agent)?.toLowerCase();
+      if (!key) continue;
+      if (!isAgentForBrand(key, brand)) continue;
+      const entry = map.get(key) || { calls: 0, talkMin: 0 };
+      entry.calls += 1;
+      entry.talkMin += +(call.duration / 60).toFixed(1);
+      map.set(key, entry);
+    }
+  }
+
   // CDR enrichment: per-agent inbound/outbound counts
   const dirByAgent = new Map<string, { inbound: number; outbound: number }>();
   for (const call of cdrCalls) {
@@ -328,8 +342,19 @@ export async function GET(request: NextRequest) {
     const agents = buildSheetAgentSummaries(kpiRows, yticaDays, brand, brandCalls);
 
     // Team-level summary from Ytica TeamStats (one sheet read for all dates)
+    // Falls back to CDR-derived counts when Ytica has no data (e.g. today)
     const teamStats = await fetchYticaTeamStatsRange(dates).catch(() => []);
-    const summary = buildTeamSummary(teamStats);
+    let summary = buildTeamSummary(teamStats);
+    if (summary.totalCalls === 0 && brandCalls.length > 0) {
+      const talkSec = brandCalls.reduce((s, c) => s + c.duration, 0);
+      const inbound = brandCalls.filter(c => c.direction === 'inbound').length;
+      summary = {
+        totalCalls: brandCalls.length,
+        totalTalkMin: +(talkSec / 60).toFixed(1),
+        inbound,
+        outbound: brandCalls.length - inbound,
+      };
+    }
 
     const total = brandCalls.length;
     const page = brandCalls.slice(offset, offset + limit);
