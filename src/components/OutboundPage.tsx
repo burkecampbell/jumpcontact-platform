@@ -98,8 +98,10 @@ export default function OutboundPage() {
   if (!data) return null;
 
   const { agents, teamTotals, activityFeed, deals, pipelines, pulledAt } = data;
-  // Team members first, observer (Jose) last
-  const teamAgents = agents.filter(a => a.key !== 'jose');
+  // Sort by most calls descending; observer (Jose) always last
+  const teamAgents = agents
+    .filter(a => a.key !== 'jose')
+    .sort((a, b) => b.totalCalls - a.totalCalls);
   const observer = agents.find(a => a.key === 'jose');
 
   return (

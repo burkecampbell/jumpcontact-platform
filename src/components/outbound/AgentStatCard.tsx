@@ -1,8 +1,16 @@
 'use client';
 
+import { ExternalLink } from 'lucide-react';
 import Card from '@/components/Card';
 import { C, agentColor, capitalize } from '@/lib/constants';
 import type { OutboundAgentStats } from '@/lib/outbound-types';
+
+const HUBSPOT_PORTAL = 'YOUR_PORTAL_ID';
+
+function agentHubSpotUrl(ownerId: string): string {
+  // Links to "All contacts" view filtered by this owner
+  return `https://app-na3.hubspot.com/contacts/${HUBSPOT_PORTAL}/objects/0-1/views/all/list?ownerId=${ownerId}`;
+}
 
 function fmtDuration(ms: number): string {
   const totalSec = Math.round(ms / 1000);
@@ -15,15 +23,18 @@ function fmtDuration(ms: number): string {
 export default function AgentStatCard({ agent }: { agent: OutboundAgentStats }) {
   const color = agentColor(agent.key);
   const barPct = Math.min(agent.totalCalls, 100); // cap bar at 100
+  const hubUrl = agentHubSpotUrl(agent.ownerId);
 
   return (
-    <Card className="p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: color }} />
-        <span className="text-sm font-semibold" style={{ color: C.text }}>
-          {capitalize(agent.name)}
-        </span>
-      </div>
+    <a href={hubUrl} target="_blank" rel="noopener noreferrer" className="block no-underline">
+      <Card className="p-4 hover:brightness-110 transition-all">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: color }} />
+          <span className="text-sm font-semibold" style={{ color: C.text }}>
+            {capitalize(agent.name)}
+          </span>
+          <ExternalLink size={11} className="ml-auto shrink-0 opacity-30" style={{ color: C.sub }} />
+        </div>
 
       {/* Calls bar */}
       <div className="mb-3">
@@ -64,6 +75,7 @@ export default function AgentStatCard({ agent }: { agent: OutboundAgentStats }) 
           </div>
         )}
       </div>
-    </Card>
+      </Card>
+    </a>
   );
 }
