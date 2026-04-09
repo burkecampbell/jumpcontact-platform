@@ -68,14 +68,16 @@ function rateSpeed(sec: number | null): number {
   return 15;
 }
 
-/** Conv/Hr (higher = better). 99 = 4+/hr sustained. */
+/** Conv/Hr (higher = better). Calibrated to team avg ~0.77/hr.
+ *  0.5→35, 0.77→50 (avg), 1.2→70, 2.0→85, 3.0+→95. */
 function rateConvPerHr(cph: number | null): number {
   if (cph === null || cph <= 0) return 15;
-  if (cph >= 4) return 97;
-  if (cph >= 3) return clamp(Math.round(85 + (cph - 3) * 12), 85, 97);
-  if (cph >= 2) return clamp(Math.round(70 + (cph - 2) * 15), 70, 85);
-  if (cph >= 1) return clamp(Math.round(50 + (cph - 1) * 20), 50, 70);
-  return clamp(Math.round(15 + cph * 35), 15, 50);
+  if (cph >= 3.0) return 95;
+  if (cph >= 2.0) return clamp(Math.round(85 + (cph - 2.0) * 10), 85, 95);
+  if (cph >= 1.2) return clamp(Math.round(70 + (cph - 1.2) / 0.8 * 15), 70, 85);
+  if (cph >= 0.77) return clamp(Math.round(50 + (cph - 0.77) / 0.43 * 20), 50, 70);
+  if (cph >= 0.3) return clamp(Math.round(25 + (cph - 0.3) / 0.47 * 25), 25, 50);
+  return clamp(Math.round(15 + cph / 0.3 * 10), 15, 25);
 }
 
 /** Pickup rate % (higher = better). Slightly compressed — 95%+ → 90+. */
@@ -128,20 +130,57 @@ export interface OvrInput {
   talkMin: number;
   wrapUpSec: number | null;
   declineRate: number | null;
-  hoursScheduled: number;  // Required for per-hour normalization
+  hoursScheduled: number;  // Full day scheduled hours
+  hoursElapsed?: number;   // Hours on shift so far (for today's view — uses elapsed, not full day)
 }
 
-/** Compute all 9 sub-ratings from raw metrics. Volume and talk time normalize by hours. */
+/**
+ * Compute elapsed shift hours for today.
+ * Uses schedule shift range + current MST time to determine how long the agent
+ * has been on shift. Falls back to hoursScheduled if schedule unavailable.
+ *
+ * @param shiftStr - The schedule string for today (e.g. "8a-5p", "OFF")
+ * @param nowMST - Current time in MST
+ * @returns Hours elapsed on shift (minimum 0.5 to avoid division spikes)
+ */
+export function computeElapsedHours(shiftStr: string | null, nowMST: Date): number {
+  if (!shiftStr || /off|n\/a|-$/i.test(shiftStr.trim())) return 0;
+  // Parse shift range (e.g. "8a-5p" → {start: 8, end: 17})
+  const m = shiftStr.trim().match(/^(\d+(?::\d+)?)\s*([ap])m?\s*[-–]\s*(\d+(?::\d+)?)\s*([ap])m?$/i);
+  if (!m) return 0;
+  const toH = (t: string, ampm: string) => {
+    const [h, min = '0'] = t.split(':');
+    let hour = parseInt(h);
+    if (ampm.toLowerCase() === 'p' && hour !== 12) hour += 12;
+    if (ampm.toLowerCase() === 'a' && hour === 12) hour = 0;
+    return hour + parseInt(min) / 60;
+  };
+  const start = toH(m[1], m[2]);
+  const end = toH(m[3], m[4]);
+  const nowH = nowMST.getHours() + nowMST.getMinutes() / 60;
+
+  // If before shift started, 0 hours elapsed
+  if (nowH < start) return 0;
+  // If after shift ended, return full shift length
+  const shiftLength = end > start ? end - start : (24 - start + end);
+  if (nowH >= end && end > start) return Math.max(shiftLength, 0.5);
+  // During shift — elapsed = now - start
+  return Math.max(nowH - start, 0.5); // min 0.5hr to avoid division spikes
+}
+
+/** Compute all 9 sub-ratings from raw metrics.
+ *  Volume and talk time normalize by hoursElapsed (today) or hoursScheduled (historical). */
 export function computeSubRatings(input: OvrInput): AgentSubRatings {
-  const hrs = Math.max(input.hoursScheduled, 1); // prevent division by zero
+  // Use elapsed hours when available (today's view), otherwise full scheduled hours
+  const hrs = Math.max(input.hoursElapsed ?? input.hoursScheduled, 0.5);
   return {
     conversions: rateConversions(input.conversions),
     convPct:     rateConvPct(input.conversions, input.calls),
-    volume:      rateVolume(input.calls / hrs),          // calls per scheduled hour
+    volume:      rateVolume(input.calls / hrs),
     speed:       rateSpeed(input.speedSec),
-    convPerHr:   rateConvPerHr(input.convsPerHour),
+    convPerHr:   rateConvPerHr(input.conversions / hrs),  // Use actual elapsed, not API's convsPerHour
     pickupRate:  ratePickupRate(input.pickupRate),
-    talkTime:    rateTalkTime(input.talkMin / hrs),       // talk minutes per scheduled hour
+    talkTime:    rateTalkTime(input.talkMin / hrs),
     wrapUp:      rateWrapUp(input.wrapUpSec),
     declineRate: rateDeclineRate(input.declineRate),
   };

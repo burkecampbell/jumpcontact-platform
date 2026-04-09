@@ -16,7 +16,7 @@ import MixedInsights from './MixedInsights';
 import KPICard from './KPICard';
 import OvrBadge from './OvrBadge';
 import { shareRecording } from '@/lib/recording-utils';
-import { computeOVRFromInput, computeBaselineOVR } from '@/lib/ratings';
+import { computeOVRFromInput, computeBaselineOVR, computeElapsedHours } from '@/lib/ratings';
 import type { AgentBaseline } from '@/lib/types';
 import agentHistoryData from '@/data/agent-history.json';
 
@@ -140,6 +140,19 @@ function LiveNowPageInner() {
     }
   }
 
+  // Build schedule lookup for elapsed hours
+  const scheduleMap: Record<string, string> = {};
+  if (data.schedule?.agents) {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const nowMST = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Edmonton' }));
+    const dayKey = days[nowMST.getDay()];
+    for (const sa of data.schedule.agents) {
+      const shift = sa.schedule[dayKey] || sa.schedule[dayKey.toLowerCase()] || '';
+      scheduleMap[sa.name.toLowerCase()] = shift;
+    }
+  }
+  const nowMST = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Edmonton' }));
+
   type RankRow = RepAgent & { convs: number; pickup: number | null; wrapUp: number | null; ovr: number; baselineOvr: number };
   const rankRows: RankRow[] = agents.map(a => {
     const yt = yticaMtd[a.agent.toLowerCase()];
@@ -152,6 +165,9 @@ function LiveNowPageInner() {
       ? a.wrapUpSec
       : (yt?.avgWrapUpSec ?? null);
     const convs = convByAgent[a.agent.toLowerCase()] || 0;
+    // Compute elapsed shift hours for today's rating (not full scheduled)
+    const shiftStr = scheduleMap[a.agent.toLowerCase()] || null;
+    const elapsed = shiftStr ? computeElapsedHours(shiftStr, nowMST) : null;
     const { ovr } = computeOVRFromInput({
       calls: a.calls,
       conversions: convs,
@@ -162,6 +178,7 @@ function LiveNowPageInner() {
       wrapUpSec: wrapUp,
       declineRate: a.declineRate ?? null,
       hoursScheduled: a.hoursScheduled || 8,
+      hoursElapsed: elapsed ?? undefined,
     });
     return {
       ...a,
