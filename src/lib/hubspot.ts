@@ -275,7 +275,8 @@ export async function fetchRecentActivity(
 ): Promise<ActivityFeedItem[]> {
   const ownerFilter = { propertyName: 'hubspot_owner_id', operator: 'IN' as const, values: ownerIds };
 
-  // Fetch engagement types sequentially to avoid HubSpot's per-second rate limit
+  // Fetch engagement types sequentially with delays to respect HubSpot's per-second rate limit.
+  // Private App tokens allow ~4-5 requests/second. We add 300ms gaps.
   const calls = await hubspotSearch(
     'calls',
     [ownerFilter],
@@ -283,6 +284,7 @@ export async function fetchRecentActivity(
     [{ propertyName: 'hs_timestamp', direction: 'DESCENDING' }],
     limit,
   );
+  await sleep(300);
   const tasks = await hubspotSearch(
     'tasks',
     [ownerFilter],
@@ -290,6 +292,7 @@ export async function fetchRecentActivity(
     [{ propertyName: 'hs_timestamp', direction: 'DESCENDING' }],
     limit,
   );
+  await sleep(300);
   const notes = await hubspotSearch(
     'notes',
     [ownerFilter],
@@ -297,6 +300,7 @@ export async function fetchRecentActivity(
     [{ propertyName: 'hs_timestamp', direction: 'DESCENDING' }],
     20,
   );
+  await sleep(300);
   const emails = await hubspotSearch(
     'emails',
     [ownerFilter],
@@ -379,6 +383,11 @@ export async function fetchRecentActivity(
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
+
+/** Brief pause between HubSpot API calls to avoid per-second rate limit. */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 function stripHtml(html: string): string {
   return html

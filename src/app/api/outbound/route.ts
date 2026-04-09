@@ -29,11 +29,13 @@ async function fetchOutboundData(): Promise<OutboundDashboardData> {
   const today = todayMST();
   const allOwnerIds = ALL_HUBSPOT_OWNERS.map(o => o.ownerId);
 
-  // Sequential fetches to stay within HubSpot's per-second rate limit.
+  // Sequential fetches with pauses to stay within HubSpot's per-second rate limit.
   // Cached at 60s so this only runs once per minute.
   const pipelines = await fetchPipelines();
   const calls = await fetchCallsForOwners(allOwnerIds, today);
+  await new Promise(r => setTimeout(r, 400));
   const deals = await fetchDealsForOwners(allOwnerIds);
+  await new Promise(r => setTimeout(r, 400));
   const activityFeed = await fetchRecentActivity(allOwnerIds, 50);
 
   // Build pipeline stage lookup for deal label resolution
