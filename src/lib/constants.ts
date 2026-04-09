@@ -42,7 +42,7 @@ const csv = (key: string, fallback: string) =>
 
 export const ACTIVE_AGENTS = csv('ACTIVE_AGENTS', 'omar,burke,ian,danny,chris,wendy,sara,george,sue,angel');
 export const OUTBOUND_AGENTS = csv('OUTBOUND_AGENTS', 'william,joseph');
-export const EXCLUDED_AGENTS = csv('EXCLUDED_AGENTS', 'sue');
+export const EXCLUDED_AGENTS = csv('EXCLUDED_AGENTS', 'sue,ian');
 
 // MSC-only agents — NEVER appear on JC dashboards
 export const MSC_ONLY_AGENTS = new Set([

@@ -130,55 +130,28 @@ export interface OvrInput {
   talkMin: number;
   wrapUpSec: number | null;
   declineRate: number | null;
-  hoursScheduled: number;  // Full day scheduled hours
-  hoursElapsed?: number;   // Hours on shift so far (for today's view — uses elapsed, not full day)
+  hoursScheduled: number;  // Full day scheduled hours — used for normalization
 }
 
 /**
- * Compute elapsed shift hours for today.
- * Uses schedule shift range + current MST time to determine how long the agent
- * has been on shift. Falls back to hoursScheduled if schedule unavailable.
+ * OVR is a PACE metric: it only goes UP as you perform, never DOWN for being idle.
+ * We divide by scheduled hours (not elapsed) so the score reflects "pace toward
+ * end-of-day goal." At 10 AM you're low because you haven't finished your day yet.
+ * By 5 PM your rate reflects real full-day performance.
  *
- * @param shiftStr - The schedule string for today (e.g. "8a-5p", "OFF")
- * @param nowMST - Current time in MST
- * @returns Hours elapsed on shift (minimum 0.5 to avoid division spikes)
+ * This means: OVR never drops during the day unless you actively do something
+ * negative (decline calls, wrap-up gets slower, etc.). Danny's question
+ * "why did my score go down when I didn't take any calls?" is answered:
+ * it doesn't anymore.
  */
-export function computeElapsedHours(shiftStr: string | null, nowMST: Date): number {
-  if (!shiftStr || /off|n\/a|-$/i.test(shiftStr.trim())) return 0;
-  // Parse shift range (e.g. "8a-5p" → {start: 8, end: 17})
-  const m = shiftStr.trim().match(/^(\d+(?::\d+)?)\s*([ap])m?\s*[-–]\s*(\d+(?::\d+)?)\s*([ap])m?$/i);
-  if (!m) return 0;
-  const toH = (t: string, ampm: string) => {
-    const [h, min = '0'] = t.split(':');
-    let hour = parseInt(h);
-    if (ampm.toLowerCase() === 'p' && hour !== 12) hour += 12;
-    if (ampm.toLowerCase() === 'a' && hour === 12) hour = 0;
-    return hour + parseInt(min) / 60;
-  };
-  const start = toH(m[1], m[2]);
-  const end = toH(m[3], m[4]);
-  const nowH = nowMST.getHours() + nowMST.getMinutes() / 60;
-
-  // If before shift started, 0 hours elapsed
-  if (nowH < start) return 0;
-  // If after shift ended, return full shift length
-  const shiftLength = end > start ? end - start : (24 - start + end);
-  if (nowH >= end && end > start) return Math.max(shiftLength, 0.5);
-  // During shift — elapsed = now - start
-  return Math.max(nowH - start, 0.5); // min 0.5hr to avoid division spikes
-}
-
-/** Compute all 9 sub-ratings from raw metrics.
- *  Volume and talk time normalize by hoursElapsed (today) or hoursScheduled (historical). */
 export function computeSubRatings(input: OvrInput): AgentSubRatings {
-  // Use elapsed hours when available (today's view), otherwise full scheduled hours
-  const hrs = Math.max(input.hoursElapsed ?? input.hoursScheduled, 0.5);
+  const hrs = Math.max(input.hoursScheduled, 1);
   return {
     conversions: rateConversions(input.conversions),
     convPct:     rateConvPct(input.conversions, input.calls),
     volume:      rateVolume(input.calls / hrs),
     speed:       rateSpeed(input.speedSec),
-    convPerHr:   rateConvPerHr(input.conversions / hrs),  // Use actual elapsed, not API's convsPerHour
+    convPerHr:   rateConvPerHr(input.convsPerHour),  // API computes this from scheduled hours
     pickupRate:  ratePickupRate(input.pickupRate),
     talkTime:    rateTalkTime(input.talkMin / hrs),
     wrapUp:      rateWrapUp(input.wrapUpSec),

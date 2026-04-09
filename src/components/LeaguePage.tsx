@@ -8,7 +8,7 @@ import ErrorBoundary from './ErrorBoundary';
 import OvrBadge from './OvrBadge';
 import TopAgents, { type CategoryTop3 } from './TopAgents';
 import { C, capitalize, agentColor, fmtSpeed, fmtTalkTime, rankBadge, speedGrade } from '@/lib/constants';
-import { computeOVRFromInput, computeBaselineOVR, computeElapsedHours, ratingTier, ratingDelta, SUB_RATING_LABELS, type OvrInput } from '@/lib/ratings';
+import { computeOVRFromInput, computeBaselineOVR, ratingTier, ratingDelta, SUB_RATING_LABELS, type OvrInput } from '@/lib/ratings';
 import type { DashboardData, RepAgent, AgentBaseline, AgentSubRatings } from '@/lib/types';
 import { useBrand } from '@/hooks/useBrand';
 import { isAgentForBrand } from '@/lib/brand';
@@ -96,7 +96,6 @@ function buildLeagueRow(
   speedSec: number | null,
   wrapUpSec: number | null,
   baselineOvr: number,
-  hoursElapsed?: number,
 ): LeagueRow {
   const convPct = a.calls > 0 ? +((convs / a.calls) * 100).toFixed(1) : null;
   const input: OvrInput = {
@@ -109,7 +108,6 @@ function buildLeagueRow(
     wrapUpSec,
     declineRate: a.declineRate ?? null,
     hoursScheduled: a.hoursScheduled || 8,
-    hoursElapsed,
   };
   const { ovr, subRatings } = computeOVRFromInput(input);
   const delta = ratingDelta(ovr, baselineOvr);
@@ -232,22 +230,10 @@ function LeaguePageInner() {
 
     if (horizon === 'today') {
       // TODAY: live data from repActivity + today's conversions
-      // Use elapsed shift hours (not full scheduled) for per-hour normalization
+      // Uses hoursScheduled (not elapsed) so OVR only goes UP during the day
       const agents = data.today.repActivity.agents;
       const convByAgent: Record<string, number> = {};
       for (const a of data.today.conversions.byAgent) convByAgent[a.agent.toLowerCase()] = a.count;
-
-      // Build schedule lookup for elapsed hours
-      const schedMap: Record<string, string> = {};
-      if (data.schedule?.agents) {
-        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Edmonton' }));
-        const dayKey = days[now.getDay()];
-        for (const sa of data.schedule.agents) {
-          schedMap[sa.name.toLowerCase()] = sa.schedule[dayKey] || sa.schedule[dayKey.toLowerCase()] || '';
-        }
-      }
-      const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Edmonton' }));
 
       return agents
         .filter(a => a.calls > 0)
@@ -262,10 +248,8 @@ function LeaguePageInner() {
           const convs = convByAgent[a.agent.toLowerCase()] || 0;
           const bl = baselines[a.agent.toLowerCase()];
           const baselineOvr = bl ? computeBaselineOVR(bl) : 0;
-          const shiftStr = schedMap[a.agent.toLowerCase()] || null;
-          const elapsed = shiftStr ? computeElapsedHours(shiftStr, now) : undefined;
 
-          return buildLeagueRow(a, convs, speedSec, wrapUpSec, baselineOvr, elapsed);
+          return buildLeagueRow(a, convs, speedSec, wrapUpSec, baselineOvr);
         });
     }
 
