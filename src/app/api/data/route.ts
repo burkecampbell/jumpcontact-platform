@@ -924,7 +924,8 @@ async function fetchDashboardData(): Promise<DashboardData> {
 
     const kpiLookup = new Map(kpiRows.map(k => [k.agent.toLowerCase(), k]));
     for (const agent of period.repActivity.agents) {
-      const kpi = kpiLookup.get(agent.agent.toLowerCase());
+      const agentLower = agent.agent.toLowerCase();
+      const kpi = kpiLookup.get(agentLower);
       if (!kpi) continue;
 
       // Speed: ring time from KPI sheet (THE metric Burke wants)
@@ -945,8 +946,10 @@ async function fetchDashboardData(): Promise<DashboardData> {
       if (kpi.totalTalkMin > 0) {
         agent.talkMin = kpi.totalTalkMin;
       }
-      // Conversions — KPI sheet has brand-accurate conversion counts
-      if (kpi.conversions > 0) {
+      // Conversions — skip blended agents (Sara, Wendy, Jose):
+      // KPI sheet Column D is a single integer with no JC/MSC breakdown.
+      // Blended agents get correct merged conversions from Sheets (JC) + GHL (MSC).
+      if (kpi.conversions > 0 && !BLENDED_AGENTS.has(agentLower)) {
         agent.conversions = kpi.conversions;
       }
     }

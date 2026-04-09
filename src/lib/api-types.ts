@@ -17,12 +17,24 @@ export interface AgentCallSummary {
   agent: string;
   calls: number;
   talkMin: number;
+  inbound: number;
+  outbound: number;
+}
+
+/** Aggregate stats for the full date range (before pagination) */
+export interface CallsSummary {
+  totalCalls: number;
+  totalTalkMin: number;
+  inbound: number;
+  outbound: number;
 }
 
 /** GET /api/calls?date=YYYY-MM-DD&limit=50&offset=0 */
 export interface CallsResponse {
   calls: RawCall[];
   agents: AgentCallSummary[];
+  /** Aggregate stats for the full date range (all calls, not just paginated slice) */
+  summary: CallsSummary;
   pulledAt: string;
   /** Total calls for the day (all agents, before pagination) */
   total: number;

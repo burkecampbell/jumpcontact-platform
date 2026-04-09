@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchCallLegs, pairCallLegs, todayMST } from '@/lib/twilio';
-import { ACTIVE_AGENTS, capitalize, normalizeAgent } from '@/lib/constants';
+import { capitalize, normalizeAgent } from '@/lib/constants';
 import { parseBrand, isAgentForBrand, MSC_ONLY_AGENTS, JC_ONLY_AGENTS, type Brand } from '@/lib/brand';
 import { fetchKPIForRange, type KPIAgentDay } from '@/lib/kpi-sheet';
-import { fetchYticaRepActivity, fetchYticaMtdActivity } from '@/lib/sheets';
+import { fetchYticaRepActivity, fetchYticaMtdActivity, fetchYticaTeamStatsRange, type YticaRepActivity, type YticaTeamStats } from '@/lib/sheets';
 import { isMscPhone, getClientBrand } from '@/lib/clients';
 import { cached } from '@/lib/cache';
 import { fetchCallWrapUp } from '@/lib/call-records';
 import type { PairedCall } from '@/lib/types';
+import type { AgentCallSummary, CallsSummary } from '@/lib/api-types';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,12 +25,6 @@ interface RawCall {
   ringTime?: number;
   totalDuration?: number;
   wrapUpSec?: number;
-}
-
-interface AgentCallSummary {
-  agent: string;
-  calls: number;
-  talkMin: number;
 }
 
 /** Convert call time (UTC ISO) to MST date string for KPI lookup */
@@ -127,37 +122,104 @@ function isCallForBrand(call: PairedCall, brand: Brand): boolean {
   return brand === 'jc';
 }
 
-function buildAgentSummaries(calls: RawCall[], brand: Brand): AgentCallSummary[] {
-  const map = new Map<string, { calls: number; talkSec: number }>();
+/** Is this KPI row for the requested brand? Uses Column C team tags. */
+function isKPIForBrand(kpi: KPIAgentDay, brand: Brand): boolean {
+  if (brand === 'mixed') return true;
+  if (kpi.team === 'blended') return true;
+  return kpi.team === brand;
+}
 
-  // Seed with brand-appropriate agents
-  for (const name of ACTIVE_AGENTS) {
-    if (isAgentForBrand(name, brand)) {
-      map.set(name, { calls: 0, talkSec: 0 });
+/** Parse "H:MM:SS" or "M:SS" time string to minutes */
+function parseTimeMins(val: string): number {
+  if (!val) return 0;
+  const parts = val.split(':').map(Number);
+  if (parts.length === 3) return parts[0] * 60 + parts[1] + parts[2] / 60;
+  if (parts.length === 2) return parts[0] + parts[1] / 60;
+  return parseFloat(val) || 0;
+}
+
+/**
+ * Build agent summaries from KPI Sheet (primary) + Ytica (fallback).
+ * CDR is only used to enrich with inbound/outbound direction split.
+ */
+function buildSheetAgentSummaries(
+  kpiRows: KPIAgentDay[],
+  yticaDays: (YticaRepActivity | null)[],
+  brand: Brand,
+  cdrCalls: RawCall[],
+): AgentCallSummary[] {
+  const map = new Map<string, { calls: number; talkMin: number }>();
+
+  // Primary: KPI sheet — aggregate per-agent across all days in range
+  for (const kpi of kpiRows) {
+    if (!isKPIForBrand(kpi, brand)) continue;
+    const agent = kpi.agent.toLowerCase();
+    const entry = map.get(agent) || { calls: 0, talkMin: 0 };
+    entry.calls += kpi.callsPickedUp;
+    entry.talkMin += kpi.totalTalkMin;
+    map.set(agent, entry);
+  }
+
+  // Fallback: Ytica daily for agents not in KPI
+  for (const ytica of yticaDays) {
+    if (!ytica) continue;
+    for (const a of ytica.agents) {
+      const agent = a.agent.toLowerCase();
+      if (map.has(agent)) continue; // KPI takes priority
+      if (!isAgentForBrand(agent, brand)) continue;
+      const entry = map.get(agent) || { calls: 0, talkMin: 0 };
+      entry.calls += a.calls;
+      entry.talkMin += a.talkMin;
+      map.set(agent, entry);
     }
   }
 
-  for (const call of calls) {
-    const key = normalizeAgent(call.agent);
+  // CDR enrichment: per-agent inbound/outbound counts
+  const dirByAgent = new Map<string, { inbound: number; outbound: number }>();
+  for (const call of cdrCalls) {
+    const key = normalizeAgent(call.agent)?.toLowerCase();
     if (!key) continue;
-    let entry = map.get(key);
-    if (!entry) {
-      // Agent not seeded (blended or new) — add them
-      if (!isAgentForBrand(key, brand)) continue;
-      entry = { calls: 0, talkSec: 0 };
-      map.set(key, entry);
-    }
-    entry.calls += 1;
-    entry.talkSec += call.duration;
+    const entry = dirByAgent.get(key) || { inbound: 0, outbound: 0 };
+    if (call.direction === 'inbound') entry.inbound++;
+    else entry.outbound++;
+    dirByAgent.set(key, entry);
   }
 
   return [...map.entries()]
-    .map(([name, entry]) => ({
-      agent: capitalize(name),
-      calls: entry.calls,
-      talkMin: +(entry.talkSec / 60).toFixed(1),
-    }))
+    .filter(([, e]) => e.calls > 0)
+    .map(([name, e]) => {
+      const dir = dirByAgent.get(name) || { inbound: 0, outbound: 0 };
+      return {
+        agent: capitalize(name),
+        calls: e.calls,
+        talkMin: +e.talkMin.toFixed(1),
+        inbound: dir.inbound,
+        outbound: dir.outbound,
+      };
+    })
     .sort((a, b) => b.calls - a.calls);
+}
+
+/** Aggregate Ytica TeamStats across multiple days into a CallsSummary */
+function buildTeamSummary(
+  teamStats: YticaTeamStats[],
+): CallsSummary {
+  let totalCalls = 0;
+  let totalTalkMin = 0;
+  let inbound = 0;
+  let outbound = 0;
+  for (const ts of teamStats) {
+    totalCalls += ts.totalCalls;
+    inbound += ts.inbound;
+    outbound += ts.outbound;
+    if (ts.talkTime) totalTalkMin += parseTimeMins(ts.talkTime);
+  }
+  return {
+    totalCalls,
+    totalTalkMin: +totalTalkMin.toFixed(1),
+    inbound,
+    outbound,
+  };
 }
 
 /**
@@ -262,7 +324,13 @@ export async function GET(request: NextRequest) {
     // Convert to RawCall with wrap-up embedded per call
     const brandCalls = brandPaired.map(c => toRawCall(c, agentWrapMap, perCallWrap));
 
-    const agents = buildAgentSummaries(brandCalls, brand);
+    // Agent summaries from KPI Sheet (primary) + Ytica (fallback), CDR for direction split
+    const agents = buildSheetAgentSummaries(kpiRows, yticaDays, brand, brandCalls);
+
+    // Team-level summary from Ytica TeamStats (one sheet read for all dates)
+    const teamStats = await fetchYticaTeamStatsRange(dates).catch(() => []);
+    const summary = buildTeamSummary(teamStats);
+
     const total = brandCalls.length;
     const page = brandCalls.slice(offset, offset + limit);
     const hasMore = offset + limit < total;
@@ -270,6 +338,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       calls: page,
       agents,
+      summary,
       pulledAt: new Date().toISOString(),
       total,
       hasMore,

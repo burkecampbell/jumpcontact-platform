@@ -572,3 +572,27 @@ export async function fetchYticaTeamStats(dateStr: string): Promise<YticaTeamSta
     return null;
   }
 }
+
+/** Fetch Ytica TeamStats for multiple dates in one sheet read */
+export async function fetchYticaTeamStatsRange(dates: string[]): Promise<YticaTeamStats[]> {
+  try {
+    const rows = await readSheet(YTICA_SHEET_ID, 'TeamStats!A:M');
+    if (rows.length < 2) return [];
+    const dateSet = new Set(dates);
+    return rows.slice(1)
+      .filter(row => dateSet.has((row[0] || '').trim()))
+      .map(row => ({
+        totalCalls: parseInt(row[2]) || 0,
+        inbound: parseInt(row[3]) || 0,
+        outbound: parseInt(row[4]) || 0,
+        talkTime: row[5] || '',
+        avgTalk: row[6] || '',
+        missed: parseInt(row[10]) || 0,
+        missedOver15: parseInt(row[11]) || 0,
+        missedPct: row[12] || '',
+      }));
+  } catch (e) {
+    console.warn('Ytica TeamStats range fetch failed:', (e as Error).message);
+    return [];
+  }
+}

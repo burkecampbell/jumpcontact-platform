@@ -5,7 +5,7 @@ import NavBar from './NavBar';
 import HealthBanner from './HealthBanner';
 import Card from './Card';
 import DateRangePicker, { type DateRange } from './DateRangePicker';
-import { C, capitalize, fmtTalkTime, ACTIVE_AGENTS, agentColor } from '@/lib/constants';
+import { C, capitalize, fmtTalkTime, agentColor } from '@/lib/constants';
 import { formatPhone, formatDuration, formatTime, formatDateTime } from '@/lib/formatters';
 import type { RawCall } from '@/lib/getDashboard';
 import type { CallsResponse, AgentCallSummary } from '@/lib/api-types';
@@ -345,7 +345,7 @@ function AgentMiniCard({ agent, calls, talkMin }: AgentCallSummary) {
           <span className="text-lg font-bold font-mono" style={{ color: C.text }}>{calls}</span>
           <span className="text-xs ml-1" style={{ color: C.sub }}>calls</span>
         </div>
-        <span className="text-xs font-mono" style={{ color: C.sub }}>{fmtTalkTime(talkMin)}</span>
+        <span className="text-xs font-mono" style={{ color: C.sub }}>{Math.round(talkMin).toLocaleString()}m</span>
       </div>
     </div>
   );
@@ -374,6 +374,7 @@ function CallsPageInner() {
   const [agentFilter, setAgentFilter] = useState('all');
   const [clientFilter, setClientFilter] = useState('all');
   const [dirFilter, setDirFilter] = useState<'all' | 'inbound' | 'outbound'>('all');
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [selectedSids, setSelectedSids] = useState<Set<string>>(new Set());
 
   const INITIAL_LOAD = 200;
@@ -431,13 +432,17 @@ function CallsPageInner() {
 
   const filtered = useMemo(() => {
     if (!data) return [];
-    return data.calls.filter(c => {
+    const result = data.calls.filter(c => {
       if (agentFilter !== 'all' && c.agent.toLowerCase() !== agentFilter) return false;
       if (clientFilter !== 'all' && (c.account || '') !== clientFilter) return false;
       if (dirFilter !== 'all' && c.direction !== dirFilter) return false;
       return true;
     });
-  }, [data, agentFilter, clientFilter, dirFilter]);
+    if (sortOrder === 'oldest') {
+      return [...result].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+    }
+    return result; // API already returns newest-first
+  }, [data, agentFilter, clientFilter, dirFilter, sortOrder]);
 
   const [exporting, setExporting] = useState(false);
 
@@ -554,10 +559,70 @@ function CallsPageInner() {
     );
   }
 
-  const agents = ['all', ...ACTIVE_AGENTS];
+  // Dynamic agent list from sheet data (not hardcoded ACTIVE_AGENTS)
+  const agentOptions = useMemo(() => {
+    const names = data.agents
+      .filter(a => a.calls > 0)
+      .map(a => a.agent.toLowerCase());
+    return ['all', ...names];
+  }, [data.agents]);
 
   const totalCalls = data.calls.length;
   const recordingCount = data.calls.filter(c => c.recordingUrl).length;
+
+  // Filter stats — computed from loaded+filtered CDR data
+  const hasFilter = agentFilter !== 'all' || clientFilter !== 'all' || dirFilter !== 'all';
+  const filterStats = useMemo(() => {
+    const totalSec = filtered.reduce((s, c) => s + c.duration, 0);
+    const inbound = filtered.filter(c => c.direction === 'inbound').length;
+    return {
+      calls: filtered.length,
+      talkMin: +(totalSec / 60).toFixed(1),
+      inbound,
+      outbound: filtered.length - inbound,
+    };
+  }, [filtered]);
+
+  // Per-client breakdown when agent is filtered
+  const clientBreakdown = useMemo(() => {
+    if (agentFilter === 'all') return [];
+    const map = new Map<string, { calls: number; talkSec: number }>();
+    for (const c of filtered) {
+      const client = c.account || 'Unknown';
+      const entry = map.get(client) || { calls: 0, talkSec: 0 };
+      entry.calls += 1;
+      entry.talkSec += c.duration;
+      map.set(client, entry);
+    }
+    return [...map.entries()]
+      .map(([name, e]) => ({ client: name, calls: e.calls, talkMin: +(e.talkSec / 60).toFixed(1) }))
+      .sort((a, b) => b.calls - a.calls);
+  }, [filtered, agentFilter]);
+
+  // Auto-load all calls when filtering to a single agent
+  const [autoLoading, setAutoLoading] = useState(false);
+  useEffect(() => {
+    if (agentFilter !== 'all' && data?.hasMore && !autoLoading && !loadingMore) {
+      setAutoLoading(true);
+      (async () => {
+        let offset = data.calls.length;
+        while (true) {
+          const isSingleDay = dateRange.from === dateRange.to;
+          const base = isSingleDay
+            ? `/api/calls?date=${dateRange.from}`
+            : `/api/calls?from=${dateRange.from}&to=${dateRange.to}`;
+          const res = await fetch(`${base}&limit=2000&offset=${offset}&brand=${brand}`);
+          if (!res.ok) break;
+          const json = await res.json();
+          if (!json.calls?.length) break;
+          setData(prev => prev ? { ...prev, calls: [...prev.calls, ...json.calls], hasMore: json.hasMore } : prev);
+          if (!json.hasMore) break;
+          offset += json.calls.length;
+        }
+        setAutoLoading(false);
+      })();
+    }
+  }, [agentFilter, data?.hasMore, data?.calls.length, dateRange, brand, autoLoading, loadingMore]);
 
   return (
     <>
@@ -585,7 +650,7 @@ function CallsPageInner() {
           <FilterDropdown
             value={agentFilter}
             onChange={setAgentFilter}
-            options={agents.map(a => ({ value: a, label: a === 'all' ? 'All Agents' : capitalize(a) }))}
+            options={agentOptions.map(a => ({ value: a, label: a === 'all' ? 'All Agents' : capitalize(a) }))}
           />
           <FilterDropdown
             value={clientFilter}
@@ -645,6 +710,82 @@ function CallsPageInner() {
           </div>
         </div>
 
+        {/* Minute Counter — always visible, sheet-backed */}
+        {data.summary && (
+          <div className="flex items-center gap-6 px-5 py-3 rounded-xl" style={{ background: C.card, border: `1px solid ${C.border}` }}>
+            <div>
+              <span className="text-2xl font-bold font-mono" style={{ color: C.cyan }}>
+                {hasFilter ? fmtTalkTime(filterStats.talkMin) : fmtTalkTime(data.summary.totalTalkMin)}
+              </span>
+              <span className="text-xs ml-2" style={{ color: C.sub }}>total talk time</span>
+            </div>
+            <div style={{ width: 1, height: 28, background: C.border }} />
+            <div className="flex gap-5">
+              <div>
+                <span className="text-lg font-bold font-mono" style={{ color: C.text }}>
+                  {hasFilter ? filterStats.calls.toLocaleString() : data.summary.totalCalls.toLocaleString()}
+                </span>
+                <span className="text-xs ml-1" style={{ color: C.sub }}>calls</span>
+              </div>
+              <div>
+                <span className="text-sm font-mono" style={{ color: C.sub }}>
+                  {hasFilter ? filterStats.inbound : data.summary.inbound} in
+                </span>
+                <span className="text-xs mx-1" style={{ color: C.border }}>/</span>
+                <span className="text-sm font-mono" style={{ color: C.sub }}>
+                  {hasFilter ? filterStats.outbound : data.summary.outbound} out
+                </span>
+              </div>
+            </div>
+            {autoLoading && (
+              <span className="text-xs ml-auto" style={{ color: C.cyan }}>Loading all calls...</span>
+            )}
+          </div>
+        )}
+
+        {/* Filter Summary Bar — shown when any filter is active */}
+        {hasFilter && (
+          <div className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs" style={{ background: `${C.cyan}11`, border: `1px solid ${C.cyan}33` }}>
+            <Filter size={12} style={{ color: C.cyan }} />
+            {agentFilter !== 'all' && <span className="font-semibold" style={{ color: C.cyan }}>{capitalize(agentFilter)}</span>}
+            {dirFilter !== 'all' && <span style={{ color: C.sub }}>{dirFilter}</span>}
+            {clientFilter !== 'all' && <span style={{ color: C.sub }}>{clientFilter}</span>}
+            <span style={{ color: C.border }}>→</span>
+            <span className="font-mono font-semibold" style={{ color: C.text }}>
+              {filterStats.calls} calls, {fmtTalkTime(filterStats.talkMin)}
+            </span>
+            <span style={{ color: C.sub }}>
+              ({filterStats.inbound} in / {filterStats.outbound} out)
+            </span>
+          </div>
+        )}
+
+        {/* Per-Client Breakdown — shown when agent is filtered */}
+        {clientBreakdown.length > 0 && (
+          <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
+            {clientBreakdown.slice(0, 12).map(cb => (
+              <div
+                key={cb.client}
+                className="flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-colors hover:bg-white/5"
+                style={{ background: C.card, border: `1px solid ${C.border}` }}
+                onClick={() => setClientFilter(cb.client === clientFilter ? 'all' : cb.client)}
+              >
+                <span className="text-xs truncate" style={{ color: cb.client === clientFilter ? C.cyan : C.text, maxWidth: 140 }}>
+                  {cb.client}
+                </span>
+                <span className="text-xs font-mono ml-2 whitespace-nowrap" style={{ color: C.sub }}>
+                  {cb.calls} · {fmtTalkTime(cb.talkMin)}
+                </span>
+              </div>
+            ))}
+            {clientBreakdown.length > 12 && (
+              <div className="flex items-center px-3 py-2 text-xs" style={{ color: C.sub }}>
+                +{clientBreakdown.length - 12} more clients
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Call Table */}
         <Card padding={false}>
           <div className="overflow-x-auto max-h-[calc(100vh-320px)] overflow-y-auto">
@@ -660,7 +801,15 @@ function CallsPageInner() {
                       </button>
                     )}
                   </th>
-                  {['Time', 'Agent', 'Client', 'Phone', 'Duration', 'Ring', 'Wrap', '', 'Recording'].map(h => (
+                  <th
+                    className="px-5 py-2.5 text-left text-xs font-medium cursor-pointer select-none hover:bg-white/5 transition-colors"
+                    style={{ color: C.cyan }}
+                    onClick={() => setSortOrder(s => s === 'newest' ? 'oldest' : 'newest')}
+                    title={`Sort ${sortOrder === 'newest' ? 'oldest first' : 'newest first'}`}
+                  >
+                    Time {sortOrder === 'newest' ? <ArrowDown size={10} className="inline" /> : <ArrowUp size={10} className="inline" />}
+                  </th>
+                  {['Agent', 'Client', 'Phone', 'Duration', 'Ring', 'Wrap', '', 'Recording'].map(h => (
                     <th key={h} className="px-5 py-2.5 text-left text-xs font-medium" style={{ color: C.sub }}>{h}</th>
                   ))}
                 </tr>
