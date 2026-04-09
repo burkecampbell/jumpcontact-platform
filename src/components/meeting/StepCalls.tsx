@@ -1,10 +1,14 @@
 'use client';
 
+import { useState } from 'react';
 import { C, fmtTalkTime, fmtSpeed, agentColor, isIbrahim } from '@/lib/constants';
-import type { PeriodData, DashboardData } from '@/lib/types';
+import type { PeriodData, DashboardData, RepAgent } from '@/lib/types';
 import Card from '../Card';
 import Hero from './Hero';
 import { TH, TD } from './TableCells';
+import { ChevronUp, ChevronDown } from 'lucide-react';
+
+type SortCol = 'calls' | 'talkMin' | 'avgCall' | 'hrs' | 'callsHr' | 'pickup' | 'wrap';
 
 interface StepCallsProps {
   period: PeriodData;
@@ -22,7 +26,30 @@ export default function StepCalls({ period, label, data }: StepCallsProps) {
     }
   }
 
-  const agents = [...period.repActivity.agents].sort((a, b) => b.calls - a.calls);
+  const [sortCol, setSortCol] = useState<SortCol>('calls');
+  const [sortAsc, setSortAsc] = useState(false);
+
+  const getSortVal = (a: RepAgent, col: SortCol): number => {
+    switch (col) {
+      case 'calls': return a.calls;
+      case 'talkMin': return a.talkMin;
+      case 'avgCall': return a.calls > 0 ? a.talkMin / a.calls : -1;
+      case 'hrs': return a.hoursScheduled || 0;
+      case 'callsHr': return a.hoursScheduled > 0 ? a.calls / a.hoursScheduled : -1;
+      case 'pickup': return a.speedSec ?? -1;
+      case 'wrap': return a.wrapUpSec ?? -1;
+    }
+  };
+
+  const toggleSort = (col: SortCol) => {
+    if (col === sortCol) setSortAsc(!sortAsc);
+    else { setSortCol(col); setSortAsc(false); }
+  };
+
+  const agents = [...period.repActivity.agents].sort((a, b) => {
+    const va = getSortVal(a, sortCol), vb = getSortVal(b, sortCol);
+    return sortAsc ? va - vb : vb - va;
+  });
   const agentSum = agents.reduce((s, a) => s + a.calls, 0);
   // Use the higher of answeredCalls vs agent sum — if Ytica blended higher
   // agent counts into the table, the hero must match, never contradict.
@@ -80,13 +107,18 @@ export default function StepCalls({ period, label, data }: StepCallsProps) {
               <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                 <TH>#</TH>
                 <TH>Agent</TH>
-                <TH right>Calls</TH>
-                <TH right>Talk Time</TH>
-                <TH right>Avg/Call</TH>
-                <TH right>Hrs</TH>
-                <TH right>Calls/Hr</TH>
-                <TH right>Pickup</TH>
-                <TH right>Wrap</TH>
+                {([['calls','Calls'],['talkMin','Talk Time'],['avgCall','Avg/Call'],['hrs','Hrs'],['callsHr','Calls/Hr'],['pickup','Pickup'],['wrap','Wrap']] as [SortCol, string][]).map(([key, label]) => (
+                  <th key={key}
+                    onClick={() => toggleSort(key)}
+                    className="px-3 py-2 text-right text-xs font-medium cursor-pointer select-none whitespace-nowrap"
+                    style={{ color: sortCol === key ? C.cyan : C.sub }}
+                  >
+                    <span className="inline-flex items-center gap-0.5">
+                      {label}
+                      {sortCol === key && (sortAsc ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
+                    </span>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
