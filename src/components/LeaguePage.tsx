@@ -11,7 +11,7 @@ import { C, capitalize, agentColor, fmtSpeed, fmtTalkTime, rankBadge, speedGrade
 import { computeOVRFromInput, computeBaselineOVR, ratingTier, ratingDelta, SUB_RATING_LABELS, type OvrInput } from '@/lib/ratings';
 import type { DashboardData, RepAgent, AgentBaseline, AgentSubRatings } from '@/lib/types';
 import { useBrand } from '@/hooks/useBrand';
-import { Trophy, ChevronUp, ChevronDown } from 'lucide-react';
+import { Trophy, ChevronUp, ChevronDown, FileText } from 'lucide-react';
 import agentHistoryData from '@/data/agent-history.json';
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -222,31 +222,146 @@ function LeaguePageInner() {
     return map;
   }, [data?.mtdRepActivity]);
 
-  // Build league rows from today's data
+  // Build league rows — different data per time horizon
   const leagueRows = useMemo(() => {
     if (!data) return [];
 
-    const agents = data.today.repActivity.agents;
-    const convByAgent: Record<string, number> = {};
-    for (const a of data.today.conversions.byAgent) convByAgent[a.agent.toLowerCase()] = a.count;
+    if (horizon === 'today') {
+      // TODAY: live data from repActivity + today's conversions
+      const agents = data.today.repActivity.agents;
+      const convByAgent: Record<string, number> = {};
+      for (const a of data.today.conversions.byAgent) convByAgent[a.agent.toLowerCase()] = a.count;
 
-    return agents
-      .filter(a => a.calls > 0)
-      .map(a => {
-        const yt = yticaMtd[a.agent.toLowerCase()];
-        const speedSec = (a.speedSec != null && a.speedSec > 0 && a.speedSec <= 10)
-          ? a.speedSec
-          : (yt?.avgSpeedSec ?? a.speedSec ?? null);
-        const wrapUpSec = (a.wrapUpSec != null && a.wrapUpSec > 0)
-          ? a.wrapUpSec
-          : (yt?.avgWrapUpSec ?? null);
-        const convs = convByAgent[a.agent.toLowerCase()] || 0;
-        const bl = baselines[a.agent.toLowerCase()];
-        const baselineOvr = bl ? computeBaselineOVR(bl) : 0;
+      return agents
+        .filter(a => a.calls > 0)
+        .map(a => {
+          const yt = yticaMtd[a.agent.toLowerCase()];
+          const speedSec = (a.speedSec != null && a.speedSec > 0 && a.speedSec <= 10)
+            ? a.speedSec
+            : (yt?.avgSpeedSec ?? a.speedSec ?? null);
+          const wrapUpSec = (a.wrapUpSec != null && a.wrapUpSec > 0)
+            ? a.wrapUpSec
+            : (yt?.avgWrapUpSec ?? null);
+          const convs = convByAgent[a.agent.toLowerCase()] || 0;
+          const bl = baselines[a.agent.toLowerCase()];
+          const baselineOvr = bl ? computeBaselineOVR(bl) : 0;
 
-        return buildLeagueRow(a, convs, speedSec, wrapUpSec, baselineOvr);
+          return buildLeagueRow(a, convs, speedSec, wrapUpSec, baselineOvr);
+        });
+    }
+
+    // MONTHLY / YEARLY / ALL-TIME: use Ytica MTD data + MTD conversions
+    // Monthly = this month's Ytica MTD (daily averages)
+    // Yearly/All-Time = accumulator baselines (we only have March + current April MTD)
+    const mtdAgents = data.mtdRepActivity || [];
+    const mtdConvByAgent: Record<string, number> = {};
+    for (const a of (data.mtd?.byAgent || [])) mtdConvByAgent[a.agent.toLowerCase()] = a.count;
+    const dayOfMonth = data.mtd?.dayOfMonth || 1;
+
+    if (horizon === 'monthly') {
+      // Monthly: Ytica MTD totals, convert to daily averages for rating
+      return mtdAgents
+        .filter(a => a.totalCalls > 0)
+        .map(a => {
+          const name = a.agent.toLowerCase();
+          const dailyCalls = a.totalCalls / dayOfMonth;
+          const dailyConvs = (mtdConvByAgent[name] || 0) / dayOfMonth;
+          const dailyTalkMin = a.totalTalkMin / dayOfMonth;
+          const convRate = a.totalCalls > 0 ? ((mtdConvByAgent[name] || 0) / a.totalCalls) * 100 : 0;
+          const convsPerHour = dailyConvs > 0 ? dailyConvs / 8 : null; // rough 8hr day
+
+          const bl = baselines[name];
+          const baselineOvr = bl ? computeBaselineOVR(bl) : 0;
+
+          const mockAgent: RepAgent = {
+            agent: a.agent,
+            calls: Math.round(dailyCalls),
+            talkMin: Math.round(dailyTalkMin),
+            speedSec: a.avgSpeedSec,
+            wrapUpSec: a.avgWrapUpSec,
+            hoursScheduled: 8,
+            conversions: Math.round(dailyConvs),
+            convsPerHour: convsPerHour ?? undefined,
+            pickupRate: undefined,
+            declineRate: undefined,
+          };
+
+          return buildLeagueRow(
+            mockAgent,
+            Math.round(dailyConvs),
+            a.avgSpeedSec,
+            a.avgWrapUpSec,
+            baselineOvr,
+          );
+        });
+    }
+
+    // YEARLY / ALL-TIME: combine accumulator baselines with current MTD
+    // Each agent's all-time = baseline months + current MTD
+    const combined: Record<string, { calls: number; convs: number; talkMin: number; speedSec: number | null; wrapUpSec: number | null; days: number }> = {};
+
+    // Add baseline months
+    for (const [name, bl] of Object.entries(baselines)) {
+      combined[name] = {
+        calls: bl.totalCalls,
+        convs: bl.totalConversions,
+        talkMin: bl.talkMin,
+        speedSec: bl.avgSpeedSec,
+        wrapUpSec: bl.avgWrapUpSec,
+        days: bl.workingDays,
+      };
+    }
+
+    // Add current month MTD
+    for (const a of mtdAgents) {
+      const name = a.agent.toLowerCase();
+      const convs = mtdConvByAgent[name] || 0;
+      if (!combined[name]) {
+        combined[name] = { calls: a.totalCalls, convs, talkMin: a.totalTalkMin, speedSec: a.avgSpeedSec, wrapUpSec: a.avgWrapUpSec, days: dayOfMonth };
+      } else {
+        const prev = combined[name];
+        const prevCalls = prev.calls;
+        prev.calls += a.totalCalls;
+        prev.convs += convs;
+        prev.talkMin += a.totalTalkMin;
+        prev.days += dayOfMonth;
+        // Weighted average for speed
+        if (a.avgSpeedSec != null && a.totalCalls > 0 && prev.calls > 0) {
+          prev.speedSec = prev.speedSec != null
+            ? (prev.speedSec * prevCalls + a.avgSpeedSec * a.totalCalls) / prev.calls
+            : a.avgSpeedSec;
+        }
+        if (a.avgWrapUpSec != null && a.totalCalls > 0 && prev.calls > 0) {
+          prev.wrapUpSec = prev.wrapUpSec != null
+            ? (prev.wrapUpSec * prevCalls + a.avgWrapUpSec * a.totalCalls) / prev.calls
+            : a.avgWrapUpSec;
+        }
+      }
+    }
+
+    return Object.entries(combined)
+      .filter(([, d]) => d.calls > 0)
+      .map(([name, d]) => {
+        const dailyCalls = d.calls / Math.max(d.days, 1);
+        const dailyConvs = d.convs / Math.max(d.days, 1);
+        const dailyTalkMin = d.talkMin / Math.max(d.days, 1);
+        const convsPerHour = dailyConvs > 0 ? dailyConvs / 8 : null;
+
+        const mockAgent: RepAgent = {
+          agent: name,
+          calls: Math.round(dailyCalls),
+          talkMin: Math.round(dailyTalkMin),
+          speedSec: d.speedSec,
+          wrapUpSec: d.wrapUpSec,
+          hoursScheduled: 8,
+          conversions: Math.round(dailyConvs),
+          convsPerHour: convsPerHour ?? undefined,
+        };
+
+        // For all-time, baseline IS the data — no trend
+        return buildLeagueRow(mockAgent, Math.round(dailyConvs), d.speedSec, d.wrapUpSec, 0);
       });
-  }, [data, yticaMtd, baselines]);
+  }, [data, horizon, yticaMtd, baselines]);
 
   // Sort
   const handleSort = (key: SortKey) => {
@@ -352,6 +467,16 @@ function LeaguePageInner() {
           <div className="flex items-center gap-2">
             <Trophy size={20} style={{ color: C.lime }} />
             <h1 className="text-lg font-bold" style={{ color: C.text }}>Agent League</h1>
+            <a
+              href="/agent-league-methodology.html"
+              target="_blank"
+              className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors hover:bg-white/5"
+              style={{ color: C.sub, border: `1px solid ${C.border}` }}
+              title="View OVR Methodology"
+            >
+              <FileText size={12} />
+              Methodology
+            </a>
           </div>
           <div className="flex items-center gap-1 p-0.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.04)' }}>
             {horizons.map(h => (

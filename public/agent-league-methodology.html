@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent League — OVR Methodology | Jump Contact</title>
+<style>
+  @page { size: letter; margin: 0.5in; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #1a1a1a; line-height: 1.4; max-width: 8.5in; margin: 0 auto; padding: 0.5in; }
+
+  /* Header */
+  .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #3ba5b5; padding-bottom: 12px; margin-bottom: 20px; }
+  .logo { display: flex; align-items: center; gap: 8px; }
+  .logo-box { background: linear-gradient(135deg, #2c3e50, #1a252f); border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; align-items: center; }
+  .logo-jump { font-size: 22px; font-weight: 700; color: #fff; letter-spacing: 2px; }
+  .logo-contact { font-size: 14px; font-weight: 600; color: #3ba5b5; letter-spacing: 1px; }
+  .document-title { font-size: 20px; font-weight: 700; color: #2c3e50; text-align: right; }
+  .document-subtitle { font-size: 11px; color: #495057; text-align: right; }
+
+  /* Info Block */
+  .info-block { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; padding: 12px 15px; margin-bottom: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px; }
+  .info-label { font-weight: 700; color: #495057; font-size: 11px; }
+  .info-value { font-size: 11px; }
+
+  /* Section Titles */
+  .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #2c3e50; border-bottom: 2px solid #3ba5b5; padding-bottom: 4px; margin: 20px 0 10px 0; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10px; }
+  th { background: #2c3e50; color: #fff; font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 6px 8px; text-align: left; }
+  td { padding: 5px 8px; border-bottom: 1px solid #dee2e6; }
+  tr:nth-child(even) td { background: #f8f9fa; }
+  .num { text-align: right; font-family: 'Courier New', monospace; }
+  .teal { color: #3ba5b5; font-weight: 700; }
+  .green { color: #27ae60; }
+  .red { color: #c0392b; }
+
+  /* Tier colors */
+  .tier-elite { background: #fbbf24; color: #000; padding: 1px 6px; border-radius: 3px; font-weight: 700; font-size: 9px; }
+  .tier-great { background: #4ade80; color: #000; padding: 1px 6px; border-radius: 3px; font-weight: 700; font-size: 9px; }
+  .tier-good { background: #22d3ee; color: #000; padding: 1px 6px; border-radius: 3px; font-weight: 700; font-size: 9px; }
+  .tier-avg { background: #facc15; color: #000; padding: 1px 6px; border-radius: 3px; font-weight: 700; font-size: 9px; }
+  .tier-dev { background: #f87171; color: #fff; padding: 1px 6px; border-radius: 3px; font-weight: 700; font-size: 9px; }
+
+  /* Callout boxes */
+  .callout { background: #f8f9fa; border-left: 4px solid #3ba5b5; padding: 10px 14px; margin: 10px 0; border-radius: 0 5px 5px 0; }
+  .callout-warn { border-left-color: #ffc107; background: #fff9e6; }
+
+  /* Formula blocks */
+  .formula { background: #1a252f; color: #e2e8f0; padding: 12px 16px; border-radius: 5px; font-family: 'Courier New', monospace; font-size: 10px; margin: 8px 0; line-height: 1.6; }
+
+  /* Print */
+  @media print {
+    body { padding: 0; }
+    .header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="logo">
+    <div class="logo-box">
+      <span class="logo-jump">JUMP</span>
+      <span class="logo-contact">CONTACT</span>
+    </div>
+  </div>
+  <div>
+    <div class="document-title">AGENT LEAGUE</div>
+    <div class="document-subtitle">OVR Rating Methodology v1.0</div>
+  </div>
+</div>
+
+<!-- Info Block -->
+<div class="info-block">
+  <div><span class="info-label">Document Type:</span> Internal Methodology</div>
+  <div><span class="info-label">Version:</span> 1.0</div>
+  <div><span class="info-label">Effective Date:</span> April 8, 2026</div>
+  <div><span class="info-label">Author:</span> Burke Campbell, Director of Sales &amp; Operations</div>
+  <div><span class="info-label">Scope:</span> All JC &amp; MSC inbound agents</div>
+  <div><span class="info-label">Review Cycle:</span> Monthly</div>
+</div>
+
+<!-- Introduction -->
+<div class="section-title">Overview</div>
+<p>The Agent League OVR (Overall Rating) system evaluates agent performance on a 0-99 scale using nine weighted attributes. Inspired by sports analytics (EA Sports Madden, FIFA), each agent receives a composite rating that reflects their daily contribution across production, speed, efficiency, and reliability metrics.</p>
+
+<div class="callout">
+  <strong>Purpose:</strong> Provide a single, transparent number that captures total agent value. Not a disciplinary tool — a development and recognition system. High OVR = high impact. Low OVR = coaching opportunity.
+</div>
+
+<!-- The 9 Attributes -->
+<div class="section-title">The Nine Attributes</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Attribute</th>
+      <th>Weight</th>
+      <th>Source</th>
+      <th>Direction</th>
+      <th>Why It Matters</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td class="num">1</td><td><strong>Conversions</strong> (CNV)</td><td class="num teal">18%</td><td>Conversions Sheet</td><td class="green">Higher = Better</td><td>Direct revenue generation — booked appointments</td></tr>
+    <tr><td class="num">2</td><td><strong>Conv %</strong> (C%)</td><td class="num teal">15%</td><td>Conversions / Calls</td><td class="green">Higher = Better</td><td>Efficiency — converting opportunities, not just volume</td></tr>
+    <tr><td class="num">3</td><td><strong>Volume</strong> (VOL)</td><td class="num teal">12%</td><td>Twilio CDR / Ytica</td><td class="green">Higher = Better</td><td>Availability and throughput — handling the queue</td></tr>
+    <tr><td class="num">4</td><td><strong>Speed</strong> (SPD)</td><td class="num teal">12%</td><td>Ytica Avg Speed to Answer</td><td class="red">Lower = Better</td><td>First impression — callers wait less, fewer abandonments</td></tr>
+    <tr><td class="num">5</td><td><strong>Conv/Hr</strong> (CPH)</td><td class="num teal">12%</td><td>Conversions / Scheduled Hours</td><td class="green">Higher = Better</td><td>Productivity per hour — normalizes for different shift lengths</td></tr>
+    <tr><td class="num">6</td><td><strong>Pickup Rate</strong> (PKP)</td><td class="num teal">10%</td><td>Twilio TaskRouter</td><td class="green">Higher = Better</td><td>Reliability — answering when calls come in</td></tr>
+    <tr><td class="num">7</td><td><strong>Talk Time</strong> (TLK)</td><td class="num teal">8%</td><td>Twilio CDR / Ytica</td><td class="green">Higher = Better</td><td>Engagement — meaningful conversations, not rushed calls</td></tr>
+    <tr><td class="num">8</td><td><strong>Wrap-Up</strong> (WRP)</td><td class="num teal">7%</td><td>Ytica Avg Wrap Up Time</td><td class="red">Lower = Better</td><td>Efficiency — quick post-call work means faster back to queue</td></tr>
+    <tr><td class="num">9</td><td><strong>Decline Rate</strong> (DCL)</td><td class="num teal">6%</td><td>Twilio TaskRouter</td><td class="red">Lower = Better</td><td>Commitment — not cherry-picking or dodging calls</td></tr>
+  </tbody>
+</table>
+
+<div class="callout-warn callout">
+  <strong>Weight rationale:</strong> Conversions + Conv% = 33% because revenue generation is the core mission. Speed + Volume = 24% because availability drives client satisfaction. Conv/Hr + Pickup + Decline = 28% because productivity and reliability are what make an agent dependable. Talk Time + Wrap-Up = 15% because engagement quality and efficiency are supporting factors, not primary drivers.
+</div>
+
+<!-- Normalization Curves -->
+<div class="section-title">Normalization Curves (0-99 Scale)</div>
+
+<p>Each raw metric is converted to a 0-99 sub-rating using specific curves designed to reward excellence without punishing normal performance. The curves are non-linear — the jump from "good" to "great" is harder than from "average" to "good."</p>
+
+<table>
+  <thead>
+    <tr><th>Attribute</th><th>0 Rating</th><th>~50 Rating</th><th>~80 Rating</th><th>99 Rating</th><th>Curve Type</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Conversions</td><td>0 convs</td><td>~2 convs</td><td>~5 convs</td><td>8+ convs</td><td>Logarithmic</td></tr>
+    <tr><td>Conv %</td><td>0%</td><td>~6%</td><td>~15%</td><td>20%+</td><td>Linear (min 5 calls)</td></tr>
+    <tr><td>Volume</td><td>0 calls</td><td>~8 calls</td><td>~18 calls</td><td>25+ calls</td><td>Linear with floor</td></tr>
+    <tr><td>Speed</td><td>40s+</td><td>~18s</td><td>~12s</td><td>&lt;6s</td><td>Piecewise (inverted)</td></tr>
+    <tr><td>Conv/Hr</td><td>0/hr</td><td>~0.8/hr</td><td>~2/hr</td><td>3+/hr</td><td>Piecewise</td></tr>
+    <tr><td>Pickup Rate</td><td>0%</td><td>~50%</td><td>~80%</td><td>100%</td><td>Linear</td></tr>
+    <tr><td>Talk Time</td><td>0 min</td><td>~30 min</td><td>~80 min</td><td>120+ min</td><td>Piecewise</td></tr>
+    <tr><td>Wrap-Up</td><td>120s+</td><td>~75s</td><td>~40s</td><td>&lt;30s</td><td>Piecewise (inverted)</td></tr>
+    <tr><td>Decline Rate</td><td>20%+</td><td>~8%</td><td>~3%</td><td>0%</td><td>Piecewise (inverted)</td></tr>
+  </tbody>
+</table>
+
+<!-- OVR Formula -->
+<div class="section-title">OVR Calculation</div>
+
+<div class="formula">
+OVR = round(
+    CNV × 0.18 +   // Conversions sub-rating
+    C%  × 0.15 +   // Conv % sub-rating
+    VOL × 0.12 +   // Volume sub-rating
+    SPD × 0.12 +   // Speed sub-rating
+    CPH × 0.12 +   // Conv/Hr sub-rating
+    PKP × 0.10 +   // Pickup Rate sub-rating
+    TLK × 0.08 +   // Talk Time sub-rating
+    WRP × 0.07 +   // Wrap-Up sub-rating
+    DCL × 0.06     // Decline Rate sub-rating
+)
+</div>
+
+<!-- Tier System -->
+<div class="section-title">Tier System</div>
+
+<table>
+  <thead>
+    <tr><th>OVR Range</th><th>Tier</th><th>Badge</th><th>Meaning</th></tr>
+  </thead>
+  <tbody>
+    <tr><td class="num">90 – 99</td><td><span class="tier-elite">ELITE</span></td><td style="color:#fbbf24;font-size:14px;">&#9733;</td><td>Top-tier performer. Consistent excellence across all attributes.</td></tr>
+    <tr><td class="num">80 – 89</td><td><span class="tier-great">GREAT</span></td><td style="color:#4ade80;font-size:14px;">&#9733;</td><td>Strong all-around. Minor areas to optimize but high impact.</td></tr>
+    <tr><td class="num">70 – 79</td><td><span class="tier-good">GOOD</span></td><td style="color:#22d3ee;font-size:14px;">&#9733;</td><td>Solid contributor. Above average with clear strengths.</td></tr>
+    <tr><td class="num">60 – 69</td><td><span class="tier-avg">AVG</span></td><td style="color:#facc15;font-size:14px;">&#9733;</td><td>Meeting baseline expectations. Room for growth.</td></tr>
+    <tr><td class="num">0 – 59</td><td><span class="tier-dev">DEV</span></td><td style="color:#f87171;font-size:14px;">&#9733;</td><td>Development needed. Focus area for coaching and support.</td></tr>
+  </tbody>
+</table>
+
+<!-- Time Horizons -->
+<div class="section-title">Time Horizons</div>
+
+<table>
+  <thead><tr><th>View</th><th>Data Source</th><th>What It Shows</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Today</strong></td><td>Live Twilio CDR + Conversions Sheet</td><td>Real-time performance. Volatile early in the day, stabilizes by afternoon.</td></tr>
+    <tr><td><strong>Monthly</strong></td><td>Ytica MTD aggregates + MTD Conversions</td><td>Daily average performance for the current month. Smooths out single-day variance.</td></tr>
+    <tr><td><strong>Yearly</strong></td><td>Accumulator (all months) + current MTD</td><td>Season-to-date. Combines all available monthly data.</td></tr>
+    <tr><td><strong>All-Time</strong></td><td>Full accumulator history</td><td>Career rating. Grows more stable as months accumulate.</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <strong>Trend Arrows:</strong> The &#9650; and &#9660; indicators compare the current horizon's OVR against the baseline (previous month). A difference of &gt;2 points triggers an arrow. This shows momentum — is the agent improving or declining?
+</div>
+
+<!-- Safeguards -->
+<div class="section-title">Safeguards &amp; Edge Cases</div>
+
+<table>
+  <thead><tr><th>Scenario</th><th>Handling</th><th>Rationale</th></tr></thead>
+  <tbody>
+    <tr><td>Agent has 0 calls</td><td>OVR = 0, no badge displayed</td><td>Haven't started — no rating possible</td></tr>
+    <tr><td>Agent has &lt;5 calls</td><td>Conv % fixed at 50 (neutral)</td><td>Prevents 1 call / 1 conv = 100% inflation</td></tr>
+    <tr><td>Pickup Rate is null</td><td>Sub-rating = 50 (neutral)</td><td>TaskRouter data not always available</td></tr>
+    <tr><td>Decline Rate is null</td><td>Sub-rating = 70 (benefit of doubt)</td><td>Missing data shouldn't penalize</td></tr>
+    <tr><td>Early morning (before 9am)</td><td>Ratings are naturally low due to few calls</td><td>Expected — OVR climbs through the day as data accumulates</td></tr>
+    <tr><td>Weekend agents (fewer hours)</td><td>Conv/Hr normalizes for shift length</td><td>A 4-hour shift with 2 convs = same rate as 8hrs / 4 convs</td></tr>
+  </tbody>
+</table>
+
+<!-- Data Sources -->
+<div class="section-title">Data Sources</div>
+
+<table>
+  <thead><tr><th>Source</th><th>Feeds</th><th>Refresh Rate</th></tr></thead>
+  <tbody>
+    <tr><td>Twilio CDR API</td><td>Calls, Duration, Ring Time (today only)</td><td>30s cache</td></tr>
+    <tr><td>Ytica Google Sheet</td><td>Speed, Wrap-Up, Calls, Talk Time (MTD)</td><td>Daily (6am email parse)</td></tr>
+    <tr><td>Conversions Google Sheet</td><td>Conversions by agent</td><td>5-min cache</td></tr>
+    <tr><td>Twilio TaskRouter</td><td>Pickup Rate, Decline Rate</td><td>Live</td></tr>
+    <tr><td>Agent History Accumulator</td><td>Monthly baselines for trends</td><td>Updated monthly</td></tr>
+  </tbody>
+</table>
+
+<!-- Known Limitations -->
+<div class="section-title">Known Limitations</div>
+
+<ul style="padding-left: 20px; margin: 8px 0;">
+  <li><strong>Historical pickup/decline rates</strong> are not stored. Baseline pickup rate is neutral (50) until historical data collection begins.</li>
+  <li><strong>March 2026 conversion counts</strong> are not yet backfilled. Baseline conversion sub-ratings default to 0 for March, making trend arrows show "up" for all agents.</li>
+  <li><strong>Blended agents</strong> (Wendy, Sara) appear in both JC and MSC views. Their OVR reflects total volume across both brands.</li>
+  <li><strong>Outbound agents</strong> (William, Joseph) are not currently rated — the system is designed for inbound agents.</li>
+</ul>
+
+<!-- Changelog -->
+<div class="section-title">Changelog</div>
+
+<table>
+  <thead><tr><th>Date</th><th>Version</th><th>Change</th></tr></thead>
+  <tbody>
+    <tr><td>2026-04-08</td><td>1.0</td><td>Initial release. 9-attribute formula, March baselines, 4 time horizons.</td></tr>
+  </tbody>
+</table>
+
+<div style="text-align: center; margin-top: 30px; padding-top: 15px; border-top: 1px solid #dee2e6;">
+  <em style="color: #495057; font-size: 10px;">Jump Contact &mdash; Agent League OVR Methodology v1.0 &mdash; Confidential Internal Document</em>
+</div>
+
+</body>
+</html>
