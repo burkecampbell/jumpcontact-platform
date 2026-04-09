@@ -12,9 +12,19 @@ import type { OutboundDashboardData, OutboundAgentStats } from '@/lib/outbound-t
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const data = await cached('outbound', 60_000, fetchOutboundData);
+    const url = new URL(req.url);
+    const forceRefresh = url.searchParams.get('refresh') === '1';
+
+    if (forceRefresh) {
+      // Bust cache on manual refresh — import invalidate from cache
+      const { invalidate } = await import('@/lib/cache');
+      invalidate('outbound');
+    }
+
+    // 1 hour cache — HubSpot rate limits are strict, no need to poll frequently
+    const data = await cached('outbound', 3_600_000, fetchOutboundData);
     return NextResponse.json(data);
   } catch (err) {
     return NextResponse.json(

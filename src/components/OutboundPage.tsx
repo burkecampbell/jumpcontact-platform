@@ -10,17 +10,19 @@ import ActivityFeed from './outbound/ActivityFeed';
 import PipelineView from './outbound/PipelineView';
 import { C } from '@/lib/constants';
 import { formatDuration } from '@/lib/formatters';
-import { Phone, PhoneOff, PhoneIncoming, Clock } from 'lucide-react';
+import { Phone, PhoneOff, PhoneIncoming, Clock, RefreshCw } from 'lucide-react';
 import type { OutboundDashboardData } from '@/lib/outbound-types';
 
 export default function OutboundPage() {
   const [data, setData] = useState<OutboundDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (forceRefresh = false) => {
     try {
-      const res = await fetch('/api/outbound');
+      const url = forceRefresh ? '/api/outbound?refresh=1' : '/api/outbound';
+      const res = await fetch(url);
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: 'Unknown error' }));
         throw new Error(body.error || `HTTP ${res.status}`);
@@ -32,12 +34,19 @@ export default function OutboundPage() {
       setError(String(err));
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchData(true);
+  }, [fetchData]);
+
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 120_000);
+    // Poll hourly (matches 1hr server cache)
+    const interval = setInterval(fetchData, 3_600_000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
@@ -75,7 +84,7 @@ export default function OutboundPage() {
           <p className="text-lg mb-2" style={{ color: C.bad }}>Failed to load outbound data</p>
           <p className="text-sm mb-4" style={{ color: C.sub }}>{error}</p>
           <button
-            onClick={fetchData}
+            onClick={() => fetchData(true)}
             className="px-4 py-2 rounded-lg text-sm font-medium"
             style={{ background: C.cyan, color: '#000' }}
           >
@@ -98,6 +107,20 @@ export default function OutboundPage() {
       <NavBar pulledAt={pulledAt} />
 
       <div className="max-w-7xl mx-auto px-4 pt-20 pb-8">
+        {/* ── Header with refresh ──────────────────────────────── */}
+        <div className="flex items-center justify-end mb-3">
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors hover:bg-white/5 disabled:opacity-50"
+            style={{ color: C.sub, border: `1px solid ${C.border}` }}
+            title="Force refresh from HubSpot (bypasses 1hr cache)"
+          >
+            <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
+        </div>
+
         {/* ── KPI Strip ─────────────────────────────────────────── */}
         <ErrorBoundary section="KPI Strip">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
