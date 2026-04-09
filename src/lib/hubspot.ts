@@ -134,6 +134,7 @@ async function hubspotSearch(
   let after: string | undefined;
 
   // Paginate (HubSpot caps at 100 per page, 10K total)
+  // Add delay between pages to avoid per-second rate limit (4-5 req/s for Private Apps)
   do {
     const body: Record<string, unknown> = {
       filterGroups: filters.length ? [{ filters }] : [],
@@ -149,11 +150,35 @@ async function hubspotSearch(
     );
     all.push(...res.results);
     after = res.paging?.next?.after;
-    // Safety cap: don't fetch more than 500 items per type
-    if (all.length >= 500) break;
+    // Safety cap: don't fetch more than 200 items per search
+    if (all.length >= 200) break;
+    // Rate limit pause between pages
+    if (after) await sleep(500);
   } while (after);
 
   return all;
+}
+
+/** Single-page search — no pagination. Use when you only need the top N results
+ *  sorted descending (most recent). Saves API calls vs paginated hubspotSearch. */
+async function hubspotSearchOnePage(
+  objectType: string,
+  filters: Array<{ propertyName: string; operator: string; value?: string; values?: string[] }>,
+  properties: string[],
+  sorts: Array<{ propertyName: string; direction: string }> = [],
+  limit = 50,
+): Promise<SearchResponse['results']> {
+  const body = {
+    filterGroups: filters.length ? [{ filters }] : [],
+    properties,
+    sorts,
+    limit: Math.min(limit, 100), // HubSpot max per page
+  };
+  const res = await hubspotFetch<SearchResponse>(
+    `/crm/v3/objects/${objectType}/search`,
+    { method: 'POST', body: JSON.stringify(body) },
+  );
+  return res.results;
 }
 
 // ── Date Helpers (MST) ──────────────────────────────────────────────
@@ -318,8 +343,9 @@ export async function fetchRecentActivity(
   const ownerFilter = { propertyName: 'hubspot_owner_id', operator: 'IN' as const, values: ownerIds };
 
   // Fetch engagement types sequentially with delays to respect HubSpot's per-second rate limit.
-  // Private App tokens allow ~4-5 requests/second. We add 300ms gaps.
-  const calls = await hubspotSearch(
+  // Use hubspotSearchOnePage to get ONLY the first page (no pagination) — we just need
+  // the N most recent of each type sorted descending. This keeps total API calls to ~5-6.
+  const calls = await hubspotSearchOnePage(
     'calls',
     [ownerFilter],
     ['hs_call_title', 'hs_call_status', 'hs_call_duration', 'hs_call_summary', 'hs_timestamp', 'hubspot_owner_id'],
@@ -327,7 +353,7 @@ export async function fetchRecentActivity(
     limit,
   );
   await sleep(600);
-  const tasks = await hubspotSearch(
+  const tasks = await hubspotSearchOnePage(
     'tasks',
     [ownerFilter],
     ['hs_task_subject', 'hs_task_status', 'hs_timestamp', 'hubspot_owner_id'],
@@ -335,7 +361,7 @@ export async function fetchRecentActivity(
     limit,
   );
   await sleep(600);
-  const notes = await hubspotSearch(
+  const notes = await hubspotSearchOnePage(
     'notes',
     [ownerFilter],
     ['hs_note_body', 'hs_timestamp', 'hubspot_owner_id'],
@@ -343,7 +369,7 @@ export async function fetchRecentActivity(
     20,
   );
   await sleep(600);
-  const emails = await hubspotSearch(
+  const emails = await hubspotSearchOnePage(
     'emails',
     [ownerFilter],
     ['hs_email_subject', 'hs_email_status', 'hs_timestamp', 'hubspot_owner_id'],
