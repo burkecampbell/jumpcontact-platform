@@ -272,32 +272,54 @@ import scheduleJson from '../data/schedule-fallback.json';
 
 export async function fetchSchedule(): Promise<ScheduleEntry[]> {
   try {
-    // Columns: A=Agent, B-H=Sun-Sat shifts, I=Lunch Time, J=Lunch Mins
-    const rows = await readSheet(SCHEDULE_SHEET_ID, 'A:J');
+    // Sheet format: alternating rows — Agent row (shifts) then Lunch row (lunch times).
+    // A=Agent/Lunch, B=Sun, C=Mon, D=Tue, E=Wed, F=Thu, G=Fri, H=Sat, I=Hrs/Wk
+    const rows = await readSheet(SCHEDULE_SHEET_ID, 'A:I');
     if (rows.length <= 1) return fallbackSchedule();
 
     const entries: ScheduleEntry[] = [];
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
       if (!row[0]) continue;
+      const label = row[0].trim().toLowerCase();
+      // Skip non-agent rows (lunch rows are consumed by the agent above them)
+      if (label === 'lunch' || label === 'break' || label === 'agent') continue;
+
       const name = normalizeAgent(row[0]);
-      if (!name || name === 'lunch' || name === 'break' || name === 'agent') continue;
+      if (!name) continue;
 
-      // Parse lunch from columns I and J
-      const rawLunch = (row[8] || '').trim();
-      const lunchTime = rawLunch && !/off|n\/a|^-?$/i.test(rawLunch) ? rawLunch : null;
-      const lunchMins = parseInt(row[9]) || (lunchTime ? 60 : 0); // default 60 if lunch time set but no duration
-
+      // Read shift schedule from this row
       const schedule: Record<string, string> = {};
+      for (let d = 0; d < 7; d++) {
+        schedule[DAY_NAMES[d]] = (row[d + 1] || 'OFF').trim();
+      }
+
+      // Peek at next row — if it's a "Lunch" row, read lunch times from it
+      let lunchTime: string | null = null;
+      let lunchMins = 0;
+      const nextRow = rows[i + 1];
+      if (nextRow && (nextRow[0] || '').trim().toLowerCase() === 'lunch') {
+        // Find the first non-empty lunch time (use Mon = column C = index 2 as primary)
+        for (let d = 1; d <= 7; d++) {
+          const val = (nextRow[d] || '').trim();
+          if (val && val !== '-' && !/off/i.test(val)) {
+            lunchTime = val;
+            break;
+          }
+        }
+        // Default 60 min lunch if any lunch time is set
+        lunchMins = lunchTime ? 60 : 0;
+      }
+
+      // Compute net hours per week
       let totalHrs = 0;
       for (let d = 0; d < 7; d++) {
-        const val = (row[d + 1] || 'OFF').trim();
-        schedule[DAY_NAMES[d]] = val;
-        const gross = parseGrossShiftHours(val);
-        // Deduct lunch only for days with a shift (not OFF)
+        const gross = parseGrossShiftHours(schedule[DAY_NAMES[d]]);
+        // Deduct lunch on days with a shift. No lunch = no deduction.
         const net = gross > 0 ? Math.max(gross - lunchMins / 60, 0) : 0;
         totalHrs += net;
       }
+
       entries.push({ name, schedule, hrsPerWeek: totalHrs, lunchTime, lunchMins });
     }
     return entries.length > 0 ? entries : fallbackSchedule();
