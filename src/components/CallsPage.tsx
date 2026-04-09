@@ -561,11 +561,12 @@ function CallsPageInner() {
 
   // Dynamic agent list from sheet data (not hardcoded ACTIVE_AGENTS)
   const agentOptions = useMemo(() => {
+    if (!data?.agents) return ['all'];
     const names = data.agents
       .filter(a => a.calls > 0)
       .map(a => a.agent.toLowerCase());
     return ['all', ...names];
-  }, [data.agents]);
+  }, [data?.agents]);
 
   const totalCalls = data.calls.length;
   const recordingCount = data.calls.filter(c => c.recordingUrl).length;
