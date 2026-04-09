@@ -5,8 +5,7 @@ import {
   fetchDealsForOwners,
   fetchPipelines,
   fetchRecentActivity,
-  ALL_HUBSPOT_OWNERS,
-  HUBSPOT_TEAM,
+  getHubSpotTeam,
   todayMST,
 } from '@/lib/hubspot';
 import type { OutboundDashboardData, OutboundAgentStats } from '@/lib/outbound-types';
@@ -27,7 +26,8 @@ export async function GET() {
 
 async function fetchOutboundData(): Promise<OutboundDashboardData> {
   const today = todayMST();
-  const allOwnerIds = ALL_HUBSPOT_OWNERS.map(o => o.ownerId);
+  const team = await getHubSpotTeam();
+  const allOwnerIds = team.map(o => o.ownerId);
 
   // Sequential fetches with pauses to stay within HubSpot's per-second rate limit.
   // Cached at 60s so this only runs once per minute.
@@ -56,7 +56,7 @@ async function fetchOutboundData(): Promise<OutboundDashboardData> {
   }));
 
   // Compute per-agent stats
-  const agents: OutboundAgentStats[] = ALL_HUBSPOT_OWNERS.map(owner => {
+  const agents: OutboundAgentStats[] = team.map(owner => {
     const agentCalls = calls.filter(c => c.ownerKey === owner.key);
     const connected = agentCalls.filter(c =>
       c.status === 'COMPLETED' && c.durationMs > 30_000,

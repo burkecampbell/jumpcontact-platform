@@ -24,26 +24,61 @@ import type {
 
 // ── Team Config ─────────────────────────────────────────────────────
 // Colors come from AGENT_COLORS in constants.ts via agentColor() — not redefined here.
+// Team roster lives in Google Sheet, cached 1 hour. Hardcoded fallback if sheet fails.
 
-interface HubSpotOwner {
+export const HUBSPOT_TEAM_SHEET_ID = '1iGJNY7q4KJcqYllF-5o91IhLSJ31LZrNWJ5xViTv0EM';
+
+export interface HubSpotOwner {
   ownerId: string;
   name: string;
   key: string;
+  role: 'outbound' | 'observer';
 }
 
-export const HUBSPOT_TEAM: HubSpotOwner[] = [
-  { ownerId: '263706316', name: 'Anthony', key: 'anthony' },
-  { ownerId: '264612211', name: 'Angel M', key: 'angel' },
-  { ownerId: '263685131', name: 'William', key: 'william' },
+// Hardcoded fallback — used if the sheet is unreadable
+const FALLBACK_TEAM: HubSpotOwner[] = [
+  { ownerId: '263706316', name: 'Anthony', key: 'anthony', role: 'outbound' },
+  { ownerId: '264612211', name: 'Angel M', key: 'angel', role: 'outbound' },
+  { ownerId: '263685131', name: 'William', key: 'william', role: 'outbound' },
+  { ownerId: '89367067', name: 'Jose', key: 'jose', role: 'observer' },
 ];
 
-export const HUBSPOT_OBSERVERS: HubSpotOwner[] = [
-  { ownerId: '89367067', name: 'Jose', key: 'jose' },
-];
+/** Fetch HubSpot team roster from Google Sheet, cached 1hr. Falls back to hardcoded list. */
+async function fetchHubSpotTeamFromSheet(): Promise<HubSpotOwner[]> {
+  try {
+    // Re-use the same readSheet helper used by the rest of the platform
+    const { readSheet } = await import('./sheets');
+    const rows = await readSheet(HUBSPOT_TEAM_SHEET_ID, 'Sheet1!A:D');
+    if (rows.length < 2) return FALLBACK_TEAM;
 
-export const ALL_HUBSPOT_OWNERS = [...HUBSPOT_TEAM, ...HUBSPOT_OBSERVERS];
+    const owners: HubSpotOwner[] = [];
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row[0]) continue;
+      owners.push({
+        key: (row[0] || '').trim().toLowerCase(),
+        name: (row[1] || '').trim(),
+        ownerId: (row[2] || '').trim(),
+        role: ((row[3] || '').trim().toLowerCase() === 'observer' ? 'observer' : 'outbound') as 'outbound' | 'observer',
+      });
+    }
+    return owners.length > 0 ? owners : FALLBACK_TEAM;
+  } catch (e) {
+    console.warn('HubSpot team sheet fetch failed, using fallback:', (e as Error).message);
+    return FALLBACK_TEAM;
+  }
+}
 
-const OWNER_BY_ID = new Map(ALL_HUBSPOT_OWNERS.map(o => [o.ownerId, o]));
+export async function getHubSpotTeam(): Promise<HubSpotOwner[]> {
+  return cached('hubspot-team', 3_600_000, fetchHubSpotTeamFromSheet);
+}
+
+// Synchronous exports for backward compat — populated on first API call
+export const HUBSPOT_TEAM: HubSpotOwner[] = FALLBACK_TEAM.filter(o => o.role === 'outbound');
+export const HUBSPOT_OBSERVERS: HubSpotOwner[] = FALLBACK_TEAM.filter(o => o.role === 'observer');
+export const ALL_HUBSPOT_OWNERS = FALLBACK_TEAM;
+
+let OWNER_BY_ID = new Map(FALLBACK_TEAM.map(o => [o.ownerId, o]));
 
 function resolveOwner(ownerId: string): { key: string; name: string } {
   return OWNER_BY_ID.get(ownerId) ?? { key: 'unknown', name: `Owner ${ownerId}` };
@@ -329,14 +364,14 @@ export async function fetchRecentActivity(
     });
   }
 
-  // Map tasks
+  // Map tasks — use updatedAt for activity timing, NOT hs_timestamp (which is the due date)
   for (const r of tasks) {
     const p = r.properties;
     const owner = resolveOwner(p.hubspot_owner_id || '');
     items.push({
       id: r.id,
       type: 'task',
-      timestamp: p.hs_timestamp || r.createdAt,
+      timestamp: r.updatedAt || r.createdAt,
       agentName: owner.name,
       agentKey: owner.key,
       title: p.hs_task_subject || 'Task',
