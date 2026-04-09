@@ -326,7 +326,7 @@ export async function fetchRecentActivity(
     [{ propertyName: 'hs_timestamp', direction: 'DESCENDING' }],
     limit,
   );
-  await sleep(300);
+  await sleep(600);
   const tasks = await hubspotSearch(
     'tasks',
     [ownerFilter],
@@ -334,7 +334,7 @@ export async function fetchRecentActivity(
     [{ propertyName: 'hs_timestamp', direction: 'DESCENDING' }],
     limit,
   );
-  await sleep(300);
+  await sleep(600);
   const notes = await hubspotSearch(
     'notes',
     [ownerFilter],
@@ -342,7 +342,7 @@ export async function fetchRecentActivity(
     [{ propertyName: 'hs_timestamp', direction: 'DESCENDING' }],
     20,
   );
-  await sleep(300);
+  await sleep(600);
   const emails = await hubspotSearch(
     'emails',
     [ownerFilter],
