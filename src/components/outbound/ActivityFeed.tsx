@@ -65,11 +65,17 @@ export default function ActivityFeed({ items }: { items: ActivityFeedItem[] }) {
           const Icon = config.icon;
           const aColor = agentColor(item.agentKey);
 
+          const Row = item.hubspotUrl ? 'a' : 'div';
+          const linkProps = item.hubspotUrl
+            ? { href: item.hubspotUrl, target: '_blank' as const, rel: 'noopener noreferrer' }
+            : {};
+
           return (
-            <div
+            <Row
               key={`${item.type}-${item.id}`}
-              className="flex items-start gap-2 px-2 py-2 rounded-md hover:bg-white/5 transition-colors"
+              className="flex items-start gap-2 px-2 py-2 rounded-md hover:bg-white/5 transition-colors no-underline cursor-pointer"
               style={{ borderLeft: `3px solid ${config.borderColor}` }}
+              {...linkProps}
             >
               {/* Icon */}
               <div className="mt-0.5 shrink-0">
@@ -110,7 +116,7 @@ export default function ActivityFeed({ items }: { items: ActivityFeedItem[] }) {
                   </span>
                 )}
               </div>
-            </div>
+            </Row>
           );
         })}
       </div>
