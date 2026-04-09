@@ -717,7 +717,7 @@ function CallsPageInner() {
           <div className="flex items-center gap-6 px-5 py-3 rounded-xl" style={{ background: C.card, border: `1px solid ${C.border}` }}>
             <div>
               <span className="text-2xl font-bold font-mono" style={{ color: C.cyan }}>
-                {hasFilter ? fmtTalkTime(filterStats.talkMin) : fmtTalkTime(data.summary.totalTalkMin)}
+                {hasFilter ? `${Math.round(filterStats.talkMin).toLocaleString()}m` : `${Math.round(data.summary.totalTalkMin).toLocaleString()}m`}
               </span>
               <span className="text-xs ml-2" style={{ color: C.sub }}>total talk time</span>
             </div>
@@ -754,7 +754,7 @@ function CallsPageInner() {
             {clientFilter !== 'all' && <span style={{ color: C.sub }}>{clientFilter}</span>}
             <span style={{ color: C.border }}>→</span>
             <span className="font-mono font-semibold" style={{ color: C.text }}>
-              {filterStats.calls} calls, {fmtTalkTime(filterStats.talkMin)}
+              {filterStats.calls} calls, {Math.round(filterStats.talkMin).toLocaleString()}m
             </span>
             <span style={{ color: C.sub }}>
               ({filterStats.inbound} in / {filterStats.outbound} out)
