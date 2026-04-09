@@ -107,6 +107,7 @@ function buildLeagueRow(
     talkMin: a.talkMin,
     wrapUpSec,
     declineRate: a.declineRate ?? null,
+    hoursScheduled: a.hoursScheduled || 8,
   };
   const { ovr, subRatings } = computeOVRFromInput(input);
   const delta = ratingDelta(ovr, baselineOvr);
@@ -169,7 +170,7 @@ function PlayerCard({ row }: { row: LeagueRow }) {
             const subTier = ratingTier(val);
             return (
               <div key={key} className="flex items-center justify-between">
-                <span className="text-[10px] font-medium" style={{ color: C.sub }}>{meta.abbr}</span>
+                <span className="text-[10px] font-medium cursor-help" style={{ color: C.sub }} title={meta.tooltip}>{meta.abbr}</span>
                 <span className="text-[10px] font-mono font-bold" style={{ color: subTier.color }}>{val}</span>
               </div>
             );
@@ -544,6 +545,7 @@ function LeaguePageInner() {
                         className="px-2 py-2 text-center text-[10px] font-medium cursor-pointer select-none"
                         style={{ color: sortKey === key ? C.cyan : C.sub }}
                         onClick={() => handleSort(key)}
+                        title={SUB_RATING_LABELS[key].tooltip}
                       >
                         <span className="inline-flex items-center gap-0.5">
                           {SUB_RATING_LABELS[key].abbr} <SortIcon col={key} />

@@ -76,8 +76,8 @@
 <!-- Info Block -->
 <div class="info-block">
   <div><span class="info-label">Document Type:</span> Internal Methodology</div>
-  <div><span class="info-label">Version:</span> 1.0</div>
-  <div><span class="info-label">Effective Date:</span> April 8, 2026</div>
+  <div><span class="info-label">Version:</span> 1.1</div>
+  <div><span class="info-label">Effective Date:</span> April 9, 2026</div>
   <div><span class="info-label">Author:</span> Burke Campbell</div>
   <div><span class="info-label">Scope:</span> All JC &amp; MSC inbound agents</div>
   <div><span class="info-label">Review Cycle:</span> Monthly</div>
@@ -123,26 +123,30 @@
 </div>
 
 <!-- Normalization Curves -->
-<div class="section-title">Normalization Curves (0-99 Scale)</div>
+<div class="section-title">Normalization Curves (0-97 Effective Scale)</div>
 
-<p>Each raw metric is converted to a 0-99 sub-rating using specific curves designed to reward excellence without punishing normal performance. The curves are non-linear — the jump from "good" to "great" is harder than from "average" to "good."</p>
+<p>Each raw metric is converted to a 0-97 sub-rating. <strong>99 is unreachable by formula</strong> — it exists as a theoretical ceiling to prevent clustering at the top. The curves use diminishing returns: going from 85 to 90 is much harder than going from 50 to 55. Volume and Talk Time are <strong>normalized by scheduled hours</strong> to prevent rewarding longer shifts over efficiency.</p>
 
 <table>
   <thead>
-    <tr><th>Attribute</th><th>0 Rating</th><th>~50 Rating</th><th>~80 Rating</th><th>99 Rating</th><th>Curve Type</th></tr>
+    <tr><th>Attribute</th><th>Low (~30)</th><th>Mid (~50-60)</th><th>High (~80+)</th><th>Elite (~95+)</th><th>Curve</th></tr>
   </thead>
   <tbody>
-    <tr><td>Conversions</td><td>0 convs</td><td>~2 convs</td><td>~5 convs</td><td>8+ convs</td><td>Logarithmic</td></tr>
-    <tr><td>Conv %</td><td>0%</td><td>~6%</td><td>~15%</td><td>20%+</td><td>Linear (min 5 calls)</td></tr>
-    <tr><td>Volume</td><td>0 calls</td><td>~8 calls</td><td>~18 calls</td><td>25+ calls</td><td>Linear with floor</td></tr>
-    <tr><td>Speed</td><td>40s+</td><td>~18s</td><td>~12s</td><td>&lt;6s</td><td>Piecewise (inverted)</td></tr>
-    <tr><td>Conv/Hr</td><td>0/hr</td><td>~0.8/hr</td><td>~2/hr</td><td>3+/hr</td><td>Piecewise</td></tr>
-    <tr><td>Pickup Rate</td><td>0%</td><td>~50%</td><td>~80%</td><td>100%</td><td>Linear</td></tr>
-    <tr><td>Talk Time</td><td>0 min</td><td>~30 min</td><td>~80 min</td><td>120+ min</td><td>Piecewise</td></tr>
-    <tr><td>Wrap-Up</td><td>120s+</td><td>~75s</td><td>~40s</td><td>&lt;30s</td><td>Piecewise (inverted)</td></tr>
-    <tr><td>Decline Rate</td><td>20%+</td><td>~8%</td><td>~3%</td><td>0%</td><td>Piecewise (inverted)</td></tr>
+    <tr><td>Conversions</td><td>1 conv</td><td>3 convs</td><td>10 convs</td><td>20+ convs</td><td>Logarithmic (cap 97)</td></tr>
+    <tr><td>Conv %</td><td>5%</td><td>12%</td><td>22%</td><td>30%+</td><td>Linear (min 5 calls, cap 97)</td></tr>
+    <tr><td>Volume</td><td>1 call/hr</td><td>3 calls/hr</td><td>6 calls/hr</td><td>8+ calls/hr</td><td>Log (per sched hour, cap 95)</td></tr>
+    <tr><td>Speed</td><td>25s+</td><td>15s</td><td>10s</td><td>&lt;5s</td><td>Piecewise inverted (cap 97)</td></tr>
+    <tr><td>Conv/Hr</td><td>0.3/hr</td><td>1/hr</td><td>2.5/hr</td><td>4+/hr</td><td>Piecewise (cap 97)</td></tr>
+    <tr><td>Pickup Rate</td><td>50%</td><td>70%</td><td>90%</td><td>98%+</td><td>Compressed (cap 97)</td></tr>
+    <tr><td>Talk Time</td><td>5 min/hr</td><td>12 min/hr</td><td>25 min/hr</td><td>35+ min/hr</td><td>Log (per sched hour, cap 95)</td></tr>
+    <tr><td>Wrap-Up</td><td>100s+</td><td>60s</td><td>35s</td><td>&lt;25s</td><td>Piecewise inverted (cap 97)</td></tr>
+    <tr><td>Decline Rate</td><td>15%+</td><td>8%</td><td>3%</td><td>0%</td><td>Piecewise inverted (cap 97)</td></tr>
   </tbody>
 </table>
+
+<div class="callout">
+  <strong>Why 97 not 99?</strong> If too many agents cluster at 99, the rating loses meaning. By capping at 97 and using steep diminishing returns near the top, the gap between 90 and 95 represents genuine excellence. Only one agent at a time should be near 97 in any category.
+</div>
 
 <!-- OVR Formula -->
 <div class="section-title">OVR Calculation</div>
@@ -243,8 +247,43 @@ OVR = round(
   </tbody>
 </table>
 
+<!-- Methodology Critique -->
+<div class="section-title">Known Methodology Weaknesses</div>
+
+<p>This rating system is v1.1. We are transparent about its limitations and actively improving:</p>
+
+<ul style="padding-left: 20px; margin: 8px 0;">
+  <li><strong>No call quality metric.</strong> The system measures speed, volume, and outcomes — but not how well an agent handles a difficult call. A future "Quality Score" from call reviews or client satisfaction surveys would add a 10th attribute.</li>
+  <li><strong>Conversion attribution is coarse.</strong> An agent who warms a lead across 3 calls gets no credit if a different agent logs the final conversion. Multi-touch attribution would be more fair.</li>
+  <li><strong>Decline rate data is sparse.</strong> TaskRouter doesn't always populate this. Many agents show null, which defaults to 65 (benefit of doubt). As data improves, this default will tighten.</li>
+  <li><strong>Historical baselines are thin.</strong> The accumulator currently only has March 2026 partial data. Trend arrows will become meaningful as months accumulate.</li>
+  <li><strong>Weekend/off-peak hours aren't weighted differently.</strong> A Sunday shift with fewer calls isn't the same competitive environment as a Monday. Future versions may apply day-of-week normalization.</li>
+  <li><strong>Blended agents get a volume advantage.</strong> Wendy and Sara handle both JC and MSC calls — their total volume is higher than single-brand agents, even normalized by hours. Brand-level splitting would fix this.</li>
+</ul>
+
+<!-- Feedback -->
+<div class="section-title">Feedback</div>
+
+<div class="callout" style="text-align: center;">
+  <p style="margin-bottom: 8px;"><strong>This methodology is open for discussion.</strong></p>
+  <p style="margin-bottom: 4px;">If you disagree with a weight, think a curve is too generous or too harsh, or want to propose a new attribute — we want to hear it.</p>
+  <p><strong>Email: <a href="mailto:burke@jumpcontact.com" style="color: #3ba5b5;">burke@jumpcontact.com</a></strong></p>
+  <p style="font-size: 10px; color: #495057; margin-top: 8px;">Questions, feedback, and challenges are extremely valuable. This system gets better with input from the people it measures.</p>
+</div>
+
+<!-- Changelog -->
+<div class="section-title">Changelog</div>
+
+<table>
+  <thead><tr><th>Date</th><th>Version</th><th>Change</th></tr></thead>
+  <tbody>
+    <tr><td>2026-04-09</td><td>1.1</td><td>Curve overhaul: cap at 97, diminishing returns near top. Volume and Talk Time now normalized by scheduled hours. Added methodology critique and feedback section.</td></tr>
+    <tr><td>2026-04-08</td><td>1.0</td><td>Initial release. 9-attribute formula, March baselines, 4 time horizons.</td></tr>
+  </tbody>
+</table>
+
 <div style="text-align: center; margin-top: 30px; padding-top: 15px; border-top: 1px solid #dee2e6;">
-  <em style="color: #495057; font-size: 10px;">Jump Contact &mdash; Agent League OVR Methodology v1.0 &mdash; Confidential Internal Document</em>
+  <em style="color: #495057; font-size: 10px;">Jump Contact &mdash; Agent League OVR Methodology v1.1 &mdash; Confidential Internal Document</em>
 </div>
 
 </body>

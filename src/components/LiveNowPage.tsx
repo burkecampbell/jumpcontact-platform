@@ -161,6 +161,7 @@ function LiveNowPageInner() {
       talkMin: a.talkMin,
       wrapUpSec: wrapUp,
       declineRate: a.declineRate ?? null,
+      hoursScheduled: a.hoursScheduled || 8,
     });
     return {
       ...a,
