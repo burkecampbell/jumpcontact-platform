@@ -272,7 +272,8 @@ import scheduleJson from '../data/schedule-fallback.json';
 
 export async function fetchSchedule(): Promise<ScheduleEntry[]> {
   try {
-    const rows = await readSheet(SCHEDULE_SHEET_ID, 'A:H');
+    // Columns: A=Agent, B-H=Sun-Sat shifts, I=Lunch Time, J=Lunch Mins
+    const rows = await readSheet(SCHEDULE_SHEET_ID, 'A:J');
     if (rows.length <= 1) return fallbackSchedule();
 
     const entries: ScheduleEntry[] = [];
@@ -281,14 +282,23 @@ export async function fetchSchedule(): Promise<ScheduleEntry[]> {
       if (!row[0]) continue;
       const name = normalizeAgent(row[0]);
       if (!name || name === 'lunch' || name === 'break' || name === 'agent') continue;
+
+      // Parse lunch from columns I and J
+      const rawLunch = (row[8] || '').trim();
+      const lunchTime = rawLunch && !/off|n\/a|^-?$/i.test(rawLunch) ? rawLunch : null;
+      const lunchMins = parseInt(row[9]) || (lunchTime ? 60 : 0); // default 60 if lunch time set but no duration
+
       const schedule: Record<string, string> = {};
       let totalHrs = 0;
       for (let d = 0; d < 7; d++) {
         const val = (row[d + 1] || 'OFF').trim();
         schedule[DAY_NAMES[d]] = val;
-        totalHrs += parseShiftHours(val);
+        const gross = parseGrossShiftHours(val);
+        // Deduct lunch only for days with a shift (not OFF)
+        const net = gross > 0 ? Math.max(gross - lunchMins / 60, 0) : 0;
+        totalHrs += net;
       }
-      entries.push({ name, schedule, hrsPerWeek: totalHrs });
+      entries.push({ name, schedule, hrsPerWeek: totalHrs, lunchTime, lunchMins });
     }
     return entries.length > 0 ? entries : fallbackSchedule();
   } catch {
@@ -296,17 +306,23 @@ export async function fetchSchedule(): Promise<ScheduleEntry[]> {
   }
 }
 
+/** Get NET productive hours for an agent on a given day (gross shift minus lunch). */
 export function getScheduledHours(schedule: ScheduleEntry[], agent: string, date: Date): number {
   const dayName = DAY_NAMES[date.getDay()];
   const entry = schedule.find(s => s.name === normalizeAgent(agent));
   if (!entry) return 8;
   const shift = entry.schedule[dayName] || 'OFF';
-  return parseShiftHours(shift);
+  const gross = parseGrossShiftHours(shift);
+  if (gross <= 0) return 0;
+  // Deduct lunch from the sheet (column J). If no lunch data, deduct 1hr for shifts > 6hrs.
+  const lunchDeduction = entry.lunchMins > 0 ? entry.lunchMins / 60 : (gross > 6 ? 1 : 0);
+  return Math.max(gross - lunchDeduction, 0);
 }
 
-function parseShiftHours(shift: string): number {
+/** Parse GROSS shift hours from a shift range string. No lunch deduction. */
+function parseGrossShiftHours(shift: string): number {
   if (!shift || shift === 'OFF' || shift === '-') return 0;
-  const segments = shift.split(',').map(s => s.trim());
+  const segments = shift.split(/[,\/]/).map(s => s.trim());
   let total = 0;
   for (const seg of segments) {
     const match = seg.match(/(\d{1,2})\s*(a|p)m?\s*[-–]\s*(\d{1,2})\s*(a|p)m?/i);
@@ -320,9 +336,7 @@ function parseShiftHours(shift: string): number {
     if (endP === 'p' && end !== 12) end += 12;
     if (endP === 'a' && end === 12) end = 0;
     if (end <= start) end += 24;
-    let hours = end - start;
-    if (hours > 6) hours -= 1;
-    total += hours;
+    total += end - start;
   }
   return total;
 }
@@ -332,6 +346,8 @@ function fallbackSchedule(): ScheduleEntry[] {
     name: normalizeAgent(a.name.split(' ')[0]),
     schedule: a.schedule,
     hrsPerWeek: a.hrsPerWeek,
+    lunchTime: null,
+    lunchMins: 60, // fallback: 1hr lunch (old behavior)
   }));
 }
 

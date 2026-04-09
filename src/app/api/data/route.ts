@@ -594,6 +594,8 @@ function buildScheduleData(
       schedule: e.schedule,
       hrsPerWeek: e.hrsPerWeek,
       isOnShift: isOnShift(e.schedule, nowMST),
+      lunchTime: e.lunchTime,
+      lunchMins: e.lunchMins,
     })),
   };
 }

@@ -147,8 +147,10 @@ export interface AnalyticsData {
 
 export interface ScheduleEntry {
   name: string;
-  schedule: Record<string, string>;
+  schedule: Record<string, string>;  // Day → shift range (e.g. "8a-5p", "OFF")
   hrsPerWeek: number;
+  lunchTime: string | null;          // e.g. "3p", "12p", null = no lunch
+  lunchMins: number;                 // Duration in minutes (0 = no lunch)
 }
 
 // ── Contract Types ──────────────────────────────────────────────────
@@ -294,6 +296,8 @@ export interface ScheduleData {
     schedule: Record<string, string>;
     hrsPerWeek: number;
     isOnShift: boolean;
+    lunchTime: string | null;
+    lunchMins: number;
   }[];
 }
 
