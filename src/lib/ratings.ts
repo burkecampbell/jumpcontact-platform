@@ -130,30 +130,93 @@ export interface OvrInput {
   talkMin: number;
   wrapUpSec: number | null;
   declineRate: number | null;
-  hoursScheduled: number;  // Full day scheduled hours — used for normalization
+  hoursScheduled: number;
+  opportunityWeight?: number;  // 0-1: fraction of daily call volume during this agent's shift
+}
+
+// ── Call Opportunity ──────────────────────────────────────────────────
+
+/**
+ * Compute an agent's call opportunity weight based on when they work.
+ *
+ * If 60% of daily calls land 8am-2pm and Chris works 3pm-12am (15% of calls),
+ * his opportunity weight is 0.15. Burke working 7am-6pm (80% of calls) gets 0.80.
+ * This means Chris's 15 calls = Burke's 40 calls in terms of "capturing your window."
+ *
+ * @param hourlyCallDist - 24-element array of call counts per hour (index 0 = midnight)
+ * @param shiftStart - Hour the agent's shift starts (e.g. 7 for 7am, 15 for 3pm)
+ * @param shiftEnd - Hour the shift ends (e.g. 17 for 5pm, 24 for midnight)
+ * @returns Weight between 0 and 1
+ */
+export function computeOpportunityWeight(
+  hourlyCallDist: number[],
+  shiftStart: number,
+  shiftEnd: number,
+): number {
+  if (!hourlyCallDist || hourlyCallDist.length < 24) return 1; // no data → neutral
+  const total = hourlyCallDist.reduce((s, v) => s + v, 0);
+  if (total <= 0) return 1;
+
+  let shiftCalls = 0;
+  // Handle overnight shifts (e.g. 3pm-12am = 15-24, or 10pm-6am = 22-30)
+  const end = shiftEnd <= shiftStart ? shiftEnd + 24 : shiftEnd;
+  for (let h = shiftStart; h < end; h++) {
+    shiftCalls += hourlyCallDist[h % 24] || 0;
+  }
+  return Math.max(shiftCalls / total, 0.05); // floor at 5% to prevent division explosion
 }
 
 /**
- * OVR is a PACE metric: it only goes UP as you perform, never DOWN for being idle.
- * We divide by scheduled hours (not elapsed) so the score reflects "pace toward
- * end-of-day goal." At 10 AM you're low because you haven't finished your day yet.
- * By 5 PM your rate reflects real full-day performance.
+ * Parse a shift range string into start/end hours.
+ * "8a-5p" → { start: 8, end: 17 }
+ * "3p-12a" → { start: 15, end: 24 }
+ * For split shifts like "7a-4p /6-9p", uses the full span (7-21).
+ */
+export function parseShiftHours(shiftStr: string): { start: number; end: number } | null {
+  if (!shiftStr || /off|n\/a|^-$/i.test(shiftStr.trim())) return null;
+  const segments = shiftStr.split(/[,\/]/).map(s => s.trim());
+  let earliest = 24, latest = 0;
+  for (const seg of segments) {
+    const m = seg.match(/(\d{1,2})\s*(a|p)m?\s*[-–]\s*(\d{1,2})\s*(a|p)m?/i);
+    if (!m) continue;
+    let start = parseInt(m[1]);
+    if (m[2].toLowerCase() === 'p' && start !== 12) start += 12;
+    if (m[2].toLowerCase() === 'a' && start === 12) start = 0;
+    let end = parseInt(m[3]);
+    if (m[4].toLowerCase() === 'p' && end !== 12) end += 12;
+    if (m[4].toLowerCase() === 'a' && end === 12) end = 0;
+    if (end === 0) end = 24;
+    if (start < earliest) earliest = start;
+    if (end > latest) latest = end;
+  }
+  return earliest < latest ? { start: earliest, end: latest } : null;
+}
+
+// ── Sub-rating computation ───────────────────────────────────────────
+
+/**
+ * Volume and talk time normalize by OPPORTUNITY-ADJUSTED hours.
+ * An agent working off-peak gets credit for handling what's available.
+ * An agent working peak hours is held to a higher standard.
  *
- * This means: OVR never drops during the day unless you actively do something
- * negative (decline calls, wrap-up gets slower, etc.). Danny's question
- * "why did my score go down when I didn't take any calls?" is answered:
- * it doesn't anymore.
+ * effectiveHours = hoursScheduled × opportunityWeight
+ * → Peak agent (weight 0.8): 8hrs × 0.8 = 6.4 effective hours
+ * → Off-peak agent (weight 0.2): 8hrs × 0.2 = 1.6 effective hours
+ * Chris's 15 calls / 1.6 = 9.4 calls/effective-hr
+ * Burke's 40 calls / 6.4 = 6.25 calls/effective-hr
+ * Chris is actually outperforming Burke relative to opportunity.
  */
 export function computeSubRatings(input: OvrInput): AgentSubRatings {
-  const hrs = Math.max(input.hoursScheduled, 1);
+  const w = input.opportunityWeight ?? 1;
+  const effectiveHrs = Math.max(input.hoursScheduled * w, 0.5);
   return {
     conversions: rateConversions(input.conversions),
     convPct:     rateConvPct(input.conversions, input.calls),
-    volume:      rateVolume(input.calls / hrs),
+    volume:      rateVolume(input.calls / effectiveHrs),
     speed:       rateSpeed(input.speedSec),
-    convPerHr:   rateConvPerHr(input.convsPerHour),  // API computes this from scheduled hours
+    convPerHr:   rateConvPerHr(input.conversions / effectiveHrs),
     pickupRate:  ratePickupRate(input.pickupRate),
-    talkTime:    rateTalkTime(input.talkMin / hrs),
+    talkTime:    rateTalkTime(input.talkMin / effectiveHrs),
     wrapUp:      rateWrapUp(input.wrapUpSec),
     declineRate: rateDeclineRate(input.declineRate),
   };

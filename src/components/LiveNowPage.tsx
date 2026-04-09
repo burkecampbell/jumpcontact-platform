@@ -16,7 +16,7 @@ import MixedInsights from './MixedInsights';
 import KPICard from './KPICard';
 import OvrBadge from './OvrBadge';
 import { shareRecording } from '@/lib/recording-utils';
-import { computeOVRFromInput, computeBaselineOVR } from '@/lib/ratings';
+import { computeOVRFromInput, computeBaselineOVR, computeOpportunityWeight, parseShiftHours } from '@/lib/ratings';
 import type { AgentBaseline } from '@/lib/types';
 import agentHistoryData from '@/data/agent-history.json';
 
@@ -140,18 +140,36 @@ function LiveNowPageInner() {
     }
   }
 
+  // Build opportunity weights from hourly call distribution + agent schedules
+  const hourlyDist = data.today.repActivity.agents.length > 0
+    ? (data as { today: { hourlyTotal?: number[] } }).today.hourlyTotal || []
+    : [];
+  const schedLookup: Record<string, { start: number; end: number }> = {};
+  if (data.schedule?.agents) {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const nowDay = days[new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Edmonton' })).getDay()];
+    for (const sa of data.schedule.agents) {
+      const shift = sa.schedule[nowDay] || sa.schedule[nowDay.toLowerCase()] || '';
+      const parsed = parseShiftHours(shift);
+      if (parsed) schedLookup[sa.name.toLowerCase()] = parsed;
+    }
+  }
+
   type RankRow = RepAgent & { convs: number; pickup: number | null; wrapUp: number | null; ovr: number; baselineOvr: number };
   const rankRows: RankRow[] = agents.map(a => {
     const yt = yticaMtd[a.agent.toLowerCase()];
-    // Pickup: prefer Ytica MTD when CDR is inflated (>10s), otherwise CDR
     const pickup = (a.speedSec != null && a.speedSec > 0 && a.speedSec <= 10)
       ? a.speedSec
       : (yt?.avgSpeedSec ?? a.speedSec ?? null);
-    // Wrap-up: CDR when available (>0), else Ytica MTD
     const wrapUp = (a.wrapUpSec != null && a.wrapUpSec > 0)
       ? a.wrapUpSec
       : (yt?.avgWrapUpSec ?? null);
     const convs = convByAgent[a.agent.toLowerCase()] || 0;
+    // Opportunity weight: what fraction of daily calls land during this agent's shift
+    const shift = schedLookup[a.agent.toLowerCase()];
+    const oppWeight = shift && hourlyDist.length >= 24
+      ? computeOpportunityWeight(hourlyDist, shift.start, shift.end)
+      : undefined;
     const { ovr } = computeOVRFromInput({
       calls: a.calls,
       conversions: convs,
@@ -162,6 +180,7 @@ function LiveNowPageInner() {
       wrapUpSec: wrapUp,
       declineRate: a.declineRate ?? null,
       hoursScheduled: a.hoursScheduled || 8,
+      opportunityWeight: oppWeight,
     });
     return {
       ...a,

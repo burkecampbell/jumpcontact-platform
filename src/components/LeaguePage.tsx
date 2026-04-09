@@ -8,7 +8,7 @@ import ErrorBoundary from './ErrorBoundary';
 import OvrBadge from './OvrBadge';
 import TopAgents, { type CategoryTop3 } from './TopAgents';
 import { C, capitalize, agentColor, fmtSpeed, fmtTalkTime, rankBadge, speedGrade } from '@/lib/constants';
-import { computeOVRFromInput, computeBaselineOVR, ratingTier, ratingDelta, SUB_RATING_LABELS, type OvrInput } from '@/lib/ratings';
+import { computeOVRFromInput, computeBaselineOVR, computeOpportunityWeight, parseShiftHours, ratingTier, ratingDelta, SUB_RATING_LABELS, type OvrInput } from '@/lib/ratings';
 import type { DashboardData, RepAgent, AgentBaseline, AgentSubRatings } from '@/lib/types';
 import { useBrand } from '@/hooks/useBrand';
 import { isAgentForBrand } from '@/lib/brand';
@@ -96,6 +96,7 @@ function buildLeagueRow(
   speedSec: number | null,
   wrapUpSec: number | null,
   baselineOvr: number,
+  opportunityWeight?: number,
 ): LeagueRow {
   const convPct = a.calls > 0 ? +((convs / a.calls) * 100).toFixed(1) : null;
   const input: OvrInput = {
@@ -108,6 +109,7 @@ function buildLeagueRow(
     wrapUpSec,
     declineRate: a.declineRate ?? null,
     hoursScheduled: a.hoursScheduled || 8,
+    opportunityWeight,
   };
   const { ovr, subRatings } = computeOVRFromInput(input);
   const delta = ratingDelta(ovr, baselineOvr);
@@ -229,11 +231,22 @@ function LeaguePageInner() {
     if (!data) return [];
 
     if (horizon === 'today') {
-      // TODAY: live data from repActivity + today's conversions
-      // Uses hoursScheduled (not elapsed) so OVR only goes UP during the day
       const agents = data.today.repActivity.agents;
       const convByAgent: Record<string, number> = {};
       for (const a of data.today.conversions.byAgent) convByAgent[a.agent.toLowerCase()] = a.count;
+
+      // Opportunity weights from hourly call distribution + agent schedules
+      const hourlyDist = (data as { today: { hourlyTotal?: number[] } }).today.hourlyTotal || [];
+      const schedLookup: Record<string, { start: number; end: number }> = {};
+      if (data.schedule?.agents) {
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const nowDay = days[new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Edmonton' })).getDay()];
+        for (const sa of data.schedule.agents) {
+          const shift = sa.schedule[nowDay] || sa.schedule[nowDay.toLowerCase()] || '';
+          const parsed = parseShiftHours(shift);
+          if (parsed) schedLookup[sa.name.toLowerCase()] = parsed;
+        }
+      }
 
       return agents
         .filter(a => a.calls > 0)
@@ -248,8 +261,12 @@ function LeaguePageInner() {
           const convs = convByAgent[a.agent.toLowerCase()] || 0;
           const bl = baselines[a.agent.toLowerCase()];
           const baselineOvr = bl ? computeBaselineOVR(bl) : 0;
+          const shift = schedLookup[a.agent.toLowerCase()];
+          const oppWeight = shift && hourlyDist.length >= 24
+            ? computeOpportunityWeight(hourlyDist, shift.start, shift.end)
+            : undefined;
 
-          return buildLeagueRow(a, convs, speedSec, wrapUpSec, baselineOvr);
+          return buildLeagueRow(a, convs, speedSec, wrapUpSec, baselineOvr, oppWeight);
         });
     }
 
