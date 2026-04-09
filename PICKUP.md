@@ -54,6 +54,16 @@ EA Sports-style OVR rating system. Already in git, pushed alongside outbound.
 
 ## What's NOT Done Yet (Carry Forward)
 
+### CRITICAL: Wendy's conversions underreported (blended agent bug)
+MTD shows Wendy had **17 conversions on April 8**, but `yesterday.conversions.byAgent` shows only **1**. The 1 is probably from her MSC call — the brand filter assigned 16 of her conversions to MSC and only 1 to JC. But MTD daily breakdown (from Google Sheets aggregate) correctly shows 17 total.
+
+**Root cause:** `fetchConversions('2026-04-08')` per-day fetch finds different results than the MTD aggregate for the same date. Either:
+- Date/timezone parsing bug in per-day fetch (some conversions landing on wrong day)
+- Brand filter splitting blended agent conversions incorrectly (proportional split based on CDR call ratios gives wrong results for Wendy)
+- The KPI sheet column D has 0 conversions (Burke confirmed "conversions are not on that sheet"), so `applyKPIOverrides` can't fix it
+
+**Fix:** Use the MTD daily breakdown as the source of truth for per-day conversions. `mtd.byAgent[wendy].daily['2026-04-08'] = 17` is correct. The per-day fetch is wrong.
+
 ### From previous sessions (still open):
 1. **Outbound calls — no agent** in Call Log (Twilio issue, not HubSpot)
 2. **Wrap-up column dashes** — date format mismatch in KPI sheet
