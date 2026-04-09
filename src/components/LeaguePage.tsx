@@ -11,6 +11,7 @@ import { C, capitalize, agentColor, fmtSpeed, fmtTalkTime, rankBadge, speedGrade
 import { computeOVRFromInput, computeBaselineOVR, ratingTier, ratingDelta, SUB_RATING_LABELS, type OvrInput } from '@/lib/ratings';
 import type { DashboardData, RepAgent, AgentBaseline, AgentSubRatings } from '@/lib/types';
 import { useBrand } from '@/hooks/useBrand';
+import { isAgentForBrand } from '@/lib/brand';
 import { Trophy, ChevronUp, ChevronDown, FileText } from 'lucide-react';
 import agentHistoryData from '@/data/agent-history.json';
 
@@ -261,7 +262,7 @@ function LeaguePageInner() {
     if (horizon === 'monthly') {
       // Monthly: Ytica MTD totals, convert to daily averages for rating
       return mtdAgents
-        .filter(a => a.totalCalls > 0)
+        .filter(a => a.totalCalls > 0 && isAgentForBrand(a.agent, brand))
         .map(a => {
           const name = a.agent.toLowerCase();
           const dailyCalls = a.totalCalls / dayOfMonth;
@@ -340,7 +341,7 @@ function LeaguePageInner() {
     }
 
     return Object.entries(combined)
-      .filter(([, d]) => d.calls > 0)
+      .filter(([name, d]) => d.calls > 0 && isAgentForBrand(name, brand))
       .map(([name, d]) => {
         const dailyCalls = d.calls / Math.max(d.days, 1);
         const dailyConvs = d.convs / Math.max(d.days, 1);
@@ -361,7 +362,7 @@ function LeaguePageInner() {
         // For all-time, baseline IS the data — no trend
         return buildLeagueRow(mockAgent, Math.round(dailyConvs), d.speedSec, d.wrapUpSec, 0);
       });
-  }, [data, horizon, yticaMtd, baselines]);
+  }, [data, horizon, yticaMtd, baselines, brand]);
 
   // Sort
   const handleSort = (key: SortKey) => {
