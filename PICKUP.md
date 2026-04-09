@@ -57,12 +57,22 @@ EA Sports-style OVR rating system. Already in git, pushed alongside outbound.
 ### CRITICAL: Wendy's conversions underreported (blended agent bug)
 MTD shows Wendy had **17 conversions on April 8**, but `yesterday.conversions.byAgent` shows only **1**. The 1 is probably from her MSC call — the brand filter assigned 16 of her conversions to MSC and only 1 to JC. But MTD daily breakdown (from Google Sheets aggregate) correctly shows 17 total.
 
-**Root cause:** `fetchConversions('2026-04-08')` per-day fetch finds different results than the MTD aggregate for the same date. Either:
-- Date/timezone parsing bug in per-day fetch (some conversions landing on wrong day)
-- Brand filter splitting blended agent conversions incorrectly (proportional split based on CDR call ratios gives wrong results for Wendy)
-- The KPI sheet column D has 0 conversions (Burke confirmed "conversions are not on that sheet"), so `applyKPIOverrides` can't fix it
+**Root cause:** `applyKPIOverrides()` overwrites Wendy's 17 JC conversions (from Google Sheets) with 1 MSC conversion (from KPI sheet / GHL). The KPI sheet doesn't distinguish JC vs MSC conversions — it just has a total that comes from GHL (MSC source). For blended agents, this replaces correct JC data with wrong MSC data.
 
-**Fix:** Use the MTD daily breakdown as the source of truth for per-day conversions. `mtd.byAgent[wendy].daily['2026-04-08'] = 17` is correct. The per-day fetch is wrong.
+**Fix:** `applyKPIOverrides()` should NOT override conversions for blended agents (Sara, Wendy, Jose). KPI sheet should only override speed, wrap-up, pickup — NOT conversions. Conversions must come from: Google Sheets for JC, GHL for MSC. The brand filter handles the split.
+
+**In `src/app/api/data/route.ts` `applyKPIOverrides()`**, change:
+```ts
+// BEFORE (broken for blended agents):
+if (kpi.conversions > 0) agent.conversions = kpi.conversions;
+
+// AFTER:
+// Skip conversion override for blended agents — KPI mixes JC+MSC
+const isBlended = BLENDED_AGENTS.has(agent.agent.toLowerCase());
+if (kpi.conversions > 0 && !isBlended) agent.conversions = kpi.conversions;
+```
+
+Also: the `if (kpiRows.length > 0)` block that rebuilds `conversions.byAgent` should skip blended agents too.
 
 ### From previous sessions (still open):
 1. **Outbound calls — no agent** in Call Log (Twilio issue, not HubSpot)
