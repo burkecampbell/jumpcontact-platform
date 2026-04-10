@@ -238,10 +238,42 @@ export function computeOVR(subs: AgentSubRatings): number {
   return Math.round(raw);
 }
 
-/** Compute OVR from raw metrics (convenience). */
-export function computeOVRFromInput(input: OvrInput): { ovr: number; subRatings: AgentSubRatings } {
+/**
+ * Bayesian confidence prior — how many calls of "evidence" the team average
+ * is worth. With fewer calls than this, you're pulled toward the team average.
+ * With more, your actual performance dominates.
+ *
+ * At 10 calls: 50% you, 50% team average
+ * At 20 calls: 67% you, 33% team average
+ * At 40 calls: 80% you, 20% team average
+ */
+const CONFIDENCE_PRIOR = 10;
+
+/** Default team average OVR when no agents have enough data. */
+const DEFAULT_TEAM_AVG = 65;
+
+/**
+ * Compute OVR with Bayesian confidence adjustment.
+ *
+ * Chris with 3 calls: rawOVR weighted 23%, team avg weighted 77% → fair rating
+ * Burke with 36 calls: rawOVR weighted 78%, team avg weighted 22% → earned rating
+ *
+ * @param teamAvgOvr - Current team average OVR (computed from agents with 10+ calls)
+ */
+export function computeOVRFromInput(
+  input: OvrInput,
+  teamAvgOvr?: number,
+): { ovr: number; rawOvr: number; confidence: number; subRatings: AgentSubRatings } {
   const subRatings = computeSubRatings(input);
-  return { ovr: computeOVR(subRatings), subRatings };
+  const rawOvr = computeOVR(subRatings);
+  const prior = teamAvgOvr ?? DEFAULT_TEAM_AVG;
+  const n = input.calls;
+
+  // Bayesian: blend raw OVR with team prior, weighted by sample size
+  const confidence = n / (n + CONFIDENCE_PRIOR); // 0→0, 10→0.5, 20→0.67, 40→0.8
+  const ovr = Math.round(prior * (1 - confidence) + rawOvr * confidence);
+
+  return { ovr, rawOvr, confidence, subRatings };
 }
 
 /** Compute baseline OVR from monthly totals (daily averages). */

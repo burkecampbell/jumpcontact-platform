@@ -97,6 +97,7 @@ function buildLeagueRow(
   wrapUpSec: number | null,
   baselineOvr: number,
   opportunityWeight?: number,
+  teamAvgOvr?: number,
 ): LeagueRow {
   const convPct = a.calls > 0 ? +((convs / a.calls) * 100).toFixed(1) : null;
   const input: OvrInput = {
@@ -111,7 +112,7 @@ function buildLeagueRow(
     hoursScheduled: a.hoursScheduled || 8,
     opportunityWeight,
   };
-  const { ovr, subRatings } = computeOVRFromInput(input);
+  const { ovr, subRatings } = computeOVRFromInput(input, teamAvgOvr);
   const delta = ratingDelta(ovr, baselineOvr);
 
   return {
@@ -248,26 +249,35 @@ function LeaguePageInner() {
         }
       }
 
-      return agents
-        .filter(a => a.calls > 0)
-        .map(a => {
-          const yt = yticaMtd[a.agent.toLowerCase()];
-          const speedSec = (a.speedSec != null && a.speedSec > 0 && a.speedSec <= 10)
-            ? a.speedSec
-            : (yt?.avgSpeedSec ?? a.speedSec ?? null);
-          const wrapUpSec = (a.wrapUpSec != null && a.wrapUpSec > 0)
-            ? a.wrapUpSec
-            : (yt?.avgWrapUpSec ?? null);
-          const convs = convByAgent[a.agent.toLowerCase()] || 0;
-          const bl = baselines[a.agent.toLowerCase()];
-          const baselineOvr = bl ? computeBaselineOVR(bl) : 0;
-          const shift = schedLookup[a.agent.toLowerCase()];
-          const oppWeight = shift && hourlyDist.length >= 24
-            ? computeOpportunityWeight(hourlyDist, shift.start, shift.end)
-            : undefined;
+      // First pass: raw OVRs for team average (agents with 10+ calls)
+      const preRows = agents.filter(a => a.calls > 0).map(a => {
+        const yt = yticaMtd[a.agent.toLowerCase()];
+        const speedSec = (a.speedSec != null && a.speedSec > 0 && a.speedSec <= 10)
+          ? a.speedSec : (yt?.avgSpeedSec ?? a.speedSec ?? null);
+        const wrapUpSec = (a.wrapUpSec != null && a.wrapUpSec > 0)
+          ? a.wrapUpSec : (yt?.avgWrapUpSec ?? null);
+        const convs = convByAgent[a.agent.toLowerCase()] || 0;
+        const shift = schedLookup[a.agent.toLowerCase()];
+        const oppWeight = shift && hourlyDist.length >= 24
+          ? computeOpportunityWeight(hourlyDist, shift.start, shift.end) : undefined;
+        return { a, convs, speedSec, wrapUpSec, oppWeight };
+      });
 
-          return buildLeagueRow(a, convs, speedSec, wrapUpSec, baselineOvr, oppWeight);
-        });
+      const rawOvrs = preRows.filter(r => r.a.calls >= 10).map(r =>
+        computeOVRFromInput({
+          calls: r.a.calls, conversions: r.convs, speedSec: r.speedSec,
+          convsPerHour: r.a.convsPerHour ?? null, pickupRate: r.a.pickupRate ?? null,
+          talkMin: r.a.talkMin, wrapUpSec: r.wrapUpSec, declineRate: r.a.declineRate ?? null,
+          hoursScheduled: r.a.hoursScheduled || 8, opportunityWeight: r.oppWeight,
+        }).rawOvr,
+      );
+      const tAvg = rawOvrs.length > 0 ? Math.round(rawOvrs.reduce((s, v) => s + v, 0) / rawOvrs.length) : undefined;
+
+      return preRows.map(({ a, convs, speedSec, wrapUpSec, oppWeight }) => {
+        const bl = baselines[a.agent.toLowerCase()];
+        const baselineOvr = bl ? computeBaselineOVR(bl) : 0;
+        return buildLeagueRow(a, convs, speedSec, wrapUpSec, baselineOvr, oppWeight, tAvg);
+      });
     }
 
     // MONTHLY / YEARLY / ALL-TIME: use Ytica MTD data + MTD conversions

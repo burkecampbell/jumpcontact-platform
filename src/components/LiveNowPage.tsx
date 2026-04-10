@@ -155,33 +155,44 @@ function LiveNowPageInner() {
     }
   }
 
-  type RankRow = RepAgent & { convs: number; pickup: number | null; wrapUp: number | null; ovr: number; baselineOvr: number };
-  const rankRows: RankRow[] = agents.map(a => {
+  // First pass: compute raw OVRs to get team average (for Bayesian adjustment)
+  type PreRow = { agent: RepAgent; convs: number; pickup: number | null; wrapUp: number | null; oppWeight?: number };
+  const preRows: PreRow[] = agents.map(a => {
     const yt = yticaMtd[a.agent.toLowerCase()];
     const pickup = (a.speedSec != null && a.speedSec > 0 && a.speedSec <= 10)
-      ? a.speedSec
-      : (yt?.avgSpeedSec ?? a.speedSec ?? null);
+      ? a.speedSec : (yt?.avgSpeedSec ?? a.speedSec ?? null);
     const wrapUp = (a.wrapUpSec != null && a.wrapUpSec > 0)
-      ? a.wrapUpSec
-      : (yt?.avgWrapUpSec ?? null);
+      ? a.wrapUpSec : (yt?.avgWrapUpSec ?? null);
     const convs = convByAgent[a.agent.toLowerCase()] || 0;
-    // Opportunity weight: what fraction of daily calls land during this agent's shift
     const shift = schedLookup[a.agent.toLowerCase()];
     const oppWeight = shift && hourlyDist.length >= 24
-      ? computeOpportunityWeight(hourlyDist, shift.start, shift.end)
-      : undefined;
-    const { ovr } = computeOVRFromInput({
-      calls: a.calls,
-      conversions: convs,
-      speedSec: pickup,
-      convsPerHour: a.convsPerHour ?? null,
-      pickupRate: a.pickupRate ?? null,
-      talkMin: a.talkMin,
-      wrapUpSec: wrapUp,
-      declineRate: a.declineRate ?? null,
-      hoursScheduled: a.hoursScheduled || 8,
-      opportunityWeight: oppWeight,
+      ? computeOpportunityWeight(hourlyDist, shift.start, shift.end) : undefined;
+    return { agent: a, convs, pickup, wrapUp, oppWeight };
+  });
+
+  // Compute team avg OVR from agents with 10+ calls (enough data to be meaningful)
+  const rawOvrs = preRows.filter(r => r.agent.calls >= 10).map(r => {
+    const { rawOvr } = computeOVRFromInput({
+      calls: r.agent.calls, conversions: r.convs, speedSec: r.pickup,
+      convsPerHour: r.agent.convsPerHour ?? null, pickupRate: r.agent.pickupRate ?? null,
+      talkMin: r.agent.talkMin, wrapUpSec: r.wrapUp, declineRate: r.agent.declineRate ?? null,
+      hoursScheduled: r.agent.hoursScheduled || 8, opportunityWeight: r.oppWeight,
     });
+    return rawOvr;
+  });
+  const teamAvgOvr = rawOvrs.length > 0
+    ? Math.round(rawOvrs.reduce((s, v) => s + v, 0) / rawOvrs.length)
+    : undefined;
+
+  // Second pass: compute Bayesian-adjusted OVRs
+  type RankRow = RepAgent & { convs: number; pickup: number | null; wrapUp: number | null; ovr: number; baselineOvr: number };
+  const rankRows: RankRow[] = preRows.map(({ agent: a, convs, pickup, wrapUp, oppWeight }) => {
+    const { ovr } = computeOVRFromInput({
+      calls: a.calls, conversions: convs, speedSec: pickup,
+      convsPerHour: a.convsPerHour ?? null, pickupRate: a.pickupRate ?? null,
+      talkMin: a.talkMin, wrapUpSec: wrapUp, declineRate: a.declineRate ?? null,
+      hoursScheduled: a.hoursScheduled || 8, opportunityWeight: oppWeight,
+    }, teamAvgOvr);
     return {
       ...a,
       convs,
