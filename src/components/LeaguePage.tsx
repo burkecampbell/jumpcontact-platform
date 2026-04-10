@@ -382,6 +382,12 @@ function LeaguePageInner() {
 
   const sorted = useMemo(() => {
     return [...leagueRows].sort((a, b) => {
+      // King (Jose) always sits at the bottom — shown, but doesn't compete for rank
+      const aKing = !isLeaderboardAgent(a.agent);
+      const bKing = !isLeaderboardAgent(b.agent);
+      if (aKing && !bKing) return 1;
+      if (bKing && !aKing) return -1;
+
       let va: number, vb: number;
       if (sortKey === 'ovr') { va = a.ovr; vb = b.ovr; }
       else if (sortKey === 'agent') { return sortAsc ? a.agent.localeCompare(b.agent) : b.agent.localeCompare(a.agent); }
@@ -404,23 +410,26 @@ function LeaguePageInner() {
       })),
     });
 
+    // Filter out the king (Jose) from all top 3 rankings — his 100s don't compete
+    const realAgents = leagueRows.filter(r => isLeaderboardAgent(r.agent));
+
     return [
-      top3([...leagueRows].sort((a, b) => b.conversions - a.conversions), 'Conversions', r => `${r.conversions}`, '🏆', 'conv'),
-      top3([...leagueRows].sort((a, b) => b.calls - a.calls), 'Calls', r => `${r.calls}`, '📞', 'calls'),
+      top3([...realAgents].sort((a, b) => b.conversions - a.conversions), 'Conversions', r => `${r.conversions}`, '🏆', 'conv'),
+      top3([...realAgents].sort((a, b) => b.calls - a.calls), 'Calls', r => `${r.calls}`, '📞', 'calls'),
       top3(
-        [...leagueRows].filter(r => r.speedSec != null && r.speedSec > 0).sort((a, b) => (a.speedSec ?? 99) - (b.speedSec ?? 99)),
+        [...realAgents].filter(r => r.speedSec != null && r.speedSec > 0).sort((a, b) => (a.speedSec ?? 99) - (b.speedSec ?? 99)),
         'Speed', r => fmtSpeed(r.speedSec), '⚡', 'speed',
       ),
       top3(
-        [...leagueRows].filter(r => r.calls >= 5).sort((a, b) => (b.convPct ?? 0) - (a.convPct ?? 0)),
+        [...realAgents].filter(r => r.calls >= 5).sort((a, b) => (b.convPct ?? 0) - (a.convPct ?? 0)),
         'Conv %', r => `${r.convPct ?? 0}%`, '🎯', 'convPct',
       ),
       top3(
-        [...leagueRows].sort((a, b) => b.talkMin - a.talkMin),
+        [...realAgents].sort((a, b) => b.talkMin - a.talkMin),
         'Most Minutes', r => `${Math.round(r.talkMin)}m`, '💰', 'minutes',
       ),
       top3(
-        [...leagueRows].filter(r => r.baselineOvr > 0 && isLeaderboardAgent(r.agent)).sort((a, b) => (b.ovr - b.baselineOvr) - (a.ovr - a.baselineOvr)),
+        [...realAgents].filter(r => r.baselineOvr > 0).sort((a, b) => (b.ovr - b.baselineOvr) - (a.ovr - a.baselineOvr)),
         'vs Career', r => {
           const d = r.ovr - r.baselineOvr;
           return d > 0 ? `+${d}` : `${d}`;
@@ -541,17 +550,17 @@ function LeaguePageInner() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                    <th className="px-4 py-2 text-left text-[11px] font-medium w-8" style={{ color: C.sub }}>#</th>
-                    <th className="px-4 py-2 text-left text-[11px] font-medium cursor-pointer select-none" style={{ color: sortKey === 'agent' ? C.cyan : C.sub }} onClick={() => handleSort('agent')}>
+                    <th className="px-4 py-2 text-left text-xs font-medium w-8" style={{ color: C.sub }}>#</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium cursor-pointer select-none" style={{ color: sortKey === 'agent' ? C.cyan : C.sub }} onClick={() => handleSort('agent')}>
                       Agent <SortIcon col="agent" />
                     </th>
-                    <th className="px-3 py-2 text-center text-[11px] font-medium cursor-pointer select-none" style={{ color: sortKey === 'ovr' ? C.cyan : C.sub }} onClick={() => handleSort('ovr')}>
+                    <th className="px-3 py-2 text-center text-xs font-medium cursor-pointer select-none" style={{ color: sortKey === 'ovr' ? C.cyan : C.sub }} onClick={() => handleSort('ovr')}>
                       <span className="inline-flex items-center gap-0.5">OVR <SortIcon col="ovr" /></span>
                     </th>
                     {(Object.keys(SUB_RATING_LABELS) as (keyof AgentSubRatings)[]).map(key => (
                       <th
                         key={key}
-                        className="px-2 py-2 text-center text-[10px] font-medium cursor-pointer select-none"
+                        className="px-4 py-2 text-center text-xs font-medium cursor-pointer select-none"
                         style={{ color: sortKey === key ? C.cyan : C.sub }}
                         onClick={() => handleSort(key)}
                         title={SUB_RATING_LABELS[key].tooltip}
@@ -564,32 +573,37 @@ function LeaguePageInner() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sorted.map((row, i) => {
-                    const tier = ratingTier(row.ovr);
-                    return (
-                      <tr key={row.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
-                        <td className="px-4 py-2.5 text-xs" style={{ color: C.sub }}>{!isLeaderboardAgent(row.agent) ? '👑' : rankBadge(i)}</td>
-                        <td className="px-4 py-2.5">
-                          <span className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full" style={{ background: agentColor(row.agent) }} />
-                            <span className="font-medium text-sm" style={{ color: C.text }}>{capitalize(row.agent)}</span>
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <OvrBadge ovr={row.ovr} baselineOvr={row.baselineOvr} size="md" />
-                        </td>
-                        {(Object.keys(SUB_RATING_LABELS) as (keyof AgentSubRatings)[]).map(key => {
-                          const val = row.subRatings[key];
-                          const subTier = ratingTier(val);
-                          return (
-                            <td key={key} className="px-2 py-2.5 text-center font-mono text-[11px] font-bold" style={{ color: subTier.color }}>
-                              {val}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
+                  {(() => {
+                    // Rank only counts for leaderboard agents — king gets no number
+                    let rankIdx = 0;
+                    return sorted.map((row) => {
+                      const isKing = !isLeaderboardAgent(row.agent);
+                      const rankPosition = isKing ? -1 : rankIdx++;
+                      return (
+                        <tr key={row.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
+                          <td className="px-4 py-2.5 text-xs" style={{ color: C.sub }}>{isKing ? '👑' : rankBadge(rankPosition)}</td>
+                          <td className="px-4 py-2.5">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full" style={{ background: agentColor(row.agent) }} />
+                              <span className="font-medium text-sm" style={{ color: C.text }}>{capitalize(row.agent)}</span>
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-center">
+                            <OvrBadge ovr={row.ovr} baselineOvr={row.baselineOvr} size="md" />
+                          </td>
+                          {(Object.keys(SUB_RATING_LABELS) as (keyof AgentSubRatings)[]).map(key => {
+                            const val = row.subRatings[key];
+                            const subTier = ratingTier(val);
+                            return (
+                              <td key={key} className="px-4 py-2.5 text-center font-mono text-xs font-bold" style={{ color: subTier.color }}>
+                                {val}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    });
+                  })()}
                 </tbody>
               </table>
             </div>

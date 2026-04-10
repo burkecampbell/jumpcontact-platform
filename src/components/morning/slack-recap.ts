@@ -7,7 +7,7 @@ import type { DashboardData, PeriodData } from '@/lib/types';
 import { aggregateDays } from '@/components/meeting/aggregateDays';
 
 function fmtMin(m: number) {
-  return m >= 60 ? `${Math.floor(m / 60)}h ${Math.round(m % 60)}m` : `${Math.round(m)}m`;
+  return `${Math.round(m)}m`;
 }
 
 function dayName(d: string) {

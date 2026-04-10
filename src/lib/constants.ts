@@ -173,10 +173,8 @@ export function fmtDuration(sec: number): string {
 }
 
 export function fmtHours(sec: number): string {
-  const h = Math.floor(sec / 3600);
-  const m = Math.round((sec % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
+  // Always in minutes — Burke's rule: no hours anywhere.
+  return `${Math.round(sec / 60)}m`;
 }
 
 export function formatTime(iso: string): string {
@@ -200,11 +198,7 @@ export function formatDuration(sec: number): string {
 }
 
 export function fmtTalkTime(talkMin: number): string {
-  const totalMin = Math.round(talkMin);
-  if (totalMin < 60) return `${totalMin}m`;
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  return `${h}h ${String(m).padStart(2, '0')}m`;
+  return `${Math.round(talkMin)}m`;
 }
 
 export function parseHMS(hms: string): number {

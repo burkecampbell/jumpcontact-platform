@@ -5,7 +5,7 @@ import { Num, Label, AgentBar } from './primitives';
 import { G } from './theme';
 
 function fmtMin(m: number) {
-  return m >= 60 ? `${Math.floor(m / 60)}h ${Math.round(m % 60)}m` : `${Math.round(m)}m`;
+  return `${Math.round(m)}m`;
 }
 
 export function StepTalk({ period, label }: { period: PeriodData; label?: string }) {

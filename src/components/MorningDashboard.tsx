@@ -45,7 +45,7 @@ function Z(key: string) { return SIZES[key]?.[_m] ?? SIZES[key]?.auto ?? 14; }
 // Generic spacing scale (for padding, gaps, margins)
 function G(base: number) { return Math.round(base * (Z('gap') / 12)); }
 
-function fmtMin(m: number) { return m >= 60 ? `${Math.floor(m / 60)}h ${Math.round(m % 60)}m` : `${Math.round(m)}m`; }
+function fmtMin(m: number) { return `${Math.round(m)}m`; }
 function dayName(d: string) { return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' }); }
 
 // ── Primitives ──────────────────────────────────────────────────────

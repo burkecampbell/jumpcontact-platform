@@ -6,7 +6,7 @@ import { Num, Label } from './primitives';
 import { T, Z, G } from './theme';
 
 function fmtMin(m: number) {
-  return m >= 60 ? `${Math.floor(m / 60)}h ${Math.round(m % 60)}m` : `${Math.round(m)}m`;
+  return `${Math.round(m)}m`;
 }
 
 export function StepChampions({ champions }: { champions: MonthChampions }) {

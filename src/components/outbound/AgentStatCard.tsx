@@ -13,11 +13,8 @@ function agentHubSpotUrl(ownerId: string): string {
 }
 
 function fmtDuration(ms: number): string {
-  const totalSec = Math.round(ms / 1000);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
+  const totalMin = Math.round(ms / 60000);
+  return `${totalMin}m`;
 }
 
 export default function AgentStatCard({ agent }: { agent: OutboundAgentStats }) {

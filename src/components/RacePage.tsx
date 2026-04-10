@@ -15,7 +15,7 @@ import { isAgentForBrand } from '@/lib/brand';
 
 async function downloadClientReport(
   accounts: AcctStat[],
-  agents: { agent: string; count: number; dailyAvg: number; convPerHr: number | null; projected: number; bestDay: number; mtdCalls: number; convRate: number | null }[],
+  agents: { agent: string; count: number; dailyAvg: number; convPerMin: number | null; projected: number; bestDay: number; mtdCalls: number; convRate: number | null }[],
   totalConversions: number,
   pulledAt: string,
 ) {
@@ -36,14 +36,14 @@ async function downloadClientReport(
 
   // Agent summary
   rows.push(['AGENT LEADERBOARD']);
-  rows.push(['#', 'Agent', 'Conversions', 'Avg/Day', 'Conv/Hr', 'Projected', 'Best Day', 'Calls', 'Conv %']);
+  rows.push(['#', 'Agent', 'Conversions', 'Avg/Day', 'Conv/Min', 'Projected', 'Best Day', 'Calls', 'Conv %']);
   agents.forEach((a, i) => {
     rows.push([
       i + 1,
       capitalize(a.agent),
       a.count,
       a.dailyAvg,
-      a.convPerHr !== null ? a.convPerHr : '',
+      a.convPerMin !== null ? a.convPerMin : '',
       a.projected,
       a.bestDay,
       a.mtdCalls,
@@ -69,7 +69,7 @@ async function downloadClientReport(
     { wch: 34 },  // Name/Client
     { wch: 14 },  // Conversions
     { wch: 12 },  // Avg/Day or %
-    { wch: 12 },  // Conv/Hr
+    { wch: 12 },  // Conv/Min
     { wch: 12 },  // Projected
     { wch: 12 },  // Best Day
     { wch: 12 },  // Pickup %
@@ -99,13 +99,13 @@ function SortTH({ k, cur, asc, set, flip, children }: {
   const active = cur === k;
   return (
     <th
-      className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider cursor-pointer select-none whitespace-nowrap"
+      className="px-4 py-2 text-right text-xs font-medium cursor-pointer select-none whitespace-nowrap"
       style={{ color: active ? C.cyan : C.sub }}
       onClick={() => { if (active) flip((p: boolean) => !p); else { set(k); flip(false); } }}
     >
       <span className="inline-flex items-center gap-0.5">
         {children}
-        {active && (asc ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
+        {active && (asc ? <ChevronUp size={11} /> : <ChevronDown size={11} />)}
       </span>
     </th>
   );
@@ -186,7 +186,7 @@ function SpeedBadge({ sec }: { sec: number | null }) {
 
 // ── Main Component ──────────────────────────────────────────────────────────
 
-type RaceSortKey = 'mtd' | 'avgDay' | 'convHr' | 'projected' | 'bestDay' | 'calls' | 'speed' | 'wrap' | 'talkPerCall' | 'convRate';
+type RaceSortKey = 'mtd' | 'avgDay' | 'convMin' | 'projected' | 'bestDay' | 'calls' | 'speed' | 'wrap' | 'talkPerCall' | 'convRate';
 
 function RacePageInner() {
   const { brand } = useBrand();
@@ -221,7 +221,7 @@ function RacePageInner() {
     return (
       <>
         <NavBar />
-        <div className="max-w-6xl mx-auto px-4 py-6">
+        <div className="max-w-7xl mx-auto px-4 py-6">
           <div className="skeleton h-56 rounded-2xl mb-6" />
           <div className="skeleton h-64 rounded-2xl mb-6" />
           <div className="skeleton h-48 rounded-2xl" />
@@ -234,7 +234,7 @@ function RacePageInner() {
     return (
       <>
         <NavBar />
-        <div className="max-w-6xl mx-auto px-4 py-20 text-center">
+        <div className="max-w-7xl mx-auto px-4 py-20 text-center">
           <p style={{ color: '#f87171' }}>Failed to load: {error}</p>
           <button onClick={fetchData} className="mt-4 px-4 py-2 rounded-lg text-sm" style={{ background: C.cyan, color: '#000' }}>
             Retry
@@ -317,7 +317,8 @@ function RacePageInner() {
       }
     }
     const mtdHours = mtdHoursMap[a.agent.toLowerCase()] ?? 0;
-    const convPerHr = mtdHours > 0 ? +(a.count / mtdHours).toFixed(2) : null;
+    // Conv per MINUTE (not hour) — hours × 60 = minutes, round to 4 decimals
+    const convPerMin = mtdHours > 0 ? +(a.count / (mtdHours * 60)).toFixed(4) : null;
     const ytica = mtdYticaByAgent[a.agent.toLowerCase()];
     const mtdCalls = ytica?.totalCalls ?? 0;
     const mtdSpeedSec = ytica?.avgSpeedSec ?? null;
@@ -325,7 +326,7 @@ function RacePageInner() {
     const mtdTalkMin = ytica?.totalTalkMin ?? 0;
     const mtdTalkPerCall = mtdCalls > 0 ? +(mtdTalkMin / mtdCalls).toFixed(1) : null;
     const convRate = mtdCalls > 0 ? Math.round((a.count / mtdCalls) * 1000) / 10 : null;
-    return { ...a, dailyAvg, projected, bestDay, mtdHours, convPerHr, mtdCalls, mtdSpeedSec, mtdWrapUpSec, mtdTalkPerCall, convRate };
+    return { ...a, dailyAvg, projected, bestDay, mtdHours, convPerMin, mtdCalls, mtdSpeedSec, mtdWrapUpSec, mtdTalkPerCall, convRate };
   });
 
   // Add agents who have Ytica MTD calls but 0 MTD conversions
@@ -335,7 +336,7 @@ function RacePageInner() {
     if (!isAgentForBrand(yAgent.agent, brand)) continue;
     mtdAgentStats.push({
       agent: yAgent.agent, count: 0, dailyAvg: 0, projected: 0, bestDay: 0,
-      mtdHours: mtdHoursMap[yAgent.agent.toLowerCase()] ?? 0, convPerHr: null,
+      mtdHours: mtdHoursMap[yAgent.agent.toLowerCase()] ?? 0, convPerMin: null,
       mtdCalls: yAgent.totalCalls, mtdSpeedSec: yAgent.avgSpeedSec, mtdWrapUpSec: yAgent.avgWrapUpSec,
       mtdTalkPerCall: yAgent.totalCalls > 0 ? +(yAgent.totalTalkMin / yAgent.totalCalls).toFixed(1) : null,
       convRate: null,
@@ -354,7 +355,7 @@ function RacePageInner() {
     switch (sortKey) {
       case 'mtd': va = a.count; vb = b.count; break;
       case 'avgDay': va = a.dailyAvg; vb = b.dailyAvg; break;
-      case 'convHr': va = a.convPerHr ?? -1; vb = b.convPerHr ?? -1; break;
+      case 'convMin': va = a.convPerMin ?? -1; vb = b.convPerMin ?? -1; break;
       case 'projected': va = a.projected; vb = b.projected; break;
       case 'bestDay': va = a.bestDay; vb = b.bestDay; break;
       case 'calls': va = a.mtdCalls; vb = b.mtdCalls; break;
@@ -374,7 +375,7 @@ function RacePageInner() {
     <>
       <NavBar pulledAt={data.pulledAt} />
       <HealthBanner />
-      <div className="max-w-6xl mx-auto px-4 py-6 space-y-5">
+      <div className="max-w-7xl mx-auto px-4 py-6 space-y-5">
         {/* Hero: Ring + Pace Strip */}
         <ErrorBoundary section="MTD Pace">
         <Card>
@@ -413,15 +414,15 @@ function RacePageInner() {
               />
             )}
             {(() => {
-              const byConvHr = [...agentStats].filter(a => a.convPerHr !== null && a.convPerHr! > 0).sort((a, b) => b.convPerHr! - a.convPerHr!);
-              return byConvHr.length > 0 ? (
+              const byConvMin = [...agentStats].filter(a => a.convPerMin !== null && a.convPerMin! > 0).sort((a, b) => b.convPerMin! - a.convPerMin!);
+              return byConvMin.length > 0 ? (
                 <AwardCard
                   icon={<TrendingUp size={14} style={{ color: C.lime }} />}
-                  title="Best Conv/Hr"
-                  winner={byConvHr[0].agent}
-                  value={byConvHr[0].convPerHr!.toFixed(1)}
-                  runnerUp={byConvHr[1]?.agent}
-                  runnerValue={byConvHr[1] ? byConvHr[1].convPerHr!.toFixed(1) : undefined}
+                  title="Best Conv/Min"
+                  winner={byConvMin[0].agent}
+                  value={byConvMin[0].convPerMin!.toFixed(3)}
+                  runnerUp={byConvMin[1]?.agent}
+                  runnerValue={byConvMin[1] ? byConvMin[1].convPerMin!.toFixed(3) : undefined}
                 />
               ) : null;
             })()}
@@ -511,7 +512,7 @@ function RacePageInner() {
                   <TH>Agent</TH>
                   <SortTH k="mtd" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>MTD</SortTH>
                   <SortTH k="avgDay" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Avg/Day</SortTH>
-                  <SortTH k="convHr" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Conv/Hr</SortTH>
+                  <SortTH k="convMin" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Conv/Min</SortTH>
                   <SortTH k="projected" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Projected</SortTH>
                   <SortTH k="bestDay" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Best Day</SortTH>
                   <SortTH k="calls" cur={sortKey} asc={sortAsc} set={setSortKey} flip={setSortAsc}>Calls</SortTH>
@@ -536,8 +537,8 @@ function RacePageInner() {
                     </TD>
                     <TD mono right>{a.count}</TD>
                     <TD mono right color={C.sub}>{a.dailyAvg}</TD>
-                    <TD mono right color={a.convPerHr !== null && a.convPerHr >= 1 ? C.lime : C.sub}>
-                      {a.convPerHr !== null ? a.convPerHr.toFixed(1) : '—'}
+                    <TD mono right color={a.convPerMin !== null && a.convPerMin >= 0.02 ? C.lime : C.sub}>
+                      {a.convPerMin !== null ? a.convPerMin.toFixed(3) : '—'}
                     </TD>
                     <TD mono right color={a.projected >= Math.round(GOAL / agentStats.length) ? '#4ade80' : C.sub}>
                       {a.projected}
@@ -546,7 +547,7 @@ function RacePageInner() {
                     <TD mono right color={a.mtdCalls > 0 ? C.text : C.sub}>
                       {a.mtdCalls}
                     </TD>
-                    <td className="px-3 py-2.5 text-right">
+                    <td className="px-4 py-2.5 text-right">
                       <SpeedBadge sec={a.mtdSpeedSec} />
                     </td>
                     <TD mono right color={a.mtdWrapUpSec != null ? C.text : C.sub}>
@@ -730,7 +731,7 @@ function RacePageInner() {
 
 export default function RacePage() {
   return (
-    <Suspense fallback={<><NavBar /><div className="max-w-6xl mx-auto px-4 py-6"><div className="skeleton h-96 rounded-2xl" /></div></>}>
+    <Suspense fallback={<><NavBar /><div className="max-w-7xl mx-auto px-4 py-6"><div className="skeleton h-96 rounded-2xl" /></div></>}>
       <RacePageInner />
     </Suspense>
   );

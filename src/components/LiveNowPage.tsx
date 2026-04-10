@@ -231,7 +231,7 @@ function LiveNowPageInner() {
 
   const SortIcon = ({ col }: { col: SortKey }) => {
     if (col !== sortKey) return null;
-    return sortAsc ? <ChevronUp size={12} /> : <ChevronDown size={12} />;
+    return sortAsc ? <ChevronUp size={11} /> : <ChevronDown size={11} />;
   };
 
   return (
@@ -384,7 +384,7 @@ function LiveNowPageInner() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                    <th className="px-5 py-2 text-left text-xs font-medium" style={{ color: C.sub }}>Agent</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium" style={{ color: C.sub }}>Agent</th>
                     <th className="px-3 py-2 text-center text-xs font-medium cursor-pointer select-none"
                         style={{ color: sortKey === 'ovr' ? C.cyan : C.sub }}
                         onClick={() => handleSort('ovr')}>
@@ -397,11 +397,11 @@ function LiveNowPageInner() {
                       ['pickup', 'Pickup'],
                       ['wrapUp', 'Wrap-Up'],
                       ['pickupRate', 'Pickup %'],
-                      ['hoursScheduled', 'Hrs'],
+                      ['hoursScheduled', 'Min'],
                       ['convPct', 'Conv %'],
                     ] as [SortKey, string][]).map(([key, label]) => (
                       <th key={key}
-                          className="px-5 py-2 text-right text-xs font-medium cursor-pointer select-none"
+                          className="px-4 py-2 text-right text-xs font-medium cursor-pointer select-none"
                           style={{ color: sortKey === key ? C.cyan : C.sub }}
                           onClick={() => handleSort(key)}>
                         <span className="inline-flex items-center gap-0.5">
@@ -414,7 +414,7 @@ function LiveNowPageInner() {
                 <tbody>
                   {sorted.map(row => (
                     <tr key={row.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
-                      <td className="px-5 py-2.5">
+                      <td className="px-4 py-2.5">
                         <span className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full" style={{ background: agentColor(row.agent) }} />
                           <span className="font-medium" style={{ color: C.text }}>{capitalize(row.agent)}</span>
@@ -423,24 +423,24 @@ function LiveNowPageInner() {
                       <td className="px-3 py-2.5 text-center">
                         <OvrBadge ovr={row.ovr} baselineOvr={row.baselineOvr} size="sm" />
                       </td>
-                      <td className="px-5 py-2.5 text-right font-mono text-xs font-bold" style={{ color: C.lime }}>{row.convs}</td>
-                      <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: C.text }}>{row.calls}</td>
-                      <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: C.text }}>{fmtTalkTime(row.talkMin)}</td>
-                      <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: row.pickup != null ? speedGrade(row.pickup).color : C.sub }}>
+                      <td className="px-4 py-2.5 text-right font-mono text-xs font-bold" style={{ color: C.lime }}>{row.convs}</td>
+                      <td className="px-4 py-2.5 text-right font-mono text-xs" style={{ color: C.text }}>{row.calls}</td>
+                      <td className="px-4 py-2.5 text-right font-mono text-xs" style={{ color: C.text }}>{fmtTalkTime(row.talkMin)}</td>
+                      <td className="px-4 py-2.5 text-right font-mono text-xs" style={{ color: row.pickup != null ? speedGrade(row.pickup).color : C.sub }}>
                         {row.pickup != null ? fmtSpeed(row.pickup) : '—'}
                       </td>
-                      <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: C.text }}>
+                      <td className="px-4 py-2.5 text-right font-mono text-xs" style={{ color: C.text }}>
                         {row.wrapUp != null ? fmtSpeed(row.wrapUp) : '—'}
                       </td>
-                      <td className="px-5 py-2.5 text-right font-mono text-xs" style={{
+                      <td className="px-4 py-2.5 text-right font-mono text-xs" style={{
                         color: row.pickupRate != null
                           ? (row.pickupRate >= 80 ? '#4ade80' : row.pickupRate >= 60 ? '#facc15' : '#f87171')
                           : C.sub
                       }}>
                         {row.pickupRate != null ? `${row.pickupRate}%` : '—'}
                       </td>
-                      <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: C.sub }}>{row.hoursScheduled}h</td>
-                      <td className="px-5 py-2.5 text-right font-mono text-xs" style={{ color: row.calls > 0 && row.conversions > 0 ? (row.conversions / row.calls >= 0.2 ? '#4ade80' : C.text) : C.sub }}>
+                      <td className="px-4 py-2.5 text-right font-mono text-xs" style={{ color: C.sub }}>{row.hoursScheduled * 60}m</td>
+                      <td className="px-4 py-2.5 text-right font-mono text-xs" style={{ color: row.calls > 0 && row.conversions > 0 ? (row.conversions / row.calls >= 0.2 ? '#4ade80' : C.text) : C.sub }}>
                         {row.calls > 0 ? ((row.conversions / row.calls) * 100).toFixed(1) + '%' : '—'}
                       </td>
                     </tr>
@@ -464,7 +464,7 @@ function LiveNowPageInner() {
               <thead>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                   {['Time', 'Agent', 'Client', 'Phone', 'Duration', 'Ring', 'Wrap', '', 'Recording'].map(h => (
-                    <th key={h} className="px-5 py-2 text-left text-xs font-medium" style={{ color: C.sub }}>
+                    <th key={h} className="px-4 py-2 text-left text-xs font-medium" style={{ color: C.sub }}>
                       {h}
                     </th>
                   ))}
@@ -473,36 +473,36 @@ function LiveNowPageInner() {
               <tbody>
                 {(data.recentCalls || []).map((call: RawCall, i: number) => (
                   <tr key={i} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
-                    <td className="px-5 py-2.5 font-mono text-xs" style={{ color: C.sub }}>
+                    <td className="px-4 py-2.5 font-mono text-xs" style={{ color: C.sub }}>
                       {formatTime(call.time)}
                     </td>
-                    <td className="px-5 py-2.5">
+                    <td className="px-4 py-2.5">
                       <div className="flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full" style={{ background: agentColor(call.agent) }} />
                         <span className="font-medium" style={{ color: C.text }}>{capitalize(call.agent)}</span>
                       </div>
                     </td>
-                    <td className="px-5 py-2.5 text-xs" style={{ color: call.account ? C.text : C.border }}>
+                    <td className="px-4 py-2.5 text-xs" style={{ color: call.account ? C.text : C.border }}>
                       {call.account || '—'}
                     </td>
-                    <td className="px-5 py-2.5 font-mono text-xs" style={{ color: C.sub }}>
+                    <td className="px-4 py-2.5 font-mono text-xs" style={{ color: C.sub }}>
                       {formatPhone(call.phone)}
                     </td>
-                    <td className="px-5 py-2.5 font-mono text-xs" style={{ color: C.text }}>
+                    <td className="px-4 py-2.5 font-mono text-xs" style={{ color: C.text }}>
                       {formatDuration(call.duration)}
                     </td>
-                    <td className="px-5 py-2.5 font-mono text-xs" style={{ color: call.ringTime ? C.cyan : C.border }}>
+                    <td className="px-4 py-2.5 font-mono text-xs" style={{ color: call.ringTime ? C.cyan : C.border }}>
                       {call.ringTime ? call.ringTime + 's' : '—'}
                     </td>
-                    <td className="px-5 py-2.5 font-mono text-xs" style={{ color: call.wrapUpSec ? C.sub : C.border }}>
+                    <td className="px-4 py-2.5 font-mono text-xs" style={{ color: call.wrapUpSec ? C.sub : C.border }}>
                       {call.wrapUpSec ? Math.round(call.wrapUpSec) + 's' : '—'}
                     </td>
-                    <td className="px-5 py-2.5">
+                    <td className="px-4 py-2.5">
                       {call.direction === 'inbound'
                         ? <ArrowDown size={14} style={{ color: C.good }} />
                         : <ArrowUp size={14} style={{ color: C.info }} />}
                     </td>
-                    <td className="px-5 py-2.5">
+                    <td className="px-4 py-2.5">
                       {call.recordingUrl ? (
                         <div className="flex items-center gap-1">
                           <InlinePlayer callSid={call.callSid!} recordingUrl={call.recordingUrl} />
@@ -530,7 +530,7 @@ function LiveNowPageInner() {
                 ))}
                 {(!data.recentCalls || data.recentCalls.length === 0) && (
                   <tr>
-                    <td colSpan={9} className="px-5 py-8 text-center text-sm" style={{ color: C.sub }}>
+                    <td colSpan={9} className="px-4 py-8 text-center text-sm" style={{ color: C.sub }}>
                       No calls yet today
                     </td>
                   </tr>

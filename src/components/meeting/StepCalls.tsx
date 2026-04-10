@@ -35,7 +35,7 @@ export default function StepCalls({ period, label, data }: StepCallsProps) {
       case 'talkMin': return a.talkMin;
       case 'avgCall': return a.calls > 0 ? a.talkMin / a.calls : -1;
       case 'hrs': return a.hoursScheduled || 0;
-      case 'callsHr': return a.hoursScheduled > 0 ? a.calls / a.hoursScheduled : -1;
+      case 'callsHr': return a.hoursScheduled > 0 ? a.calls / (a.hoursScheduled * 60) : -1;
       case 'pickup': return a.speedSec ?? -1;
       case 'wrap': return a.wrapUpSec ?? -1;
     }
@@ -107,15 +107,15 @@ export default function StepCalls({ period, label, data }: StepCallsProps) {
               <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                 <TH>#</TH>
                 <TH>Agent</TH>
-                {([['calls','Calls'],['talkMin','Talk Time'],['avgCall','Avg/Call'],['hrs','Hrs'],['callsHr','Calls/Hr'],['pickup','Pickup'],['wrap','Wrap']] as [SortCol, string][]).map(([key, label]) => (
+                {([['calls','Calls'],['talkMin','Talk'],['avgCall','Avg/Call'],['hrs','Min'],['callsHr','Calls/Min'],['pickup','Pickup'],['wrap','Wrap']] as [SortCol, string][]).map(([key, label]) => (
                   <th key={key}
                     onClick={() => toggleSort(key)}
-                    className="px-3 py-2 text-right text-xs font-medium cursor-pointer select-none whitespace-nowrap"
+                    className="px-4 py-2 text-right text-xs font-medium cursor-pointer select-none whitespace-nowrap"
                     style={{ color: sortCol === key ? C.cyan : C.sub }}
                   >
                     <span className="inline-flex items-center gap-0.5">
                       {label}
-                      {sortCol === key && (sortAsc ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
+                      {sortCol === key && (sortAsc ? <ChevronUp size={11} /> : <ChevronDown size={11} />)}
                     </span>
                   </th>
                 ))}
@@ -123,7 +123,8 @@ export default function StepCalls({ period, label, data }: StepCallsProps) {
             </thead>
             <tbody>
               {agents.map((a, i) => {
-                const callsPerHr = a.hoursScheduled > 0 ? (a.calls / a.hoursScheduled).toFixed(1) : '—';
+                const scheduledMinutes = a.hoursScheduled * 60;
+                const callsPerMin = scheduledMinutes > 0 ? (a.calls / scheduledMinutes).toFixed(2) : '—';
                 const avgPerCall = a.calls > 0 ? a.talkMin / a.calls : 0;
                 return (
                 <tr key={a.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
@@ -137,8 +138,8 @@ export default function StepCalls({ period, label, data }: StepCallsProps) {
                   <TD mono right>{a.calls}</TD>
                   <TD mono right>{fmtTalkTime(a.talkMin)}</TD>
                   <TD mono right color={C.sub}>{a.calls > 0 ? fmtTalkTime(avgPerCall) : '—'}</TD>
-                  <TD mono right color={C.sub}>{a.hoursScheduled > 0 ? a.hoursScheduled : '—'}</TD>
-                  <TD mono right color={callsPerHr !== '—' && parseFloat(callsPerHr) >= 3 ? '#4ade80' : C.sub}>{callsPerHr}</TD>
+                  <TD mono right color={C.sub}>{scheduledMinutes > 0 ? `${scheduledMinutes}m` : '—'}</TD>
+                  <TD mono right color={callsPerMin !== '—' && parseFloat(callsPerMin) >= 0.05 ? '#4ade80' : C.sub}>{callsPerMin}</TD>
                   <TD mono right>{(() => {
                     const cdr = a.speedSec;
                     const ytc = yticaMtd[a.agent.toLowerCase()] ?? null;
