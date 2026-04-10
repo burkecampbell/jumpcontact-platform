@@ -14,10 +14,51 @@ import { useBrand } from '@/hooks/useBrand';
 import { isAgentForBrand } from '@/lib/brand';
 import { Trophy, ChevronUp, ChevronDown, FileText } from 'lucide-react';
 import agentHistoryData from '@/data/agent-history.json';
+import DateRangePicker, { type DateRange } from './DateRangePicker';
 
 // ── Types ────────────────────────────────────────────────────────────
 
-type TimeHorizon = 'today' | 'monthly' | 'yearly' | 'alltime';
+type TimeHorizon = 'today' | 'yesterday' | 'thisweek' | 'lastweek' | 'monthly' | 'lastmonth' | 'alltime' | 'custom';
+
+// Detect which horizon a DateRange matches so we can pick the right data source
+function detectHorizon(range: DateRange, todayStr: string): TimeHorizon {
+  const yesterday = (() => {
+    const d = new Date(todayStr + 'T12:00:00');
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  })();
+  const monthStart = todayStr.slice(0, 8) + '01';
+  const weekStart = (() => {
+    const d = new Date(todayStr + 'T12:00:00');
+    const day = d.getDay();
+    d.setDate(d.getDate() - ((day + 6) % 7)); // Monday
+    return d.toISOString().slice(0, 10);
+  })();
+  const lastWeekEnd = (() => {
+    const d = new Date(weekStart + 'T12:00:00');
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  })();
+  const lastWeekStart = (() => {
+    const d = new Date(lastWeekEnd + 'T12:00:00');
+    d.setDate(d.getDate() - 6);
+    return d.toISOString().slice(0, 10);
+  })();
+  const lastMonthEnd = (() => {
+    const d = new Date(monthStart + 'T12:00:00');
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  })();
+  const lastMonthStart = lastMonthEnd.slice(0, 8) + '01';
+
+  if (range.from === todayStr && range.to === todayStr) return 'today';
+  if (range.from === yesterday && range.to === yesterday) return 'yesterday';
+  if (range.from === weekStart && range.to === todayStr) return 'thisweek';
+  if (range.from === lastWeekStart && range.to === lastWeekEnd) return 'lastweek';
+  if (range.from === monthStart && range.to === todayStr) return 'monthly';
+  if (range.from === lastMonthStart && range.to === lastMonthEnd) return 'lastmonth';
+  return 'custom';
+}
 
 interface LeagueRow {
   agent: string;
@@ -182,7 +223,12 @@ function LeaguePageInner() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [horizon, setHorizon] = useState<TimeHorizon>('today');
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Edmonton' });
+  // Default range: Today. User can pick any range from the DateRangePicker presets.
+  const [dateRange, setDateRange] = useState<DateRange>({ from: todayStr, to: todayStr });
+  // "All-Time" is special — toggle separately since it doesn't fit the range model
+  const [allTimeMode, setAllTimeMode] = useState(false);
+  const horizon: TimeHorizon = allTimeMode ? 'alltime' : detectHorizon(dateRange, todayStr);
   const [sortKey, setSortKey] = useState<SortKey>('ovr');
   const [sortAsc, setSortAsc] = useState(false);
 
@@ -222,13 +268,18 @@ function LeaguePageInner() {
   const leagueRows = useMemo(() => {
     if (!data) return [];
 
-    if (horizon === 'today') {
-      const agents = data.today.repActivity.agents;
+    // TODAY and YESTERDAY use the same structure — point at the right period
+    if (horizon === 'today' || horizon === 'yesterday') {
+      const period = horizon === 'today' ? data.today : data.yesterday;
+      const agents = period.repActivity.agents;
       const convByAgent: Record<string, number> = {};
-      for (const a of data.today.conversions.byAgent) convByAgent[a.agent.toLowerCase()] = a.count;
+      for (const a of period.conversions.byAgent) convByAgent[a.agent.toLowerCase()] = a.count;
 
       // Opportunity weights from hourly call distribution + agent schedules
-      const hourlyDist = (data as { today: { hourlyTotal?: number[] } }).today.hourlyTotal || [];
+      // Only available for today (yesterday falls back to no opportunity weighting)
+      const hourlyDist = horizon === 'today'
+        ? ((data as { today: { hourlyTotal?: number[] } }).today.hourlyTotal || [])
+        : [];
       const schedLookup: Record<string, { start: number; end: number }> = {};
       if (data.schedule?.agents) {
         const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -268,6 +319,12 @@ function LeaguePageInner() {
         const baselineOvr = bl ? computeBaselineOVR(bl) : 0;
         return buildLeagueRow(a, convs, speedSec, wrapUpSec, baselineOvr, oppWeight, tAvg);
       });
+    }
+
+    // Unsupported horizons — no per-agent historical data yet.
+    // These will fall through to empty and show the "data accumulating" message.
+    if (horizon === 'thisweek' || horizon === 'lastweek' || horizon === 'lastmonth' || horizon === 'custom') {
+      return [];
     }
 
     // MONTHLY / YEARLY / ALL-TIME: use Ytica MTD data + MTD conversions
@@ -470,20 +527,34 @@ function LeaguePageInner() {
     );
   }
 
-  const horizons: { key: TimeHorizon; label: string }[] = [
-    { key: 'today', label: 'Today' },
-    { key: 'monthly', label: 'Monthly' },
-    { key: 'yearly', label: 'Yearly' },
-    { key: 'alltime', label: 'All-Time' },
-  ];
+  const horizonLabel: Record<TimeHorizon, string> = {
+    today: 'Today',
+    yesterday: 'Yesterday',
+    thisweek: 'This Week',
+    lastweek: 'Last Week',
+    monthly: 'This Month',
+    lastmonth: 'Last Month',
+    alltime: 'All-Time',
+    custom: 'Custom Range',
+  };
+  const horizonHasData: Record<TimeHorizon, boolean> = {
+    today: true,
+    yesterday: true,
+    thisweek: false,      // no per-agent weekly data yet
+    lastweek: false,
+    monthly: true,
+    lastmonth: false,
+    alltime: true,
+    custom: false,
+  };
 
   return (
     <>
       <NavBar pulledAt={data.pulledAt} />
       <HealthBanner />
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* Title + Horizon Tabs */}
-        <div className="flex items-center justify-between mb-5">
+        {/* Title + Date Range Picker (standardized with Call Log) */}
+        <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
           <div className="flex items-center gap-2">
             <Trophy size={20} style={{ color: C.lime }} />
             <h1 className="text-lg font-bold" style={{ color: C.text }}>Agent League</h1>
@@ -498,31 +569,36 @@ function LeaguePageInner() {
               Methodology
             </a>
           </div>
-          <div className="flex items-center gap-1 p-0.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.04)' }}>
-            {horizons.map(h => (
-              <button
-                key={h.key}
-                onClick={() => setHorizon(h.key)}
-                className="px-3 py-1 rounded-md text-xs font-medium transition-colors"
-                style={{
-                  background: horizon === h.key ? 'rgba(62,165,195,0.15)' : 'transparent',
-                  color: horizon === h.key ? C.cyan : C.sub,
-                }}
-              >
-                {h.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <DateRangePicker
+              value={dateRange}
+              onChange={(r) => { setDateRange(r); setAllTimeMode(false); }}
+              maxDate={todayStr}
+            />
+            <button
+              onClick={() => setAllTimeMode(!allTimeMode)}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border"
+              style={{
+                background: allTimeMode ? C.cyanSoft : C.card,
+                borderColor: allTimeMode ? C.cyanMuted : C.cyanHover,
+                color: allTimeMode ? C.cyan : C.text,
+              }}
+            >
+              All-Time
+            </button>
           </div>
         </div>
 
-        {horizon !== 'today' && (
-          <div className="mb-4 px-1">
-            <span className="text-xs" style={{ color: C.sub }}>
-              {horizon === 'monthly' ? 'Month-to-date ratings' : horizon === 'yearly' ? 'Year-to-date ratings' : 'All-time ratings'}
-              {' — '}showing today&apos;s live data (historical views coming as data accumulates)
+        {/* Active horizon indicator */}
+        <div className="mb-4 px-1 flex items-center gap-2">
+          <span className="text-xs" style={{ color: C.sub }}>Viewing:</span>
+          <span className="text-xs font-semibold" style={{ color: C.cyan }}>{horizonLabel[horizon]}</span>
+          {!horizonHasData[horizon] && (
+            <span className="text-xs" style={{ color: C.warn }}>
+              — per-agent data not yet available for this range (historical views coming as data accumulates)
             </span>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Top 3 Categories */}
         <ErrorBoundary section="Top Categories">
