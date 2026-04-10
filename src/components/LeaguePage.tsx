@@ -8,7 +8,7 @@ import ErrorBoundary from './ErrorBoundary';
 import OvrBadge from './OvrBadge';
 import TopAgents, { type CategoryTop3 } from './TopAgents';
 import { C, capitalize, agentColor, fmtSpeed, fmtTalkTime, rankBadge, speedGrade } from '@/lib/constants';
-import { computeOVRFromInput, computeBaselineOVR, computeOpportunityWeight, parseShiftHours, ratingTier, ratingDelta, SUB_RATING_LABELS, type OvrInput } from '@/lib/ratings';
+import { computeOVRFromInput, computeBaselineOVR, computeOpportunityWeight, parseShiftHours, isLeaderboardAgent, ratingTier, ratingDelta, SUB_RATING_LABELS, type OvrInput } from '@/lib/ratings';
 import type { DashboardData, RepAgent, AgentBaseline, AgentSubRatings } from '@/lib/types';
 import { useBrand } from '@/hooks/useBrand';
 import { isAgentForBrand } from '@/lib/brand';
@@ -106,7 +106,7 @@ function buildLeagueRow(
     hoursScheduled: a.hoursScheduled || 8,
     opportunityWeight,
   };
-  const { ovr, subRatings } = computeOVRFromInput(input, teamAvgOvr);
+  const { ovr, subRatings } = computeOVRFromInput(input, teamAvgOvr, a.agent);
   const delta = ratingDelta(ovr, baselineOvr);
 
   return {
@@ -254,12 +254,12 @@ function LeaguePageInner() {
         return { a, convs, speedSec, wrapUpSec, oppWeight };
       });
 
-      const rawOvrs = preRows.filter(r => r.a.calls >= 10).map(r =>
+      const rawOvrs = preRows.filter(r => r.a.calls >= 10 && isLeaderboardAgent(r.a.agent)).map(r =>
         computeOVRFromInput({
           calls: r.a.calls, conversions: r.convs, speedSec: r.speedSec,
           talkMin: r.a.talkMin, wrapUpSec: r.wrapUpSec,
           hoursScheduled: r.a.hoursScheduled || 8, opportunityWeight: r.oppWeight,
-        }).rawOvr,
+        }, undefined, r.a.agent).rawOvr,
       );
       const tAvg = rawOvrs.length > 0 ? Math.round(rawOvrs.reduce((s, v) => s + v, 0) / rawOvrs.length) : undefined;
 
@@ -420,7 +420,7 @@ function LeaguePageInner() {
         'Most Minutes', r => `${Math.round(r.talkMin)}m`, '💰', 'minutes',
       ),
       top3(
-        [...leagueRows].filter(r => r.baselineOvr > 0).sort((a, b) => (b.ovr - b.baselineOvr) - (a.ovr - a.baselineOvr)),
+        [...leagueRows].filter(r => r.baselineOvr > 0 && isLeaderboardAgent(r.agent)).sort((a, b) => (b.ovr - b.baselineOvr) - (a.ovr - a.baselineOvr)),
         'vs Career', r => {
           const d = r.ovr - r.baselineOvr;
           return d > 0 ? `+${d}` : `${d}`;
@@ -568,7 +568,7 @@ function LeaguePageInner() {
                     const tier = ratingTier(row.ovr);
                     return (
                       <tr key={row.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
-                        <td className="px-4 py-2.5 text-xs" style={{ color: C.sub }}>{rankBadge(i)}</td>
+                        <td className="px-4 py-2.5 text-xs" style={{ color: C.sub }}>{!isLeaderboardAgent(row.agent) ? '👑' : rankBadge(i)}</td>
                         <td className="px-4 py-2.5">
                           <span className="flex items-center gap-2">
                             <span className="w-2 h-2 rounded-full" style={{ background: agentColor(row.agent) }} />

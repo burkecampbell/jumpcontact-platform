@@ -242,17 +242,36 @@ const DEFAULT_TEAM_AVG = 65;
  *
  * @param teamAvgOvr - Current team average OVR (computed from agents with 10+ calls)
  */
+// Boss override — gets 100 OVR + 100 across the board. Excluded from
+// leaderboard rankings via isLeaderboardAgent() so he doesn't take #1 spots.
+const OVR_OVERRIDES: Record<string, number> = { jose: 100 };
+
+export function isLeaderboardAgent(agentName: string): boolean {
+  return !OVR_OVERRIDES[agentName.toLowerCase()];
+}
+
 export function computeOVRFromInput(
   input: OvrInput,
   teamAvgOvr?: number,
+  agentName?: string,
 ): { ovr: number; rawOvr: number; confidence: number; subRatings: AgentSubRatings } {
+  // Override agents get fixed perfect scores
+  const override = agentName ? OVR_OVERRIDES[agentName.toLowerCase()] : undefined;
+  if (override != null) {
+    const v = override;
+    return {
+      ovr: v, rawOvr: v, confidence: 1,
+      subRatings: { conversions: v, convPct: v, volume: v, speed: v, convPerHr: v, talkTime: v, wrapUp: v },
+    };
+  }
+
   const subRatings = computeSubRatings(input);
   const rawOvr = computeOVR(subRatings);
   const prior = teamAvgOvr ?? DEFAULT_TEAM_AVG;
   const n = input.calls;
 
   // Bayesian: blend raw OVR with team prior, weighted by sample size
-  const confidence = n / (n + CONFIDENCE_PRIOR); // 0→0, 10→0.5, 20→0.67, 40→0.8
+  const confidence = n / (n + CONFIDENCE_PRIOR);
   const ovr = Math.round(prior * (1 - confidence) + rawOvr * confidence);
 
   return { ovr, rawOvr, confidence, subRatings };

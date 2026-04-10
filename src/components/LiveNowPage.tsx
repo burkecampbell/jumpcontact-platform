@@ -16,7 +16,7 @@ import MixedInsights from './MixedInsights';
 import KPICard from './KPICard';
 import OvrBadge from './OvrBadge';
 import { shareRecording } from '@/lib/recording-utils';
-import { computeOVRFromInput, computeBaselineOVR, computeOpportunityWeight, parseShiftHours } from '@/lib/ratings';
+import { computeOVRFromInput, computeBaselineOVR, computeOpportunityWeight, parseShiftHours, isLeaderboardAgent } from '@/lib/ratings';
 import type { AgentBaseline } from '@/lib/types';
 import agentHistoryData from '@/data/agent-history.json';
 
@@ -180,27 +180,27 @@ function LiveNowPageInner() {
     return { agent: a, convs, pickup, wrapUp, oppWeight };
   });
 
-  // Compute team avg OVR from agents with 10+ calls (enough data to be meaningful)
-  const rawOvrs = preRows.filter(r => r.agent.calls >= 10).map(r => {
+  // Compute team avg OVR from leaderboard agents with 10+ calls
+  const rawOvrs = preRows.filter(r => r.agent.calls >= 10 && isLeaderboardAgent(r.agent.agent)).map(r => {
     const { rawOvr } = computeOVRFromInput({
       calls: r.agent.calls, conversions: r.convs, speedSec: r.pickup,
       talkMin: r.agent.talkMin, wrapUpSec: r.wrapUp,
       hoursScheduled: r.agent.hoursScheduled || 8, opportunityWeight: r.oppWeight,
-    });
+    }, undefined, r.agent.agent);
     return rawOvr;
   });
   const teamAvgOvr = rawOvrs.length > 0
     ? Math.round(rawOvrs.reduce((s, v) => s + v, 0) / rawOvrs.length)
     : undefined;
 
-  // Second pass: compute Bayesian-adjusted OVRs
+  // Second pass: compute Bayesian-adjusted OVRs (pass agent name for overrides)
   type RankRow = RepAgent & { convs: number; pickup: number | null; wrapUp: number | null; ovr: number; baselineOvr: number };
   const rankRows: RankRow[] = preRows.map(({ agent: a, convs, pickup, wrapUp, oppWeight }) => {
     const { ovr } = computeOVRFromInput({
       calls: a.calls, conversions: convs, speedSec: pickup,
       talkMin: a.talkMin, wrapUpSec: wrapUp,
       hoursScheduled: a.hoursScheduled || 8, opportunityWeight: oppWeight,
-    }, teamAvgOvr);
+    }, teamAvgOvr, a.agent);
     return {
       ...a,
       convs,
