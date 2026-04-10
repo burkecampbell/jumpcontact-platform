@@ -16,7 +16,7 @@ import MixedInsights from './MixedInsights';
 import KPICard from './KPICard';
 import OvrBadge from './OvrBadge';
 import { shareRecording } from '@/lib/recording-utils';
-import { computeOVRFromInput, computeBaselineOVR, computeOpportunityWeight, parseShiftHours, isLeaderboardAgent } from '@/lib/ratings';
+import { computeOVRFromInput, computeBaselineOVR, computeOpportunityWeight, parseShiftHours, isLeaderboardAgent, streakState } from '@/lib/ratings';
 import type { AgentBaseline } from '@/lib/types';
 import agentHistoryData from '@/data/agent-history.json';
 
@@ -165,14 +165,11 @@ function LiveNowPageInner() {
     }
   }
 
-  // First pass: compute raw OVRs to get team average (for Bayesian adjustment)
+  // First pass: compute today's raw inputs per agent
   // Pickup speed: only show TODAY's actual speed — don't fall back to MTD historical.
-  // Showing MTD as "today" is misleading (Burke: "why does my 1 outbound call show 7.7s pickup?")
   type PreRow = { agent: RepAgent; convs: number; pickup: number | null; wrapUp: number | null; oppWeight?: number };
   const preRows: PreRow[] = agents.map(a => {
-    // Only use today's speed when it's a valid inbound pickup (> 0 and sane)
     const pickup = (a.speedSec != null && a.speedSec > 0 && a.speedSec < 120) ? a.speedSec : null;
-    // Wrap-up: same rule — only today's actual value
     const wrapUp = (a.wrapUpSec != null && a.wrapUpSec > 0) ? a.wrapUpSec : null;
     const convs = convByAgent[a.agent.toLowerCase()] || 0;
     const shift = schedLookup[a.agent.toLowerCase()];
@@ -181,34 +178,71 @@ function LiveNowPageInner() {
     return { agent: a, convs, pickup, wrapUp, oppWeight };
   });
 
-  // Compute team avg OVR from leaderboard agents with 10+ calls
-  const rawOvrs = preRows.filter(r => r.agent.calls >= 10 && isLeaderboardAgent(r.agent.agent)).map(r => {
+  // ── MTD BASELINE OVR (EA Sports "season rating") ──
+  // Each agent's stable rating comes from their MTD performance. Today nudges it,
+  // but doesn't replace it. Mahomes starts the game at his season OVR, not zero.
+  const mtdConvByAgent: Record<string, number> = {};
+  for (const a of (data.mtd?.byAgent || [])) mtdConvByAgent[a.agent.toLowerCase()] = a.count;
+  const dayOfMonth = data.mtd?.dayOfMonth || 1;
+  const mtdOvrMap: Record<string, number> = {};
+  for (const ymtd of (data.mtdRepActivity || [])) {
+    const name = ymtd.agent.toLowerCase();
+    const mtdCalls = ymtd.totalCalls;
+    const mtdConvs = mtdConvByAgent[name] || 0;
+    const mtdTalkMin = ymtd.totalTalkMin;
+    // Divide by workingDays (dayOfMonth is a reasonable proxy since we count days that have elapsed)
+    const dailyCalls = mtdCalls / Math.max(dayOfMonth, 1);
+    const dailyConvs = mtdConvs / Math.max(dayOfMonth, 1);
+    const dailyTalkMin = mtdTalkMin / Math.max(dayOfMonth, 1);
     const { rawOvr } = computeOVRFromInput({
-      calls: r.agent.calls, conversions: r.convs, speedSec: r.pickup,
-      talkMin: r.agent.talkMin, wrapUpSec: r.wrapUp,
-      hoursScheduled: r.agent.hoursScheduled || 8, opportunityWeight: r.oppWeight,
-    }, undefined, r.agent.agent);
-    return rawOvr;
-  });
-  const teamAvgOvr = rawOvrs.length > 0
-    ? Math.round(rawOvrs.reduce((s, v) => s + v, 0) / rawOvrs.length)
-    : undefined;
+      calls: dailyCalls,
+      conversions: dailyConvs,
+      speedSec: ymtd.avgSpeedSec,
+      talkMin: dailyTalkMin,
+      wrapUpSec: ymtd.avgWrapUpSec,
+      hoursScheduled: 8,
+    }, undefined, ymtd.agent);
+    mtdOvrMap[name] = rawOvr;
+  }
 
-  // Second pass: compute Bayesian-adjusted OVRs (pass agent name for overrides)
-  type RankRow = RepAgent & { convs: number; pickup: number | null; wrapUp: number | null; ovr: number; baselineOvr: number };
+  // Team average from MTD OVRs (used as fallback for agents with no MTD data)
+  const mtdValues = Object.entries(mtdOvrMap)
+    .filter(([name]) => isLeaderboardAgent(name))
+    .map(([, v]) => v);
+  const teamAvgOvr = mtdValues.length > 0
+    ? Math.round(mtdValues.reduce((s, v) => s + v, 0) / mtdValues.length)
+    : 65;
+
+  // Second pass: compute today's raw OVR per agent, then display = MTD baseline + small today delta (clamped ±5)
+  type RankRow = RepAgent & { convs: number; pickup: number | null; wrapUp: number | null; ovr: number; baselineOvr: number; todayRawOvr: number };
   const rankRows: RankRow[] = preRows.map(({ agent: a, convs, pickup, wrapUp, oppWeight }) => {
-    const { ovr } = computeOVRFromInput({
+    // MTD baseline (their "season rating")
+    const mtdOvr = mtdOvrMap[a.agent.toLowerCase()] ?? teamAvgOvr;
+    // Today's raw performance OVR (what the formula thinks today's activity is worth)
+    const { rawOvr: todayRawOvr } = computeOVRFromInput({
       calls: a.calls, conversions: convs, speedSec: pickup,
       talkMin: a.talkMin, wrapUpSec: wrapUp,
       hoursScheduled: a.hoursScheduled || 8, opportunityWeight: oppWeight,
-    }, teamAvgOvr, a.agent);
+    }, undefined, a.agent);
+    // Nudge: today's delta from MTD baseline, clamped to ±5. Rating never swings wildly.
+    // CEO override (Jose = 100) still wins via his override in computeOVRFromInput.
+    let ovr: number;
+    if (!isLeaderboardAgent(a.agent)) {
+      ovr = 100; // Jose
+    } else if (a.calls === 0) {
+      ovr = mtdOvr; // Haven't started the game — show season rating as-is
+    } else {
+      const delta = Math.max(-5, Math.min(5, todayRawOvr - mtdOvr));
+      ovr = Math.round(Math.max(60, Math.min(90, mtdOvr + delta)));
+    }
     return {
       ...a,
       convs,
       pickup,
       wrapUp,
       ovr,
-      baselineOvr: baselineMap[a.agent.toLowerCase()] || 0,
+      baselineOvr: mtdOvr,
+      todayRawOvr,
     };
   });
 
@@ -428,12 +462,26 @@ function LiveNowPageInner() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sorted.map(row => (
+                  {sorted.map(row => {
+                    const streak = streakState(row.todayRawOvr, row.baselineOvr);
+                    return (
                     <tr key={row.agent} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
                       <td className="px-4 py-2.5">
                         <span className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full" style={{ background: agentColor(row.agent) }} />
                           <span className="font-medium" style={{ color: C.text }}>{capitalize(row.agent)}</span>
+                          {streak.state !== 'neutral' && row.calls > 0 && (
+                            <span
+                              className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                              title={`Today raw: ${row.todayRawOvr}, MTD baseline: ${row.baselineOvr}`}
+                              style={{
+                                background: streak.state === 'on-fire' || streak.state === 'hot' ? 'rgba(74,222,128,0.15)' : 'rgba(248,113,113,0.15)',
+                                color: streak.state === 'on-fire' || streak.state === 'hot' ? '#4ade80' : '#f87171',
+                              }}
+                            >
+                              {streak.label}
+                            </span>
+                          )}
                         </span>
                       </td>
                       <td className="px-3 py-2.5 text-center">
@@ -460,7 +508,8 @@ function LiveNowPageInner() {
                         {row.calls > 0 ? ((row.conversions / row.calls) * 100).toFixed(1) + '%' : '—'}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -28,82 +28,94 @@ function clamp(v: number, min: number, max: number): number {
 }
 
 /**
- * CURVE DESIGN PHILOSOPHY:
- * - 99 is truly elite — only one agent at a time should ever touch it
- * - 90+ is the "star player" zone — requires exceptional performance
- * - The curves are logarithmic/diminishing-return at the top: going from
- *   85 → 90 is much harder than going from 50 → 55
- * - Volume metrics are normalized by scheduled hours to prevent rewarding
- *   longer shifts over efficiency
+ * CURVE DESIGN PHILOSOPHY (v1.3 — Competent Employee Model):
+ *
+ * Rule 1: If you work here, you're competent. Baseline = 70+.
+ * Rule 2: Cap at 90. Nobody goes past 90 via the formula. (100 = CEO override only.)
+ * Rule 3: The best of us live in the 80s. Ian/Burke/Omar on good days = 85-88.
+ * Rule 4: Anyone in the 50s-60s "shouldn't even work here" — if they're employed,
+ *         the curve should not drag them there. 65 = bad day, 60 = very rough.
+ * Rule 5: Curves are compressed in the 70-88 "competent to great" band so daily
+ *         performance nudges feel real but never crash the rating.
+ *
+ * Bands:
+ *   90     — Ceiling, rarely reached (elite day across multiple attributes)
+ *   85-89  — Star performer having a great day
+ *   80-84  — Solid regular performer
+ *   75-79  — Average day for the agent (most common landing)
+ *   70-74  — Below-average day, needs a talk
+ *   65-69  — Bad day (not a bad employee)
+ *   <65    — Genuinely concerning (rare, should trigger coaching)
  */
 
-/** Conversions (higher = better). Diminishing returns — 99 requires 12+ per day. */
+const BASELINE_FLOOR = 68;  // Everyone who shows up starts here at minimum
+const CEILING = 90;         // Maximum reachable by formula
+
+/** Conversions (higher = better). Competent floor + compressed top. */
 function rateConversions(convs: number): number {
-  if (convs <= 0) return 0;
-  // 1→30, 2→42, 3→50, 5→60, 8→72, 10→78, 12→83, 15→88, 20→93, 25+→97
-  // 99 is unreachable by formula — reserved for truly exceptional days
-  return clamp(Math.round(20 + 28 * Math.log(convs + 1)), 0, 97);
+  if (convs <= 0) return BASELINE_FLOOR;
+  // 1→73, 2→77, 3→80, 5→83, 8→86, 12→88, 20+→90
+  return clamp(Math.round(BASELINE_FLOOR + 12 * Math.log(convs + 1)), BASELINE_FLOOR, CEILING);
 }
 
-/** Conv % (higher = better). Requires minCalls to avoid inflation. 99 = 30%+. */
+/** Conv % (higher = better). Requires minCalls. */
 function rateConvPct(convs: number, calls: number, minCalls = 5): number {
-  if (calls < minCalls) return 50; // neutral until enough data
+  if (calls < minCalls) return 75; // neutral — we don't know yet
   const rate = (convs / calls) * 100;
-  // 5%→35, 10%→55, 15%→70, 20%→82, 25%→90, 30%→97
-  return clamp(Math.round(15 + (rate / 30) * 82), 15, 97);
+  // 0%→68, 5%→73, 10%→78, 15%→82, 20%→86, 25%→88, 30%+→90
+  return clamp(Math.round(BASELINE_FLOOR + (rate / 30) * 22), BASELINE_FLOOR, CEILING);
 }
 
-/** Volume — calls per scheduled hour (normalizes for shift length). */
+/** Volume — calls per opportunity-adjusted hour. */
 function rateVolume(callsPerHour: number): number {
-  if (callsPerHour <= 0) return 0;
-  // 1/hr→25, 2/hr→40, 3/hr→52, 4/hr→62, 5/hr→72, 6/hr→80, 7/hr→87, 8+/hr→93
-  return clamp(Math.round(10 + 30 * Math.log(callsPerHour + 0.5)), 0, 95);
+  if (callsPerHour <= 0) return BASELINE_FLOOR;
+  // 0.5/hr→71, 1→74, 2→78, 3→81, 4→84, 5→86, 6+→88, 8+→90
+  return clamp(Math.round(BASELINE_FLOOR + 11 * Math.log(callsPerHour + 0.7)), BASELINE_FLOOR, CEILING);
 }
 
-/** Pickup speed in seconds (lower = better). 99 = sub-5s (nearly instant). */
+/** Pickup speed in seconds (lower = better). */
 function rateSpeed(sec: number | null): number {
-  if (sec === null || sec <= 0) return 50; // neutral when missing
-  if (sec < 5)  return 97;
-  if (sec < 7)  return clamp(Math.round(88 + (7 - sec) / 2 * 9), 88, 97);
-  if (sec < 10) return clamp(Math.round(76 + (10 - sec) / 3 * 12), 76, 88);
-  if (sec < 15) return clamp(Math.round(62 + (15 - sec) / 5 * 14), 62, 76);
-  if (sec < 25) return clamp(Math.round(40 + (25 - sec) / 10 * 22), 40, 62);
-  if (sec < 40) return clamp(Math.round(20 + (40 - sec) / 15 * 20), 20, 40);
-  return 15;
+  if (sec === null || sec <= 0) return 78; // neutral — slightly above floor when unknown
+  if (sec < 5)  return CEILING;
+  if (sec < 8)  return clamp(Math.round(85 + (8 - sec) / 3 * 5), 85, CEILING);
+  if (sec < 12) return clamp(Math.round(80 + (12 - sec) / 4 * 5), 80, 85);
+  if (sec < 18) return clamp(Math.round(75 + (18 - sec) / 6 * 5), 75, 80);
+  if (sec < 30) return clamp(Math.round(70 + (30 - sec) / 12 * 5), 70, 75);
+  if (sec < 50) return clamp(Math.round(BASELINE_FLOOR + (50 - sec) / 20 * 2), BASELINE_FLOOR, 70);
+  return 66; // very slow but still competent — coaching, not firing
 }
 
-/** Conv/Hr (higher = better). Calibrated to team avg ~0.77/hr.
- *  0.5→35, 0.77→50 (avg), 1.2→70, 2.0→85, 3.0+→95. */
+/** Conv/Hr (higher = better). Team avg ~0.77/hr. */
 function rateConvPerHr(cph: number | null): number {
-  if (cph === null || cph <= 0) return 15;
-  if (cph >= 3.0) return 95;
-  if (cph >= 2.0) return clamp(Math.round(85 + (cph - 2.0) * 10), 85, 95);
-  if (cph >= 1.2) return clamp(Math.round(70 + (cph - 1.2) / 0.8 * 15), 70, 85);
-  if (cph >= 0.77) return clamp(Math.round(50 + (cph - 0.77) / 0.43 * 20), 50, 70);
-  if (cph >= 0.3) return clamp(Math.round(25 + (cph - 0.3) / 0.47 * 25), 25, 50);
-  return clamp(Math.round(15 + cph / 0.3 * 10), 15, 25);
+  if (cph === null || cph <= 0) return BASELINE_FLOOR;
+  if (cph >= 3.0) return CEILING;
+  if (cph >= 2.0) return clamp(Math.round(86 + (cph - 2.0) * 4), 86, CEILING);
+  if (cph >= 1.2) return clamp(Math.round(82 + (cph - 1.2) / 0.8 * 4), 82, 86);
+  if (cph >= 0.77) return clamp(Math.round(78 + (cph - 0.77) / 0.43 * 4), 78, 82);
+  if (cph >= 0.4) return clamp(Math.round(73 + (cph - 0.4) / 0.37 * 5), 73, 78);
+  return clamp(Math.round(BASELINE_FLOOR + cph / 0.4 * 5), BASELINE_FLOOR, 73);
 }
 
 // Pickup Rate and Decline Rate curves removed — TaskRouter reservation data
 // penalizes agents for having teammates. See RATING_WEIGHTS comment.
 
-/** Talk time per scheduled hour (normalizes for shift length). */
+/** Talk time per opportunity-adjusted hour. */
 function rateTalkTime(talkMinPerHour: number): number {
-  if (talkMinPerHour <= 0) return 0;
-  // 5 min/hr→25, 10→45, 15→60, 20→72, 25→82, 30→88, 35+→93
-  return clamp(Math.round(5 + 32 * Math.log(talkMinPerHour + 0.5)), 0, 95);
+  if (talkMinPerHour <= 0) return BASELINE_FLOOR;
+  // 5→72, 10→76, 15→79, 20→82, 25→85, 30→87, 35+→89
+  return clamp(Math.round(BASELINE_FLOOR + 6 * Math.log(talkMinPerHour + 1)), BASELINE_FLOOR, CEILING);
 }
 
-/** Wrap-up in seconds (lower = better). 99 = sub-25s. */
+/** Wrap-up in seconds (lower = better). */
 function rateWrapUp(sec: number | null): number {
-  if (sec === null) return 50; // neutral when missing
-  if (sec < 25) return 97;
-  if (sec < 35) return clamp(Math.round(85 + (35 - sec) / 10 * 12), 85, 97);
-  if (sec < 50) return clamp(Math.round(68 + (50 - sec) / 15 * 17), 68, 85);
-  if (sec < 70) return clamp(Math.round(50 + (70 - sec) / 20 * 18), 50, 68);
-  if (sec < 100) return clamp(Math.round(30 + (100 - sec) / 30 * 20), 30, 50);
-  if (sec < 140) return clamp(Math.round(15 + (140 - sec) / 40 * 15), 15, 30);
-  return 10;
+  if (sec === null) return 78; // neutral when unknown
+  if (sec < 25) return CEILING;
+  if (sec < 35) return clamp(Math.round(85 + (35 - sec) / 10 * 5), 85, CEILING);
+  if (sec < 50) return clamp(Math.round(80 + (50 - sec) / 15 * 5), 80, 85);
+  if (sec < 70) return clamp(Math.round(75 + (70 - sec) / 20 * 5), 75, 80);
+  if (sec < 100) return clamp(Math.round(70 + (100 - sec) / 30 * 5), 70, 75);
+  if (sec < 140) return clamp(Math.round(BASELINE_FLOOR + (140 - sec) / 40 * 2), BASELINE_FLOOR, 70);
+  return 66;
 }
 
 // rateDeclineRate removed — see above.
@@ -230,9 +242,11 @@ export function computeOVR(subs: AgentSubRatings): number {
  * At 40 calls: 80% you, 20% team average
  */
 const CONFIDENCE_PRIOR = 10;
+const OVR_CEILING = 90; // Formula cap — only Jose override can go higher
+const OVR_FLOOR = 60;   // Formula floor — if you work here, you're at least this good
 
 /** Default team average OVR when no agents have enough data. */
-const DEFAULT_TEAM_AVG = 65;
+const DEFAULT_TEAM_AVG = 78;
 
 /**
  * Compute OVR with Bayesian confidence adjustment.
@@ -266,13 +280,15 @@ export function computeOVRFromInput(
   }
 
   const subRatings = computeSubRatings(input);
-  const rawOvr = computeOVR(subRatings);
+  const rawOvr = Math.max(OVR_FLOOR, Math.min(OVR_CEILING, computeOVR(subRatings)));
   const prior = teamAvgOvr ?? DEFAULT_TEAM_AVG;
   const n = input.calls;
 
   // Bayesian: blend raw OVR with team prior, weighted by sample size
   const confidence = n / (n + CONFIDENCE_PRIOR);
-  const ovr = Math.round(prior * (1 - confidence) + rawOvr * confidence);
+  const blended = prior * (1 - confidence) + rawOvr * confidence;
+  // Final clamp: formula can never go above ceiling or below floor.
+  const ovr = Math.max(OVR_FLOOR, Math.min(OVR_CEILING, Math.round(blended)));
 
   return { ovr, rawOvr, confidence, subRatings };
 }
@@ -304,11 +320,14 @@ export interface RatingTier {
 }
 
 export function ratingTier(ovr: number): RatingTier {
-  if (ovr >= 90) return { label: 'ELITE', color: '#fbbf24', bg: 'rgba(251,191,36,0.12)' };
-  if (ovr >= 80) return { label: 'GREAT', color: '#4ade80', bg: 'rgba(74,222,128,0.12)' };
-  if (ovr >= 70) return { label: 'GOOD',  color: '#22d3ee', bg: 'rgba(34,211,238,0.12)' };
-  if (ovr >= 60) return { label: 'AVG',   color: '#facc15', bg: 'rgba(250,204,21,0.12)' };
-  return             { label: 'DEV',   color: '#f87171', bg: 'rgba(248,113,113,0.12)' };
+  // v1.3 bands — competent-employee model. 100 = CEO override only.
+  if (ovr >= 100) return { label: 'CEO',   color: '#fbbf24', bg: 'rgba(251,191,36,0.20)' };
+  if (ovr >= 88)  return { label: 'ELITE', color: '#fbbf24', bg: 'rgba(251,191,36,0.12)' };
+  if (ovr >= 83)  return { label: 'GREAT', color: '#4ade80', bg: 'rgba(74,222,128,0.12)' };
+  if (ovr >= 78)  return { label: 'GOOD',  color: '#22d3ee', bg: 'rgba(34,211,238,0.12)' };
+  if (ovr >= 73)  return { label: 'SOLID', color: '#86efac', bg: 'rgba(134,239,172,0.12)' };
+  if (ovr >= 68)  return { label: 'OK',    color: '#facc15', bg: 'rgba(250,204,21,0.12)' };
+  return            { label: 'ROUGH', color: '#f87171', bg: 'rgba(248,113,113,0.12)' };
 }
 
 /** Trend arrow: current vs baseline. */
@@ -317,6 +336,21 @@ export function ratingDelta(current: number, baseline: number): { direction: 'up
   if (diff > 2) return { direction: 'up', diff };
   if (diff < -2) return { direction: 'down', diff: Math.abs(diff) };
   return { direction: 'same', diff: 0 };
+}
+
+/**
+ * Hot/cold streak indicator — how today is trending vs the MTD baseline.
+ * "On fire" = today's raw OVR is significantly above baseline
+ * "Cold"    = significantly below
+ */
+export type StreakState = 'on-fire' | 'hot' | 'neutral' | 'cold' | 'freezing';
+export function streakState(todayRaw: number, baseline: number): { state: StreakState; delta: number; label: string } {
+  const delta = todayRaw - baseline;
+  if (delta >= 8)  return { state: 'on-fire',  delta, label: '🔥 On fire' };
+  if (delta >= 4)  return { state: 'hot',      delta, label: '↗ Hot' };
+  if (delta <= -8) return { state: 'freezing', delta, label: '🥶 Cold streak' };
+  if (delta <= -4) return { state: 'cold',     delta, label: '↘ Cooling' };
+  return { state: 'neutral', delta, label: '' };
 }
 
 // ── Sub-rating labels for display ────────────────────────────────────
