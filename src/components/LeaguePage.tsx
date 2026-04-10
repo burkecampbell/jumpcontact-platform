@@ -30,11 +30,8 @@ interface LeagueRow {
   calls: number;
   conversions: number;
   speedSec: number | null;
-  convsPerHour: number | null;
-  pickupRate: number | null;
   talkMin: number;
   wrapUpSec: number | null;
-  declineRate: number | null;
   convPct: number | null;
 }
 
@@ -104,11 +101,8 @@ function buildLeagueRow(
     calls: a.calls,
     conversions: convs,
     speedSec,
-    convsPerHour: a.convsPerHour ?? null,
-    pickupRate: a.pickupRate ?? null,
     talkMin: a.talkMin,
     wrapUpSec,
-    declineRate: a.declineRate ?? null,
     hoursScheduled: a.hoursScheduled || 8,
     opportunityWeight,
   };
@@ -125,11 +119,8 @@ function buildLeagueRow(
     calls: a.calls,
     conversions: convs,
     speedSec,
-    convsPerHour: a.convsPerHour ?? null,
-    pickupRate: a.pickupRate ?? null,
     talkMin: a.talkMin,
     wrapUpSec,
-    declineRate: a.declineRate ?? null,
     convPct,
   };
 }
@@ -266,8 +257,7 @@ function LeaguePageInner() {
       const rawOvrs = preRows.filter(r => r.a.calls >= 10).map(r =>
         computeOVRFromInput({
           calls: r.a.calls, conversions: r.convs, speedSec: r.speedSec,
-          convsPerHour: r.a.convsPerHour ?? null, pickupRate: r.a.pickupRate ?? null,
-          talkMin: r.a.talkMin, wrapUpSec: r.wrapUpSec, declineRate: r.a.declineRate ?? null,
+          talkMin: r.a.talkMin, wrapUpSec: r.wrapUpSec,
           hoursScheduled: r.a.hoursScheduled || 8, opportunityWeight: r.oppWeight,
         }).rawOvr,
       );
@@ -297,9 +287,6 @@ function LeaguePageInner() {
           const dailyCalls = a.totalCalls / dayOfMonth;
           const dailyConvs = (mtdConvByAgent[name] || 0) / dayOfMonth;
           const dailyTalkMin = a.totalTalkMin / dayOfMonth;
-          const convRate = a.totalCalls > 0 ? ((mtdConvByAgent[name] || 0) / a.totalCalls) * 100 : 0;
-          const convsPerHour = dailyConvs > 0 ? dailyConvs / 8 : null; // rough 8hr day
-
           const bl = baselines[name];
           const baselineOvr = bl ? computeBaselineOVR(bl) : 0;
 
@@ -311,9 +298,6 @@ function LeaguePageInner() {
             wrapUpSec: a.avgWrapUpSec,
             hoursScheduled: 8,
             conversions: Math.round(dailyConvs),
-            convsPerHour: convsPerHour ?? undefined,
-            pickupRate: undefined,
-            declineRate: undefined,
           };
 
           return buildLeagueRow(
@@ -375,8 +359,6 @@ function LeaguePageInner() {
         const dailyCalls = d.calls / Math.max(d.days, 1);
         const dailyConvs = d.convs / Math.max(d.days, 1);
         const dailyTalkMin = d.talkMin / Math.max(d.days, 1);
-        const convsPerHour = dailyConvs > 0 ? dailyConvs / 8 : null;
-
         const mockAgent: RepAgent = {
           agent: name,
           calls: Math.round(dailyCalls),
@@ -385,7 +367,6 @@ function LeaguePageInner() {
           wrapUpSec: d.wrapUpSec,
           hoursScheduled: 8,
           conversions: Math.round(dailyConvs),
-          convsPerHour: convsPerHour ?? undefined,
         };
 
         // For all-time, baseline IS the data — no trend
@@ -435,8 +416,8 @@ function LeaguePageInner() {
         'Conv %', r => `${r.convPct ?? 0}%`, '🎯', 'convPct',
       ),
       top3(
-        [...leagueRows].filter(r => r.pickupRate != null).sort((a, b) => (b.pickupRate ?? 0) - (a.pickupRate ?? 0)),
-        'Pickup Rate', r => `${r.pickupRate ?? 0}%`, '🛡', 'pickup',
+        [...leagueRows].sort((a, b) => b.talkMin - a.talkMin),
+        'Most Minutes', r => `${Math.round(r.talkMin)}m`, '💰', 'minutes',
       ),
       top3(
         [...leagueRows].filter(r => r.baselineOvr > 0).sort((a, b) => (b.ovr - b.baselineOvr) - (a.ovr - a.baselineOvr)),

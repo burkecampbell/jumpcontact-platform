@@ -184,8 +184,7 @@ function LiveNowPageInner() {
   const rawOvrs = preRows.filter(r => r.agent.calls >= 10).map(r => {
     const { rawOvr } = computeOVRFromInput({
       calls: r.agent.calls, conversions: r.convs, speedSec: r.pickup,
-      convsPerHour: r.agent.convsPerHour ?? null, pickupRate: r.agent.pickupRate ?? null,
-      talkMin: r.agent.talkMin, wrapUpSec: r.wrapUp, declineRate: r.agent.declineRate ?? null,
+      talkMin: r.agent.talkMin, wrapUpSec: r.wrapUp,
       hoursScheduled: r.agent.hoursScheduled || 8, opportunityWeight: r.oppWeight,
     });
     return rawOvr;
@@ -199,8 +198,7 @@ function LiveNowPageInner() {
   const rankRows: RankRow[] = preRows.map(({ agent: a, convs, pickup, wrapUp, oppWeight }) => {
     const { ovr } = computeOVRFromInput({
       calls: a.calls, conversions: convs, speedSec: pickup,
-      convsPerHour: a.convsPerHour ?? null, pickupRate: a.pickupRate ?? null,
-      talkMin: a.talkMin, wrapUpSec: wrapUp, declineRate: a.declineRate ?? null,
+      talkMin: a.talkMin, wrapUpSec: wrapUp,
       hoursScheduled: a.hoursScheduled || 8, opportunityWeight: oppWeight,
     }, teamAvgOvr);
     return {

@@ -5,23 +5,20 @@ import type { AgentBaseline, AgentSubRatings } from './types';
 
 // ── Weights (must sum to 1.0) ────────────────────────────────────────
 
-// Pickup Rate and Decline Rate come from TaskRouter reservation data, which
-// measures how often an agent grabs a call that was ALSO offered to every other
-// agent simultaneously. A 35% rate doesn't mean 65% missed — it means teammates
-// answered first. These metrics penalize agents for having a team.
-//
-// Weight them at 0 until we have a better reliability signal (e.g., actual
-// missed calls attributed to specific agents, or calls-answered / calls-available).
+// 7 attributes. Pickup Rate and Decline Rate removed entirely — TaskRouter
+// reservation data measures how often an agent grabs a call that was ALSO offered
+// to every other agent simultaneously. A 35% rate doesn't mean 65% missed — it
+// means teammates answered first. The metric penalizes agents for having a team.
+// Minutes = dollars. Talk time is the #1 revenue driver — more minutes on calls
+// means more billable time. Conversions are the outcome, but minutes are the work.
 export const RATING_WEIGHTS = {
-  conversions: 0.22,   // ↑ from 0.18 — the money metric
-  convPct:     0.18,   // ↑ from 0.15 — efficiency matters
-  volume:      0.14,   // ↑ from 0.12
-  speed:       0.14,   // ↑ from 0.12
-  convPerHr:   0.14,   // ↑ from 0.12
-  pickupRate:  0.00,   // ← zeroed: TaskRouter data is misleading (see above)
-  talkTime:    0.10,   // ↑ from 0.08
-  wrapUp:      0.08,   // ↑ from 0.07
-  declineRate: 0.00,   // ← zeroed: same TaskRouter problem
+  conversions: 0.20,
+  talkTime:    0.18,   // ↑ minutes = dollars, most important after conversions
+  convPct:     0.16,
+  volume:      0.12,
+  speed:       0.12,
+  convPerHr:   0.12,
+  wrapUp:      0.10,
 } as const;
 
 // ── Sub-rating curves (each returns 0-99) ────────────────────────────
@@ -87,15 +84,8 @@ function rateConvPerHr(cph: number | null): number {
   return clamp(Math.round(15 + cph / 0.3 * 10), 15, 25);
 }
 
-/** Pickup rate % (higher = better). Slightly compressed — 95%+ → 90+. */
-function ratePickupRate(rate: number | null): number {
-  if (rate === null) return 50; // neutral when missing
-  // 50%→40, 70%→58, 80%→70, 90%→82, 95%→90, 100%→97
-  if (rate >= 95) return clamp(Math.round(90 + (rate - 95) / 5 * 7), 90, 97);
-  if (rate >= 80) return clamp(Math.round(70 + (rate - 80) / 15 * 20), 70, 90);
-  if (rate >= 60) return clamp(Math.round(48 + (rate - 60) / 20 * 22), 48, 70);
-  return clamp(Math.round(rate * 0.8), 0, 48);
-}
+// Pickup Rate and Decline Rate curves removed — TaskRouter reservation data
+// penalizes agents for having teammates. See RATING_WEIGHTS comment.
 
 /** Talk time per scheduled hour (normalizes for shift length). */
 function rateTalkTime(talkMinPerHour: number): number {
@@ -116,15 +106,7 @@ function rateWrapUp(sec: number | null): number {
   return 10;
 }
 
-/** Decline rate % (lower = better). */
-function rateDeclineRate(rate: number | null): number {
-  if (rate === null) return 65; // benefit of doubt, but not maxed
-  if (rate <= 0) return 97;
-  if (rate < 5) return clamp(Math.round(78 + (5 - rate) / 5 * 19), 78, 97);
-  if (rate < 10) return clamp(Math.round(55 + (10 - rate) / 5 * 23), 55, 78);
-  if (rate < 20) return clamp(Math.round(20 + (20 - rate) / 10 * 35), 20, 55);
-  return 20;
-}
+// rateDeclineRate removed — see above.
 
 // ── Composite OVR ────────────────────────────────────────────────────
 
@@ -132,11 +114,8 @@ export interface OvrInput {
   calls: number;
   conversions: number;
   speedSec: number | null;
-  convsPerHour: number | null;
-  pickupRate: number | null;
   talkMin: number;
   wrapUpSec: number | null;
-  declineRate: number | null;
   hoursScheduled: number;
   opportunityWeight?: number;  // 0-1: fraction of daily call volume during this agent's shift
 }
@@ -222,10 +201,8 @@ export function computeSubRatings(input: OvrInput): AgentSubRatings {
     volume:      rateVolume(input.calls / effectiveHrs),
     speed:       rateSpeed(input.speedSec),
     convPerHr:   rateConvPerHr(input.conversions / effectiveHrs),
-    pickupRate:  ratePickupRate(input.pickupRate),
     talkTime:    rateTalkTime(input.talkMin / effectiveHrs),
     wrapUp:      rateWrapUp(input.wrapUpSec),
-    declineRate: rateDeclineRate(input.declineRate),
   };
 }
 
@@ -238,10 +215,8 @@ export function computeOVR(subs: AgentSubRatings): number {
     subs.volume      * w.volume +
     subs.speed       * w.speed +
     subs.convPerHr   * w.convPerHr +
-    subs.pickupRate  * w.pickupRate +
     subs.talkTime    * w.talkTime +
-    subs.wrapUp      * w.wrapUp +
-    subs.declineRate * w.declineRate;
+    subs.wrapUp      * w.wrapUp;
   return Math.round(raw);
 }
 
@@ -288,18 +263,14 @@ export function computeBaselineOVR(b: AgentBaseline): number {
   const dailyCalls = b.totalCalls / Math.max(b.workingDays, 1);
   const dailyConvs = b.totalConversions / Math.max(b.workingDays, 1);
   const dailyTalkMin = b.talkMin / Math.max(b.workingDays, 1);
-  const avgHoursPerDay = 8; // baseline assumption for monthly averages
-  const convsPerHour = dailyConvs > 0 ? dailyConvs / avgHoursPerDay : null;
+  const avgHoursPerDay = 8;
 
   const subs = computeSubRatings({
     calls: dailyCalls,
     conversions: dailyConvs,
     speedSec: b.avgSpeedSec,
-    convsPerHour: convsPerHour,
-    pickupRate: b.avgPickupRate,
     talkMin: dailyTalkMin,
     wrapUpSec: b.avgWrapUpSec,
-    declineRate: b.avgDeclineRate,
     hoursScheduled: avgHoursPerDay,
   });
   return computeOVR(subs);
@@ -332,13 +303,11 @@ export function ratingDelta(current: number, baseline: number): { direction: 'up
 // ── Sub-rating labels for display ────────────────────────────────────
 
 export const SUB_RATING_LABELS: Record<keyof AgentSubRatings, { label: string; abbr: string; tooltip: string }> = {
-  conversions: { label: 'Conversions', abbr: 'CNV', tooltip: 'Booked appointments today. Log curve — first few matter most.' },
+  conversions: { label: 'Conversions', abbr: 'CNV', tooltip: 'Booked appointments. Log curve — first few matter most.' },
   convPct:     { label: 'Conv %',      abbr: 'C%',  tooltip: 'Conversion rate (conversions / calls). Requires 5+ calls.' },
-  volume:      { label: 'Volume',      abbr: 'VOL', tooltip: 'Calls per scheduled hour. Normalized by shift length.' },
+  volume:      { label: 'Volume',      abbr: 'VOL', tooltip: 'Calls per opportunity-adjusted hour. Normalized by shift and call density.' },
   speed:       { label: 'Speed',       abbr: 'SPD', tooltip: 'Average pickup speed (seconds). Lower is better.' },
-  convPerHr:   { label: 'Conv/Hr',     abbr: 'CPH', tooltip: 'Conversions per scheduled hour. Productivity metric.' },
-  pickupRate:  { label: 'Pickup Rate', abbr: 'PKP', tooltip: 'Percentage of offered calls accepted. From TaskRouter.' },
-  talkTime:    { label: 'Talk Time',   abbr: 'TLK', tooltip: 'Talk minutes per scheduled hour. Engagement quality.' },
+  convPerHr:   { label: 'Conv/Hr',     abbr: 'CPH', tooltip: 'Conversions per opportunity-adjusted hour. Productivity metric.' },
+  talkTime:    { label: 'Talk Time',   abbr: 'TLK', tooltip: 'Talk minutes per opportunity-adjusted hour. Engagement quality.' },
   wrapUp:      { label: 'Wrap-Up',     abbr: 'WRP', tooltip: 'Average post-call wrap-up time (seconds). Lower is better.' },
-  declineRate: { label: 'Decline Rate', abbr: 'DCL', tooltip: 'Percentage of offered calls declined. Lower is better.' },
 };

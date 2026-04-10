@@ -361,10 +361,8 @@ export interface AgentSubRatings {
   volume: number;
   speed: number;
   convPerHr: number;
-  pickupRate: number;
   talkTime: number;
   wrapUp: number;
-  declineRate: number;
 }
 
 export interface AgentRating {
