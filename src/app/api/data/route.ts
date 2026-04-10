@@ -767,6 +767,46 @@ export async function GET(request: NextRequest) {
       _health: { staleness: { ytica: yticaAge, cdr: cdrAge }, reconciliation },
     };
 
+    // Strip EXCLUDED_AGENTS from all repActivity.agents arrays in the response
+    const excl = new Set(EXCLUDED_AGENTS.map(a => a.toLowerCase()));
+    const stripExcluded = (period: { repActivity?: { agents: { agent: string }[] } } | undefined | null) => {
+      if (period?.repActivity?.agents) {
+        period.repActivity.agents = period.repActivity.agents.filter(
+          (a: { agent: string }) => !excl.has(a.agent.toLowerCase()),
+        );
+      }
+    };
+    stripExcluded(data.today);
+    stripExcluded(data.yesterday);
+    if (data.weekend) {
+      stripExcluded(data.weekend.friday);
+      stripExcluded(data.weekend.saturday);
+      stripExcluded(data.weekend.sunday);
+    }
+    // Also strip from conversions byAgent
+    if (data.today?.conversions?.byAgent) {
+      data.today.conversions.byAgent = data.today.conversions.byAgent.filter(
+        a => !excl.has(a.agent.toLowerCase()),
+      );
+    }
+    if (data.yesterday?.conversions?.byAgent) {
+      data.yesterday.conversions.byAgent = data.yesterday.conversions.byAgent.filter(
+        a => !excl.has(a.agent.toLowerCase()),
+      );
+    }
+    // Strip from MTD byAgent
+    if (data.mtd?.byAgent) {
+      data.mtd.byAgent = data.mtd.byAgent.filter(a => !excl.has(a.agent.toLowerCase()));
+    }
+    // Strip from mtdRepActivity
+    if (data.mtdRepActivity) {
+      data.mtdRepActivity = data.mtdRepActivity.filter(a => !excl.has(a.agent.toLowerCase()));
+    }
+    // Strip from recentCalls
+    if (data.recentCalls) {
+      data.recentCalls = data.recentCalls.filter(c => !excl.has((c.agent || '').toLowerCase()));
+    }
+
     const res = NextResponse.json(data);
     res.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=60');
     return res;

@@ -5,16 +5,23 @@ import type { AgentBaseline, AgentSubRatings } from './types';
 
 // ── Weights (must sum to 1.0) ────────────────────────────────────────
 
+// Pickup Rate and Decline Rate come from TaskRouter reservation data, which
+// measures how often an agent grabs a call that was ALSO offered to every other
+// agent simultaneously. A 35% rate doesn't mean 65% missed — it means teammates
+// answered first. These metrics penalize agents for having a team.
+//
+// Weight them at 0 until we have a better reliability signal (e.g., actual
+// missed calls attributed to specific agents, or calls-answered / calls-available).
 export const RATING_WEIGHTS = {
-  conversions: 0.18,
-  convPct:     0.15,
-  volume:      0.12,
-  speed:       0.12,
-  convPerHr:   0.12,
-  pickupRate:  0.10,
-  talkTime:    0.08,
-  wrapUp:      0.07,
-  declineRate: 0.06,
+  conversions: 0.22,   // ↑ from 0.18 — the money metric
+  convPct:     0.18,   // ↑ from 0.15 — efficiency matters
+  volume:      0.14,   // ↑ from 0.12
+  speed:       0.14,   // ↑ from 0.12
+  convPerHr:   0.14,   // ↑ from 0.12
+  pickupRate:  0.00,   // ← zeroed: TaskRouter data is misleading (see above)
+  talkTime:    0.10,   // ↑ from 0.08
+  wrapUp:      0.08,   // ↑ from 0.07
+  declineRate: 0.00,   // ← zeroed: same TaskRouter problem
 } as const;
 
 // ── Sub-rating curves (each returns 0-99) ────────────────────────────
