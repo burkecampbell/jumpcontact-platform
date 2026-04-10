@@ -330,7 +330,7 @@ function LiveNowPageInner() {
           <Card>
             <div className="flex items-start justify-between mb-1">
               <span className="text-xs font-medium" style={{ color: C.sub }}>Total Minutes</span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: C.cyanSoft, color: C.cyan }}>BILLABLE</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: C.cyanSoft, color: C.cyan }}>TODAY</span>
             </div>
             <div className="text-2xl font-bold font-mono" style={{ color: C.cyan }}>{Math.round(totalBillableMin).toLocaleString()}</div>
             <div className="text-[10px] mt-1" style={{ color: C.sub }}>
