@@ -112,6 +112,16 @@ function LiveNowPageInner() {
     ? agentsWithWrap.reduce((s, a) => s + (a.wrapUpSec ?? 0), 0) / agentsWithWrap.length
     : null;
 
+  // ── Minute counters (the money metrics) ──
+  const totalTalkMin = agents.reduce((s, a) => s + a.talkMin, 0);
+  const totalWrapMin = agents.reduce((s, a) => s + ((a.wrapUpSec ?? 0) * a.calls) / 60, 0);
+  const totalBillableMin = totalTalkMin + totalWrapMin;
+  const totalCalls_ = agents.reduce((s, a) => s + a.calls, 0);
+  const avgWrapPerCall = totalCalls_ > 0
+    ? agents.reduce((s, a) => s + (a.wrapUpSec ?? 0) * a.calls, 0) / totalCalls_
+    : 0;
+  const wrapIsGood = avgWrapPerCall <= 90; // under 90s avg = green
+
   // Build Ytica MTD lookup for accurate pickup speed + wrap-up fallback
   const yticaMtd: Record<string, { avgSpeedSec?: number; avgWrapUpSec?: number }> = {};
   for (const y of (data.mtdRepActivity || [])) {
@@ -306,13 +316,60 @@ function LiveNowPageInner() {
             <div className="flex items-center gap-1 flex-wrap">
               {activeAgentNames.length > 0 ? activeAgentNames.map(name => (
                 <span key={name} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
-                      style={{ background: agentColor(name) + '22', color: agentColor(name), border: `1px solid ${agentColor(name)}44` }}>
+                      style={{ background: `color-mix(in srgb, ${agentColor(name)} 13%, transparent)`, color: agentColor(name), border: `1px solid color-mix(in srgb, ${agentColor(name)} 27%, transparent)` }}>
                   <span className="w-1.5 h-1.5 rounded-full" style={{ background: agentColor(name) }} />
                   {name}
                 </span>
               )) : (
                 <span className="text-sm font-mono" style={{ color: C.sub }}>0 / 5</span>
               )}
+            </div>
+          </Card>
+        </div>
+
+        {/* Minutes Row — THE MONEY */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <Card>
+            <div className="flex items-start justify-between mb-1">
+              <span className="text-xs font-medium" style={{ color: C.sub }}>Total Minutes</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: C.cyanSoft, color: C.cyan }}>BILLABLE</span>
+            </div>
+            <div className="text-2xl font-bold font-mono" style={{ color: C.cyan }}>{Math.round(totalBillableMin).toLocaleString()}</div>
+            <div className="text-[10px] mt-1" style={{ color: C.sub }}>
+              {Math.round(totalTalkMin)} talk + {Math.round(totalWrapMin)} wrap
+            </div>
+          </Card>
+          <Card>
+            <div className="flex items-start justify-between mb-1">
+              <span className="text-xs font-medium" style={{ color: C.sub }}>Talk Minutes</span>
+            </div>
+            <div className="text-2xl font-bold font-mono" style={{ color: C.text }}>{Math.round(totalTalkMin).toLocaleString()}</div>
+            <div className="text-[10px] mt-1" style={{ color: C.sub }}>
+              {totalCalls_ > 0 ? (totalTalkMin / totalCalls_).toFixed(1) : '0'} min avg/call
+            </div>
+          </Card>
+          <Card>
+            <div className="flex items-start justify-between mb-1">
+              <span className="text-xs font-medium" style={{ color: C.sub }}>Wrap Minutes</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{
+                background: wrapIsGood ? C.goodSoft : C.badSoft,
+                color: wrapIsGood ? C.good : C.bad,
+              }}>{wrapIsGood ? 'GOOD' : 'HIGH'}</span>
+            </div>
+            <div className="text-2xl font-bold font-mono" style={{ color: wrapIsGood ? C.text : C.bad }}>
+              {Math.round(totalWrapMin).toLocaleString()}
+            </div>
+            <div className="text-[10px] mt-1" style={{ color: wrapIsGood ? C.sub : C.bad }}>
+              {Math.round(avgWrapPerCall)}s avg/call {wrapIsGood ? '(under 90s ✓)' : '(over 90s ✗)'}
+            </div>
+          </Card>
+          <Card>
+            <div className="flex items-start justify-between mb-1">
+              <span className="text-xs font-medium" style={{ color: C.sub }}>Inbound Minutes</span>
+            </div>
+            <div className="text-2xl font-bold font-mono" style={{ color: C.text }}>{Math.round(totalTalkMin).toLocaleString()}</div>
+            <div className="text-[10px] mt-1" style={{ color: C.sub }}>
+              {totalCalls_} inbound calls
             </div>
           </Card>
         </div>
