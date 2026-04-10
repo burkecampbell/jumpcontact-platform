@@ -112,6 +112,12 @@ function LiveNowPageInner() {
     ? agentsWithWrap.reduce((s, a) => s + (a.wrapUpSec ?? 0), 0) / agentsWithWrap.length
     : null;
 
+  // Fastest Today: the single fastest agent pickup today (for the meeting / live view)
+  const agentsWithSpeed = agents.filter(a => a.speedSec != null && a.speedSec > 0 && a.speedSec < 120);
+  const fastestToday = agentsWithSpeed.length > 0
+    ? agentsWithSpeed.reduce((best, a) => (a.speedSec! < (best.speedSec ?? 999) ? a : best), agentsWithSpeed[0])
+    : null;
+
   // ── Minute counters (the money metrics) ──
   const totalTalkMin = agents.reduce((s, a) => s + a.talkMin, 0);
   const totalWrapMin = agents.reduce((s, a) => s + ((a.wrapUpSec ?? 0) * a.calls) / 60, 0);
@@ -122,13 +128,7 @@ function LiveNowPageInner() {
     : 0;
   const wrapIsGood = avgWrapPerCall <= 90; // under 90s avg = green
 
-  // Build Ytica MTD lookup for accurate pickup speed + wrap-up fallback
-  const yticaMtd: Record<string, { avgSpeedSec?: number; avgWrapUpSec?: number }> = {};
-  for (const y of (data.mtdRepActivity || [])) {
-    yticaMtd[y.agent.toLowerCase()] = { avgSpeedSec: y.avgSpeedSec ?? undefined, avgWrapUpSec: y.avgWrapUpSec ?? undefined };
-  }
-
-  // Build agent ranking rows with conversions + Ytica-corrected speeds
+  // Build agent ranking rows (today's actual values only, no MTD fallback)
   const convByAgent: Record<string, number> = {};
   for (const a of data.today.conversions.byAgent) convByAgent[a.agent.toLowerCase()] = a.count;
 
@@ -166,13 +166,14 @@ function LiveNowPageInner() {
   }
 
   // First pass: compute raw OVRs to get team average (for Bayesian adjustment)
+  // Pickup speed: only show TODAY's actual speed — don't fall back to MTD historical.
+  // Showing MTD as "today" is misleading (Burke: "why does my 1 outbound call show 7.7s pickup?")
   type PreRow = { agent: RepAgent; convs: number; pickup: number | null; wrapUp: number | null; oppWeight?: number };
   const preRows: PreRow[] = agents.map(a => {
-    const yt = yticaMtd[a.agent.toLowerCase()];
-    const pickup = (a.speedSec != null && a.speedSec > 0 && a.speedSec <= 10)
-      ? a.speedSec : (yt?.avgSpeedSec ?? a.speedSec ?? null);
-    const wrapUp = (a.wrapUpSec != null && a.wrapUpSec > 0)
-      ? a.wrapUpSec : (yt?.avgWrapUpSec ?? null);
+    // Only use today's speed when it's a valid inbound pickup (> 0 and sane)
+    const pickup = (a.speedSec != null && a.speedSec > 0 && a.speedSec < 120) ? a.speedSec : null;
+    // Wrap-up: same rule — only today's actual value
+    const wrapUp = (a.wrapUpSec != null && a.wrapUpSec > 0) ? a.wrapUpSec : null;
     const convs = convByAgent[a.agent.toLowerCase()] || 0;
     const shift = schedLookup[a.agent.toLowerCase()];
     const oppWeight = shift && hourlyDist.length >= 24
@@ -373,6 +374,21 @@ function LiveNowPageInner() {
         </div>
         </ErrorBoundary>
 
+        {/* Fastest Pickup Today — inline narrow banner */}
+        {fastestToday && (
+          <ErrorBoundary section="Fastest Today">
+            <div className="mb-6 flex items-center gap-3 px-4 py-2 rounded-lg" style={{ background: C.cyanSoft, border: `1px solid ${C.border}` }}>
+              <Zap size={14} style={{ color: C.cyan }} />
+              <span className="text-xs font-medium" style={{ color: C.sub }}>Fastest Pickup Today</span>
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: agentColor(fastestToday.agent) }} />
+              <span className="text-xs font-semibold" style={{ color: C.text }}>{capitalize(fastestToday.agent)}</span>
+              <span className="text-xs font-mono font-bold ml-auto" style={{ color: speedGrade(fastestToday.speedSec).color }}>
+                {fmtSpeed(fastestToday.speedSec)}
+              </span>
+            </div>
+          </ErrorBoundary>
+        )}
+
         {/* Agent Ranking Table */}
         <ErrorBoundary section="Agent Ranking">
         {sorted.length > 0 && (
@@ -393,9 +409,9 @@ function LiveNowPageInner() {
                     {([
                       ['convs', 'Conv'],
                       ['calls', 'Calls'],
-                      ['talkMin', 'Talk Time'],
-                      ['pickup', 'Pickup'],
-                      ['wrapUp', 'Wrap-Up'],
+                      ['talkMin', 'Talk'],
+                      ['pickup', 'Speed'],
+                      ['wrapUp', 'Wrap'],
                       ['pickupRate', 'Pickup %'],
                       ['hoursScheduled', 'Min'],
                       ['convPct', 'Conv %'],

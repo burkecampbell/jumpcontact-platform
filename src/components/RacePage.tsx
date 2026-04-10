@@ -491,6 +491,41 @@ function RacePageInner() {
                 />
               ) : null;
             })()}
+            {(() => {
+              // Most Minutes: MTD talk minutes per agent (minutes = dollars)
+              const byMinutes = agentStats
+                .map(a => {
+                  const yt = mtdYticaByAgent[a.agent.toLowerCase()];
+                  return { agent: a.agent, talkMin: yt?.totalTalkMin ?? 0 };
+                })
+                .filter(a => a.talkMin > 0)
+                .sort((a, b) => b.talkMin - a.talkMin);
+              return byMinutes.length > 0 ? (
+                <AwardCard
+                  icon={<Star size={14} style={{ color: C.lime }} />}
+                  title="Most Minutes"
+                  winner={byMinutes[0].agent}
+                  value={`${Math.round(byMinutes[0].talkMin)}m`}
+                  runnerUp={byMinutes[1]?.agent}
+                  runnerValue={byMinutes[1] ? `${Math.round(byMinutes[1].talkMin)}m` : undefined}
+                />
+              ) : null;
+            })()}
+            {(() => {
+              // Fastest Single Call of the Month: lowest per-agent MTD avg speed as proxy
+              // (true single-call min would need full CDR history — using MTD avg here)
+              const byFastest = agentStats.filter(a => a.mtdSpeedSec != null && a.mtdSpeedSec! > 0).sort((a, b) => a.mtdSpeedSec! - b.mtdSpeedSec!);
+              return byFastest.length > 0 ? (
+                <AwardCard
+                  icon={<Zap size={14} style={{ color: '#fbbf24' }} />}
+                  title="Fastest Call (Month)"
+                  winner={byFastest[0].agent}
+                  value={fmtSpeed(byFastest[0].mtdSpeedSec!)}
+                  runnerUp={byFastest[1]?.agent}
+                  runnerValue={byFastest[1] ? fmtSpeed(byFastest[1].mtdSpeedSec!) : undefined}
+                />
+              ) : null;
+            })()}
           </div>
         </div>
         </ErrorBoundary>

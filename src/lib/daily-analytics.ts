@@ -51,7 +51,9 @@ export async function buildDailyAnalytics(date: string): Promise<DailyAnalyticsR
     if (call.direction === 'inbound') agg[agent].ib++; else agg[agent].ob++;
     const answered = call.status === 'completed';
     if (answered) agg[agent].ans++; else agg[agent].mis++;
-    if (call.ringTime > 0 && call.ringTime < 120 && answered) {
+    // Only inbound calls contribute to "pickup speed" — outbound calls
+    // are agent-initiated, there's no "wait for agent" phase to measure.
+    if (call.direction === 'inbound' && call.ringTime > 0 && call.ringTime < 120 && answered) {
       agg[agent].ringSum += call.ringTime;
       agg[agent].ringCount++;
     }

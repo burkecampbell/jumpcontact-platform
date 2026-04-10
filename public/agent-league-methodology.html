@@ -76,8 +76,8 @@
 <!-- Info Block -->
 <div class="info-block">
   <div><span class="info-label">Document Type:</span> Internal Methodology</div>
-  <div><span class="info-label">Version:</span> 1.1</div>
-  <div><span class="info-label">Effective Date:</span> April 9, 2026</div>
+  <div><span class="info-label">Version:</span> 1.2</div>
+  <div><span class="info-label">Effective Date:</span> April 10, 2026</div>
   <div><span class="info-label">Author:</span> Burke Campbell</div>
   <div><span class="info-label">Scope:</span> All JC &amp; MSC inbound agents</div>
   <div><span class="info-label">Review Cycle:</span> Monthly</div>
@@ -85,14 +85,23 @@
 
 <!-- Introduction -->
 <div class="section-title">Overview</div>
-<p>The Agent League OVR (Overall Rating) system evaluates agent performance on a 0-99 scale using nine weighted attributes. Inspired by sports analytics (EA Sports Madden, FIFA), each agent receives a composite rating that reflects their daily contribution across production, speed, efficiency, and reliability metrics.</p>
+<p>The Agent League OVR (Overall Rating) system evaluates agent performance on a 0-100 scale using <strong>seven weighted attributes</strong>. Inspired by sports analytics (EA Sports Madden, FIFA), each agent receives a composite rating that reflects their contribution across production, speed, efficiency, and engagement — in minutes (the currency of the business).</p>
 
 <div class="callout">
-  <strong>Purpose:</strong> Provide a single, transparent number that captures total agent value. Not a disciplinary tool — a development and recognition system. High OVR = high impact. Low OVR = coaching opportunity.
+  <strong>Purpose:</strong> A single, transparent number that captures total agent value. Not a disciplinary tool — a development and recognition system. High OVR = high impact. Low OVR = coaching opportunity.
 </div>
 
-<!-- The 9 Attributes -->
-<div class="section-title">The Nine Attributes</div>
+<div class="callout-warn callout">
+  <strong>What changed in v1.2:</strong><br>
+  • Pickup Rate and Decline Rate <strong>removed</strong> — TaskRouter reservation data penalized agents for having teammates (when a call rings for 5 agents, only 1 can answer; the other 4 look like they "missed" it).<br>
+  • Weights redistributed to 7 attributes. <strong>Talk Time boosted to 18%</strong> — minutes on calls = billable dollars.<br>
+  • <strong>Bayesian confidence adjustment</strong> added — agents with few calls are pulled toward team average. Chris with 3 calls no longer gets crushed just because sample size is small.<br>
+  • <strong>Opportunity-weighted normalization</strong> — agents working off-peak hours are rated against calls-available during their shift, not raw volume.<br>
+  • <strong>Jose (CEO) override</strong> — gets a fixed 100 across the board with a 👑 marker, sorted to the bottom of leaderboards so he doesn't compete with working agents.
+</div>
+
+<!-- The 7 Attributes -->
+<div class="section-title">The Seven Attributes</div>
 
 <table>
   <thead>
@@ -106,26 +115,60 @@
     </tr>
   </thead>
   <tbody>
-    <tr><td class="num">1</td><td><strong>Conversions</strong> (CNV)</td><td class="num teal">18%</td><td>Conversions Sheet</td><td class="green">Higher = Better</td><td>Direct revenue generation — booked appointments</td></tr>
-    <tr><td class="num">2</td><td><strong>Conv %</strong> (C%)</td><td class="num teal">15%</td><td>Conversions / Calls</td><td class="green">Higher = Better</td><td>Efficiency — converting opportunities, not just volume</td></tr>
-    <tr><td class="num">3</td><td><strong>Volume</strong> (VOL)</td><td class="num teal">12%</td><td>Twilio CDR / Ytica</td><td class="green">Higher = Better</td><td>Availability and throughput — handling the queue</td></tr>
-    <tr><td class="num">4</td><td><strong>Speed</strong> (SPD)</td><td class="num teal">12%</td><td>Ytica Avg Speed to Answer</td><td class="red">Lower = Better</td><td>First impression — callers wait less, fewer abandonments</td></tr>
-    <tr><td class="num">5</td><td><strong>Conv/Hr</strong> (CPH)</td><td class="num teal">12%</td><td>Conversions / Scheduled Hours</td><td class="green">Higher = Better</td><td>Productivity per hour — normalizes for different shift lengths</td></tr>
-    <tr><td class="num">6</td><td><strong>Pickup Rate</strong> (PKP)</td><td class="num teal">10%</td><td>Twilio TaskRouter</td><td class="green">Higher = Better</td><td>Reliability — answering when calls come in</td></tr>
-    <tr><td class="num">7</td><td><strong>Talk Time</strong> (TLK)</td><td class="num teal">8%</td><td>Twilio CDR / Ytica</td><td class="green">Higher = Better</td><td>Engagement — meaningful conversations, not rushed calls</td></tr>
-    <tr><td class="num">8</td><td><strong>Wrap-Up</strong> (WRP)</td><td class="num teal">7%</td><td>Ytica Avg Wrap Up Time</td><td class="red">Lower = Better</td><td>Efficiency — quick post-call work means faster back to queue</td></tr>
-    <tr><td class="num">9</td><td><strong>Decline Rate</strong> (DCL)</td><td class="num teal">6%</td><td>Twilio TaskRouter</td><td class="red">Lower = Better</td><td>Commitment — not cherry-picking or dodging calls</td></tr>
+    <tr><td class="num">1</td><td><strong>Conversions</strong> (CNV)</td><td class="num teal">20%</td><td>Conversions Sheet</td><td class="green">Higher = Better</td><td>Booked appointments — value to the client</td></tr>
+    <tr><td class="num">2</td><td><strong>Talk Time</strong> (TLK)</td><td class="num teal">18%</td><td>Ytica / KPI Sheet</td><td class="green">Higher = Better</td><td><strong>Minutes = dollars.</strong> More time on calls = more billable revenue for JC.</td></tr>
+    <tr><td class="num">3</td><td><strong>Conv %</strong> (C%)</td><td class="num teal">16%</td><td>Conversions / Calls</td><td class="green">Higher = Better</td><td>Efficiency — converting opportunities, not just volume (requires 5+ calls)</td></tr>
+    <tr><td class="num">4</td><td><strong>Volume</strong> (VOL)</td><td class="num teal">12%</td><td>Calls / opportunity-adjusted minutes</td><td class="green">Higher = Better</td><td>Throughput — handling the queue during your shift</td></tr>
+    <tr><td class="num">5</td><td><strong>Speed</strong> (SPD)</td><td class="num teal">12%</td><td>KPI Sheet Ring Time</td><td class="red">Lower = Better</td><td>First impression — callers wait less, fewer abandonments</td></tr>
+    <tr><td class="num">6</td><td><strong>Conv/Min</strong> (CPM)</td><td class="num teal">12%</td><td>Conversions / opportunity-adjusted minutes</td><td class="green">Higher = Better</td><td>Productivity per minute of opportunity</td></tr>
+    <tr><td class="num">7</td><td><strong>Wrap-Up</strong> (WRP)</td><td class="num teal">10%</td><td>Ytica Avg Wrap Up</td><td class="red">Lower = Better</td><td>Post-call efficiency — faster wrap = more time on phones</td></tr>
   </tbody>
 </table>
 
 <div class="callout-warn callout">
-  <strong>Weight rationale:</strong> Conversions + Conv% = 33% because revenue generation is the core mission. Speed + Volume = 24% because availability drives client satisfaction. Conv/Hr + Pickup + Decline = 28% because productivity and reliability are what make an agent dependable. Talk Time + Wrap-Up = 15% because engagement quality and efficiency are supporting factors, not primary drivers.
+  <strong>Weight rationale:</strong> Revenue generation (Conversions + Conv% + Talk Time) = <strong>54%</strong> of the rating. Volume + Speed + Conv/Min = <strong>36%</strong> for throughput and responsiveness. Wrap-Up = <strong>10%</strong> for efficiency. Minutes and conversions dominate because they directly drive money — for both the client (appointments) and for JC (billable time).
 </div>
+
+<!-- Bayesian -->
+<div class="section-title">Bayesian Confidence Adjustment</div>
+
+<p>The OVR blends raw performance with the team average based on sample size:</p>
+
+<div class="formula">
+OVR = (teamAvg × 10 + rawOvr × callsToday) / (10 + callsToday)
+</div>
+
+<p>At 3 calls, your OVR is 77% team average + 23% your performance. At 40 calls, it's 20% team average + 80% yours. This prevents agents with tiny sample sizes from being crushed by noise — and prevents hot streaks from being overweighted early.</p>
+
+<p><strong>Example (Chris, 3 calls today):</strong><br>
+Raw OVR (from 3 calls): 44 (below average because of volume curves)<br>
+Team avg OVR: 65<br>
+Bayesian OVR: (65×10 + 44×3) / 13 = <strong>60</strong> — fair, acknowledges small sample<br>
+Without Bayesian he'd be at 44 (DEV tier) which is unfair for doing nothing wrong.</p>
+
+<!-- Opportunity Weighting -->
+<div class="section-title">Opportunity-Weighted Normalization</div>
+
+<p>Chris works 3pm–midnight. Burke works 7am–6pm. If 80% of daily calls land in Burke's window and only 15% in Chris's, rating them the same way is unfair — Chris literally has fewer opportunities to handle.</p>
+
+<div class="formula">
+opportunityWeight = calls-during-shift / total-daily-calls
+effectiveMinutes = scheduledMinutes × opportunityWeight
+
+Burke (peak):    480 min × 0.80 = 384 effective min
+Chris (off-peak): 540 min × 0.15 =  81 effective min
+
+Volume rating: calls / effectiveMinutes
+Conv/Min:      conversions / effectiveMinutes
+Talk Time:     talkMin / effectiveMinutes
+</div>
+
+<p>Chris handling 15 calls on 81 effective minutes is rated equivalently to Burke handling 40 calls on 384 effective minutes. Both captured ~9 calls per effective minute of opportunity.</p>
 
 <!-- Normalization Curves -->
 <div class="section-title">Normalization Curves (0-97 Effective Scale)</div>
 
-<p>Each raw metric is converted to a 0-97 sub-rating. <strong>99 is unreachable by formula</strong> — it exists as a theoretical ceiling to prevent clustering at the top. The curves use diminishing returns: going from 85 to 90 is much harder than going from 50 to 55. Volume and Talk Time are <strong>normalized by scheduled hours</strong> to prevent rewarding longer shifts over efficiency.</p>
+<p>Each raw metric is converted to a 0-97 sub-rating. <strong>99 is unreachable by formula</strong> — reserved as a theoretical ceiling. The curves use diminishing returns: going from 85 to 90 is much harder than going from 50 to 55. Volume, Conv/Min, and Talk Time are normalized by <strong>opportunity-adjusted minutes</strong> — your shift minutes times your call density weight.</p>
 
 <table>
   <thead>
@@ -133,37 +176,54 @@
   </thead>
   <tbody>
     <tr><td>Conversions</td><td>1 conv</td><td>3 convs</td><td>10 convs</td><td>20+ convs</td><td>Logarithmic (cap 97)</td></tr>
+    <tr><td>Talk Time</td><td>5 min/op-hr</td><td>12 min/op-hr</td><td>25 min/op-hr</td><td>35+ min/op-hr</td><td>Log (per opportunity minute, cap 95)</td></tr>
     <tr><td>Conv %</td><td>5%</td><td>12%</td><td>22%</td><td>30%+</td><td>Linear (min 5 calls, cap 97)</td></tr>
-    <tr><td>Volume</td><td>1 call/hr</td><td>3 calls/hr</td><td>6 calls/hr</td><td>8+ calls/hr</td><td>Log (per sched hour, cap 95)</td></tr>
+    <tr><td>Volume</td><td>1 call/op-hr</td><td>3 calls/op-hr</td><td>6 calls/op-hr</td><td>8+ calls/op-hr</td><td>Log (per opportunity minute, cap 95)</td></tr>
     <tr><td>Speed</td><td>25s+</td><td>15s</td><td>10s</td><td>&lt;5s</td><td>Piecewise inverted (cap 97)</td></tr>
-    <tr><td>Conv/Hr</td><td>0.3/hr</td><td>1/hr</td><td>2.5/hr</td><td>4+/hr</td><td>Piecewise (cap 97)</td></tr>
-    <tr><td>Pickup Rate</td><td>50%</td><td>70%</td><td>90%</td><td>98%+</td><td>Compressed (cap 97)</td></tr>
-    <tr><td>Talk Time</td><td>5 min/hr</td><td>12 min/hr</td><td>25 min/hr</td><td>35+ min/hr</td><td>Log (per sched hour, cap 95)</td></tr>
+    <tr><td>Conv/Min</td><td>0.005/min</td><td>0.017/min</td><td>0.04/min</td><td>0.067+/min</td><td>Piecewise (cap 97)</td></tr>
     <tr><td>Wrap-Up</td><td>100s+</td><td>60s</td><td>35s</td><td>&lt;25s</td><td>Piecewise inverted (cap 97)</td></tr>
-    <tr><td>Decline Rate</td><td>15%+</td><td>8%</td><td>3%</td><td>0%</td><td>Piecewise inverted (cap 97)</td></tr>
   </tbody>
 </table>
 
 <div class="callout">
-  <strong>Why 97 not 99?</strong> If too many agents cluster at 99, the rating loses meaning. By capping at 97 and using steep diminishing returns near the top, the gap between 90 and 95 represents genuine excellence. Only one agent at a time should be near 97 in any category.
+  <strong>Why 97 not 99?</strong> If too many agents cluster at 99, the rating loses meaning. By capping at 97 and using steep diminishing returns near the top, the gap between 90 and 95 represents genuine excellence. 99 and 100 are reserved — 100 is the Jose (CEO) override.
 </div>
 
 <!-- OVR Formula -->
-<div class="section-title">OVR Calculation</div>
+<div class="section-title">OVR Calculation (v1.2)</div>
 
 <div class="formula">
-OVR = round(
-    CNV × 0.18 +   // Conversions sub-rating
-    C%  × 0.15 +   // Conv % sub-rating
-    VOL × 0.12 +   // Volume sub-rating
-    SPD × 0.12 +   // Speed sub-rating
-    CPH × 0.12 +   // Conv/Hr sub-rating
-    PKP × 0.10 +   // Pickup Rate sub-rating
-    TLK × 0.08 +   // Talk Time sub-rating
-    WRP × 0.07 +   // Wrap-Up sub-rating
-    DCL × 0.06     // Decline Rate sub-rating
+rawOvr = round(
+    CNV × 0.20 +   // Conversions
+    TLK × 0.18 +   // Talk Time (minutes = dollars)
+    C%  × 0.16 +   // Conv %
+    VOL × 0.12 +   // Volume (per opportunity minute)
+    SPD × 0.12 +   // Speed
+    CPM × 0.12 +   // Conv/Min
+    WRP × 0.10     // Wrap-Up
 )
+
+// Apply Bayesian confidence adjustment
+confidence = callsToday / (callsToday + 10)
+OVR = round(teamAvg × (1 - confidence) + rawOvr × confidence)
+
+// CEO override — Jose gets 100 across the board
+if (agent === 'jose') OVR = 100
 </div>
+
+<!-- Jose Override -->
+<div class="section-title">The 👑 CEO Override</div>
+
+<p>Jose is the CEO. He occasionally jumps on the phones, but his role is not to compete with working agents on call volume. To handle this cleanly:</p>
+
+<ul style="padding-left: 20px; margin: 8px 0;">
+  <li><strong>Fixed OVR of 100</strong> with all 7 sub-ratings at 100.</li>
+  <li><strong>Sorted to the bottom</strong> of the main leaderboard regardless of sort direction — he doesn't compete for rank #1.</li>
+  <li><strong>Crown (👑) marker</strong> instead of a rank number.</li>
+  <li><strong>Excluded from top 3 category competitions</strong> (Conversions, Calls, Speed, Conv%, Most Minutes, vs Career).</li>
+  <li><strong>Excluded from team average</strong> calculation — he doesn't inflate the Bayesian prior.</li>
+  <li>His real metrics still appear in his row. The 100s are the rating; his actual calls/speed/talk time are shown accurately in the raw-value columns.</li>
+</ul>
 
 <!-- Tier System -->
 <div class="section-title">Tier System</div>
@@ -228,37 +288,18 @@ OVR = round(
 </table>
 
 <!-- Known Limitations -->
-<div class="section-title">Known Limitations</div>
-
-<ul style="padding-left: 20px; margin: 8px 0;">
-  <li><strong>Historical pickup/decline rates</strong> are not stored. Baseline pickup rate is neutral (50) until historical data collection begins.</li>
-  <li><strong>March 2026 conversion counts</strong> are not yet backfilled. Baseline conversion sub-ratings default to 0 for March, making trend arrows show "up" for all agents.</li>
-  <li><strong>Blended agents</strong> (Wendy, Sara) appear in both JC and MSC views. Their OVR reflects total volume across both brands.</li>
-  <li><strong>Outbound agents</strong> (William, Joseph) are not currently rated — the system is designed for inbound agents.</li>
-</ul>
-
-<!-- Changelog -->
-<div class="section-title">Changelog</div>
-
-<table>
-  <thead><tr><th>Date</th><th>Version</th><th>Change</th></tr></thead>
-  <tbody>
-    <tr><td>2026-04-08</td><td>1.0</td><td>Initial release. 9-attribute formula, March baselines, 4 time horizons.</td></tr>
-  </tbody>
-</table>
-
-<!-- Methodology Critique -->
 <div class="section-title">Known Methodology Weaknesses</div>
 
-<p>This rating system is v1.1. We are transparent about its limitations and actively improving:</p>
+<p>Transparent about where the system still falls short:</p>
 
 <ul style="padding-left: 20px; margin: 8px 0;">
-  <li><strong>No call quality metric.</strong> The system measures speed, volume, and outcomes — but not how well an agent handles a difficult call. A future "Quality Score" from call reviews or client satisfaction surveys would add a 10th attribute.</li>
+  <li><strong>No call quality metric.</strong> The system measures speed, volume, and outcomes — but not how well an agent handles a difficult call. A future "Quality Score" from call reviews or client satisfaction would add an 8th attribute.</li>
   <li><strong>Conversion attribution is coarse.</strong> An agent who warms a lead across 3 calls gets no credit if a different agent logs the final conversion. Multi-touch attribution would be more fair.</li>
-  <li><strong>Decline rate data is sparse.</strong> TaskRouter doesn't always populate this. Many agents show null, which defaults to 65 (benefit of doubt). As data improves, this default will tighten.</li>
-  <li><strong>Historical baselines are thin.</strong> The accumulator currently only has March 2026 partial data. Trend arrows will become meaningful as months accumulate.</li>
-  <li><strong>Weekend/off-peak hours aren't weighted differently.</strong> A Sunday shift with fewer calls isn't the same competitive environment as a Monday. Future versions may apply day-of-week normalization.</li>
-  <li><strong>Blended agents get a volume advantage.</strong> Wendy and Sara handle both JC and MSC calls — their total volume is higher than single-brand agents, even normalized by hours. Brand-level splitting would fix this.</li>
+  <li><strong>Historical baselines are thin.</strong> The accumulator currently only has partial March 2026 data. Trend arrows will become meaningful as months accumulate.</li>
+  <li><strong>Weekend/off-peak hours use opportunity weighting</strong> but don't account for the psychological weight of being alone on a shift. A Sunday overnight agent handling one weird call at 3am isn't the same as a Tuesday agent taking call #20.</li>
+  <li><strong>Blended agents</strong> (Wendy, Sara) appear in both JC and MSC views. Their OVR reflects total volume across both brands. Brand-level splitting would be more precise.</li>
+  <li><strong>Outbound agents</strong> (William, Joseph) are not currently rated — the system is designed for inbound call handling, not outbound sales. They appear on the Outbound page with their own metrics.</li>
+  <li><strong>Pickup Rate is intentionally excluded.</strong> TaskRouter reservation data is misleading — a 35% rate doesn't mean 65% missed, it means teammates answered first. Including it penalizes agents for having a team.</li>
 </ul>
 
 <!-- Feedback -->
@@ -277,13 +318,14 @@ OVR = round(
 <table>
   <thead><tr><th>Date</th><th>Version</th><th>Change</th></tr></thead>
   <tbody>
-    <tr><td>2026-04-09</td><td>1.1</td><td>Curve overhaul: cap at 97, diminishing returns near top. Volume and Talk Time now normalized by scheduled hours. Added methodology critique and feedback section.</td></tr>
+    <tr><td>2026-04-10</td><td>1.2</td><td>Removed Pickup Rate and Decline Rate (TaskRouter reservation data is misleading). Boosted Talk Time to 18% — minutes = dollars. Added Bayesian confidence adjustment (Chris with 3 calls no longer gets crushed). Added opportunity-weighted normalization (off-peak agents rated against calls-available during their shift). Added Jose CEO override (👑 100 OVR, sorted to bottom, excluded from competitions). 7 attributes total. All metrics displayed in minutes — no hours anywhere.</td></tr>
+    <tr><td>2026-04-09</td><td>1.1</td><td>Curve overhaul: cap at 97, diminishing returns near top. Volume and Talk Time normalized by scheduled hours. Added methodology critique and feedback section.</td></tr>
     <tr><td>2026-04-08</td><td>1.0</td><td>Initial release. 9-attribute formula, March baselines, 4 time horizons.</td></tr>
   </tbody>
 </table>
 
 <div style="text-align: center; margin-top: 30px; padding-top: 15px; border-top: 1px solid #dee2e6;">
-  <em style="color: #495057; font-size: 10px;">Jump Contact &mdash; Agent League OVR Methodology v1.1 &mdash; Confidential Internal Document</em>
+  <em style="color: #495057; font-size: 10px;">Jump Contact &mdash; Agent League OVR Methodology v1.2 &mdash; Confidential Internal Document</em>
 </div>
 
 </body>
