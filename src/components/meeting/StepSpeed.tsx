@@ -5,6 +5,7 @@ import type { DashboardData, PeriodData } from '@/lib/types';
 import Card from '../Card';
 import Hero from './Hero';
 import { TH, TD } from './TableCells';
+import StepEmptyState from './StepEmptyState';
 
 /** Step 2: Speed + Pickup Rate — how fast we answer and how many we catch */
 export default function StepSpeed({ period, label, data }: { period: PeriodData; label: string; data?: DashboardData }) {
@@ -54,6 +55,11 @@ export default function StepSpeed({ period, label, data }: { period: PeriodData;
   }
 
   // Pickup rate is now its own step — StepPickupRate
+
+  // Defensive empty state — fires when KPI sheet has no rows for this brand
+  if (period.repActivity.agents.length === 0) {
+    return <StepEmptyState label={label} brand={data?.brand} />;
+  }
 
   return (
     <div>

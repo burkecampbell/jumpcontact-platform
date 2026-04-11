@@ -6,6 +6,7 @@ import Card from '../Card';
 import Hero from './Hero';
 import { TH, TD } from './TableCells';
 import { generateCallouts } from './callouts';
+import StepEmptyState from './StepEmptyState';
 
 /** Step 3: Conversions — agent breakdown, top accounts with top agent, hourly chart */
 export default function StepConversions({ period, label, data }: { period: PeriodData; label: string; data: DashboardData }) {
@@ -46,6 +47,12 @@ export default function StepConversions({ period, label, data }: { period: Perio
         // We can't get per-account-per-agent from MTD, so use today's conv data instead
       }
     }
+  }
+
+  // Defensive empty state — fires when KPI sheet has no rows for this brand
+  // (also covers the case where all agents are filtered out)
+  if (repAgents.length === 0 && convAgents.length === 0) {
+    return <StepEmptyState label={label} brand={data.brand} />;
   }
 
   return (

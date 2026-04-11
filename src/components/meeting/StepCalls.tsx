@@ -6,6 +6,7 @@ import type { PeriodData, DashboardData, RepAgent } from '@/lib/types';
 import Card from '../Card';
 import Hero from './Hero';
 import { TH, TD } from './TableCells';
+import StepEmptyState from './StepEmptyState';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 
 type SortCol = 'calls' | 'talkMin' | 'avgCall' | 'hrs' | 'callsHr' | 'pickup' | 'wrap';
@@ -62,6 +63,11 @@ export default function StepCalls({ period, label, data }: StepCallsProps) {
   // MTD call count — sum agent calls from mtd data
   const mtdConvs = data.mtd?.total ?? 0;
   const ytdConvs = data.ytd?.total ?? 0;
+
+  // Defensive empty state — fires when KPI sheet has no rows for this brand
+  if (agents.length === 0) {
+    return <StepEmptyState label={label} brand={data.brand} />;
+  }
 
   return (
     <div>

@@ -10,10 +10,12 @@ import ActivityFeed from './outbound/ActivityFeed';
 import PipelineView from './outbound/PipelineView';
 import { C } from '@/lib/constants';
 import { formatDuration } from '@/lib/formatters';
-import { Phone, PhoneOff, PhoneIncoming, Clock, RefreshCw } from 'lucide-react';
+import { Phone, PhoneOff, PhoneIncoming, Clock, RefreshCw, Info } from 'lucide-react';
 import type { OutboundDashboardData } from '@/lib/outbound-types';
+import { useBrand } from '@/hooks/useBrand';
 
 export default function OutboundPage() {
+  const { brand } = useBrand();
   const [data, setData] = useState<OutboundDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -109,6 +111,23 @@ export default function OutboundPage() {
       <NavBar pulledAt={pulledAt} />
 
       <div className="max-w-7xl mx-auto px-4 pt-20 pb-8">
+        {/* ── Brand context banner (HubSpot is JC-only) ─────────── */}
+        {brand !== 'jc' && (
+          <div
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs mb-3"
+            style={{
+              background: `${C.cyan}15`,
+              border: `1px solid ${C.cyan}40`,
+              color: C.text,
+            }}
+          >
+            <Info size={13} style={{ color: C.cyan, flexShrink: 0 }} />
+            <span>
+              Outbound tracks the HubSpot JC sales team only — the brand toggle has no effect on this page.
+            </span>
+          </div>
+        )}
+
         {/* ── Header with refresh ──────────────────────────────── */}
         <div className="flex items-center justify-end mb-3">
           <button

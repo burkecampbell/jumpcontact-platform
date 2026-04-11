@@ -6,6 +6,7 @@ import Card from '../Card';
 import Hero from './Hero';
 import PaceBar from './PaceBar';
 import { TH, TD } from './TableCells';
+import StepEmptyState from './StepEmptyState';
 
 /** Step 4: MTD + YTD — monthly pace, avg/hr, agent leaderboard, year to date */
 export default function StepMTD({ data }: { data: DashboardData }) {
@@ -46,6 +47,11 @@ export default function StepMTD({ data }: { data: DashboardData }) {
   const ytdTotal = ytd?.total ?? 0;
   const ytdByMonth = ytd?.byMonth ?? [];
   const ytdMaxMonth = ytdByMonth.length > 0 ? Math.max(...ytdByMonth.map(m => m.conversions), 1) : 1;
+
+  // Defensive empty state — fires when KPI sheet has no MTD rows for this brand
+  if (data.mtd.total === 0 && agents.length === 0) {
+    return <StepEmptyState label="Month-to-Date" brand={data.brand} />;
+  }
 
   return (
     <div>

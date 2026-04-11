@@ -7,10 +7,16 @@ import type { DashboardData, PeriodData } from '@/lib/types';
 import Card from '../Card';
 import Hero from './Hero';
 import { TH, TD } from './TableCells';
+import StepEmptyState from './StepEmptyState';
 
 /** Step 3: Pickup Rate — who's grabbing calls when they ring */
-export default function StepPickupRate({ period, label }: { period: PeriodData; label: string; data?: DashboardData }) {
+export default function StepPickupRate({ period, label, data }: { period: PeriodData; label: string; data?: DashboardData }) {
   const agents = period.repActivity.agents;
+
+  // Defensive empty state — fires when KPI sheet has no rows for this brand
+  if (agents.length === 0) {
+    return <StepEmptyState label={label} brand={data?.brand} />;
+  }
 
   // Team totals from TaskRouter
   const totalCreated = agents.reduce((s, a) => s + (a.reservationsCreated ?? 0), 0);
