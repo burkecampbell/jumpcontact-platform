@@ -214,26 +214,65 @@ function buildSheetAgentSummaries(
     .sort((a, b) => b.calls - a.calls);
 }
 
-/** Aggregate Ytica TeamStats across multiple days into a CallsSummary */
-function buildTeamSummary(
+/** Aggregate brand-filtered CDR calls into a CallsSummary.
+ *
+ *  For ALL brands (jc/msc/mixed), the summary is derived from the already-
+ *  brand-filtered brandCalls array (when brand=mixed, brandCalls contains
+ *  every paired call since isCallForBrand() returns true for mixed).
+ *
+ *  teamStats from Ytica was considered as the Mixed source but proved to
+ *  have stale/incomplete data in production — CDR pairing is more reliable
+ *  for all three brands and keeps JC + MSC ≈ Mixed numerically comparable.
+ *  The teamStats parameter is kept for backwards compatibility but only
+ *  used as a fallback when brand=mixed and brandCalls is unexpectedly empty
+ *  (e.g., today's data not yet paired).
+ *
+ *  Exported for unit testing. */
+export function buildTeamSummary(
   teamStats: YticaTeamStats[],
+  brand: Brand,
+  brandCalls: Array<{ direction: 'inbound' | 'outbound'; duration: number }>,
 ): CallsSummary {
-  let totalCalls = 0;
-  let totalTalkMin = 0;
-  let inbound = 0;
-  let outbound = 0;
-  for (const ts of teamStats) {
-    totalCalls += ts.totalCalls;
-    inbound += ts.inbound;
-    outbound += ts.outbound;
-    if (ts.talkTime) totalTalkMin += parseTimeMins(ts.talkTime);
+  // Primary path: derive from brand-filtered CDR calls
+  if (brandCalls.length > 0) {
+    let totalTalkSec = 0;
+    let inbound = 0;
+    let outbound = 0;
+    for (const c of brandCalls) {
+      totalTalkSec += c.duration;
+      if (c.direction === 'inbound') inbound++;
+      else outbound++;
+    }
+    return {
+      totalCalls: brandCalls.length,
+      totalTalkMin: +(totalTalkSec / 60).toFixed(1),
+      inbound,
+      outbound,
+    };
   }
-  return {
-    totalCalls,
-    totalTalkMin: +totalTalkMin.toFixed(1),
-    inbound,
-    outbound,
-  };
+
+  // Fallback for Mixed only: Ytica teamStats (when CDR has no data yet)
+  if (brand === 'mixed' && teamStats.length > 0) {
+    let totalCalls = 0;
+    let totalTalkMin = 0;
+    let inbound = 0;
+    let outbound = 0;
+    for (const ts of teamStats) {
+      totalCalls += ts.totalCalls;
+      inbound += ts.inbound;
+      outbound += ts.outbound;
+      if (ts.talkTime) totalTalkMin += parseTimeMins(ts.talkTime);
+    }
+    return {
+      totalCalls,
+      totalTalkMin: +totalTalkMin.toFixed(1),
+      inbound,
+      outbound,
+    };
+  }
+
+  // Zero summary when neither source has data
+  return { totalCalls: 0, totalTalkMin: 0, inbound: 0, outbound: 0 };
 }
 
 /**
@@ -341,20 +380,11 @@ export async function GET(request: NextRequest) {
     // Agent summaries from KPI Sheet (primary) + Ytica (fallback), CDR for direction split
     const agents = buildSheetAgentSummaries(kpiRows, yticaDays, brand, brandCalls);
 
-    // Team-level summary from Ytica TeamStats (one sheet read for all dates)
-    // Falls back to CDR-derived counts when Ytica has no data (e.g. today)
+    // Team-level summary — brand-aware:
+    //   Mixed: Ytica TeamStats (one sheet read, authoritative for all brands)
+    //   JC/MSC: derived from brand-filtered CDR calls (Ytica has no brand column)
     const teamStats = await fetchYticaTeamStatsRange(dates).catch(() => []);
-    let summary = buildTeamSummary(teamStats);
-    if (summary.totalCalls === 0 && brandCalls.length > 0) {
-      const talkSec = brandCalls.reduce((s, c) => s + c.duration, 0);
-      const inbound = brandCalls.filter(c => c.direction === 'inbound').length;
-      summary = {
-        totalCalls: brandCalls.length,
-        totalTalkMin: +(talkSec / 60).toFixed(1),
-        inbound,
-        outbound: brandCalls.length - inbound,
-      };
-    }
+    const summary = buildTeamSummary(teamStats, brand, brandCalls);
 
     const total = brandCalls.length;
     const page = brandCalls.slice(offset, offset + limit);

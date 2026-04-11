@@ -214,13 +214,26 @@ export async function getAvailableDates(): Promise<string[]> {
   return [...new Set(all.map(r => r.date))].sort();
 }
 
-/** Get MTD summary for the current month */
-export async function fetchKPIMtdSummary(monthPrefix: string): Promise<{
+export interface KPIMtdAgent {
+  agent: string;
+  team: 'jc' | 'msc' | 'blended';
+  conversions: number;
+  calls: number;
+  ringTimeSec: number;
+  pickupPct: number;
+  avgWrapSec: number;
+  totalTalkMin: number;
+}
+
+export interface KPIMtdSummary {
   totalConversions: number;
   totalCalls: number;
-  byAgent: { agent: string; team: string; conversions: number; calls: number; ringTimeSec: number; pickupPct: number; avgWrapSec: number; totalTalkMin: number }[];
+  byAgent: KPIMtdAgent[];
   byDate: { date: string; conversions: number; calls: number }[];
-}> {
+}
+
+/** Get MTD summary for the current month */
+export async function fetchKPIMtdSummary(monthPrefix: string): Promise<KPIMtdSummary> {
   const all = await fetchAllRows();
   const monthRows = all.filter(r => r.date.startsWith(monthPrefix));
 
@@ -256,9 +269,9 @@ export async function fetchKPIMtdSummary(monthPrefix: string): Promise<{
     dateMap.set(r.date, de);
   }
 
-  const byAgent = [...agentMap.entries()].map(([agent, s]) => ({
+  const byAgent: KPIMtdAgent[] = [...agentMap.entries()].map(([agent, s]) => ({
     agent,
-    team: s.team,
+    team: s.team as 'jc' | 'msc' | 'blended',
     conversions: s.conversions,
     calls: s.calls,
     ringTimeSec: s.ringCount > 0 ? +(s.ringSum / s.ringCount).toFixed(2) : 0,

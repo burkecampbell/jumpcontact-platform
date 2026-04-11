@@ -13,13 +13,16 @@
  */
 
 import type {
-  PeriodData, RepAgent, AcctStat,
+  PeriodData, RepAgent, AcctStat, AgentStat,
   BrandCallSummary, BrandBucket,
+  MtdData, YtdData, TrendData, YticaMtdAgent,
 } from './types';
 import type { YticaAgent, YticaRepActivity } from './sheets';
-import { type Brand, MSC_ONLY_AGENTS, JC_ONLY_AGENTS, BLENDED_AGENTS } from './brand';
+import type { KPIMtdSummary } from './kpi-sheet';
+import { type Brand, MSC_ONLY_AGENTS, JC_ONLY_AGENTS, BLENDED_AGENTS, isAgentForBrand } from './brand';
 import type { PairedCall } from './types';
-import { normalizeAgent } from './constants';
+import { normalizeAgent, MONTHLY_GOAL } from './constants';
+import { getClientBrand } from './clients';
 
 // ── Build Brand Summary from CDR ───────────────────────────────────
 // Single pass over tagged CDR calls → buckets everything by brand.
@@ -384,5 +387,272 @@ export function blendYticaIntoPerioData(period: PeriodData, ytica: YticaRepActiv
       avgSpeedSec,
     },
     teamStats: period.teamStats,
+  };
+}
+
+// ── Brand Derivation for MTD, YTD, Weekly ──────────────────────────
+// Extends the today/yesterday pattern (deriveBrandView) to the historical
+// aggregates. Every field that flows into /api/data must be brand-filtered
+// at this boundary — not at the fetcher — so the raw 'dashboard-data'
+// cache stays shared across all three brand views.
+//
+// Data sources for classification (highest-precedence first):
+//   1. KPI sheet team tags (column C: "Jump" | "MSC" | "MSC/Jump")
+//   2. Brand.ts agent sets (MSC_ONLY_AGENTS, JC_ONLY_AGENTS, BLENDED_AGENTS)
+//   3. clients.ts getClientBrand() for account classification
+// For blended agents, calls/conversions are split via today's CDR ratios
+// (summary.agentRatios), with 50/50 as the fallback when no ratio exists.
+// This is an approximation for historical data — noted in comments below.
+
+/** Build agentLower → team lookup from KPI MTD summary */
+function buildKpiTeamLookup(kpiMtd: KPIMtdSummary): Map<string, 'jc' | 'msc' | 'blended'> {
+  const m = new Map<string, 'jc' | 'msc' | 'blended'>();
+  for (const a of kpiMtd.byAgent) {
+    m.set(a.agent.toLowerCase(), a.team);
+  }
+  return m;
+}
+
+/** Classify an agent for a brand view.
+ *  - 'include': agent belongs entirely to the requested brand
+ *  - 'split':   blended agent, split proportionally via CDR ratio
+ *  - 'exclude': agent does not appear in the requested brand view
+ */
+function classifyAgentForBrand(
+  agentLower: string,
+  brand: 'jc' | 'msc',
+  kpiTeams: Map<string, 'jc' | 'msc' | 'blended'>,
+): 'include' | 'split' | 'exclude' {
+  // KPI team tag is authoritative when present
+  const kpiTeam = kpiTeams.get(agentLower);
+  if (kpiTeam) {
+    if (kpiTeam === 'blended') return 'split';
+    if (kpiTeam === brand) return 'include';
+    return 'exclude';
+  }
+  // Fallback: use brand.ts agent sets
+  if (!isAgentForBrand(agentLower, brand)) return 'exclude';
+  return BLENDED_AGENTS.has(agentLower) ? 'split' : 'include';
+}
+
+/** Split an integer count between brands using a CDR ratio (exact additivity).
+ *  Returns the share for `brand`; jcCount + mscCount always equals total. */
+function splitCount(
+  total: number,
+  brand: 'jc' | 'msc',
+  ratio?: { jc: number; msc: number },
+): number {
+  if (!ratio) {
+    // 50/50 fallback: JC gets ceil, MSC gets floor
+    const jc = Math.ceil(total / 2);
+    return brand === 'jc' ? jc : total - jc;
+  }
+  const jc = Math.round(total * ratio.jc);
+  return brand === 'jc' ? jc : total - jc;
+}
+
+/** Split a decimal minute total between brands using a CDR ratio.
+ *  Preserves 1 decimal place; jcMin + mscMin === total. */
+function splitMinutes(
+  total: number,
+  brand: 'jc' | 'msc',
+  ratio?: { jc: number; msc: number },
+): number {
+  if (!ratio) {
+    const jc = +(total / 2).toFixed(1);
+    return brand === 'jc' ? jc : +(total - jc).toFixed(1);
+  }
+  const jc = +(total * ratio.jc).toFixed(1);
+  return brand === 'jc' ? jc : +(total - jc).toFixed(1);
+}
+
+/** Derive brand-filtered MTD data from raw (Mixed) MTD + KPI team tags.
+ *
+ *  For Mixed: returns raw unchanged.
+ *  For JC/MSC: filters byAgent using KPI team tags; splits blended agents
+ *  via today's CDR ratio (fallback 50/50). Recomputes total, projections,
+ *  and scales byAccount + mtdDaily + hourly by the resulting brand ratio.
+ *
+ *  byAccount classification:
+ *    - accounts with known JC/MSC brand (via clients.json) → direct include/exclude
+ *    - unknown accounts → proportional scale by brand ratio
+ */
+export function deriveMtdForBrand(
+  raw: MtdData,
+  kpiMtd: KPIMtdSummary,
+  summary: BrandCallSummary,
+  brand: Brand,
+): MtdData {
+  if (brand === 'mixed') return raw;
+
+  const kpiTeams = buildKpiTeamLookup(kpiMtd);
+  const filteredAgents: AgentStat[] = [];
+
+  for (const a of raw.byAgent) {
+    const agentLower = a.agent.toLowerCase();
+    const cls = classifyAgentForBrand(agentLower, brand, kpiTeams);
+    if (cls === 'exclude') continue;
+    if (cls === 'include') {
+      filteredAgents.push(a);
+      continue;
+    }
+    // 'split' — blended agent
+    const brandCount = splitCount(a.count, brand, summary.agentRatios[agentLower]);
+    if (brandCount > 0) {
+      filteredAgents.push({ ...a, count: brandCount });
+    }
+  }
+
+  filteredAgents.sort((a, b) => b.count - a.count);
+  const total = filteredAgents.reduce((s, a) => s + a.count, 0);
+  const brandRatio = raw.total > 0 ? total / raw.total : 0;
+
+  // byAccount: use client brand classification; scale unknowns proportionally
+  const filteredAccounts: AcctStat[] = [];
+  for (const acct of (raw.byAccount || [])) {
+    const clientBrand = getClientBrand(acct.account);
+    if (clientBrand === brand) {
+      filteredAccounts.push(acct);
+    } else if (clientBrand === null) {
+      // Unknown account — proportional scale
+      const scaled = Math.round(acct.count * brandRatio);
+      if (scaled > 0) filteredAccounts.push({ ...acct, count: scaled });
+    }
+    // Other brand → exclude
+  }
+  filteredAccounts.sort((a, b) => b.count - a.count);
+
+  // mtdDaily: each day scaled proportionally (imperfect but best without
+  // per-date brand tags from the KPI sheet)
+  const mtdDaily = (raw.mtdDaily || []).map(d => ({
+    date: d.date,
+    total: Math.round(d.total * brandRatio),
+  }));
+
+  // hourly: same proportional scale
+  const hourly = (raw.hourly || []).map(h => Math.round(h * brandRatio));
+
+  // Recompute projections from filtered total
+  const { dayOfMonth, daysInMonth, daysRemaining, goal, dailyGoal } = raw;
+  const goalPace = dayOfMonth > 0 ? Math.round((total / dayOfMonth) * daysInMonth) : 0;
+  const projectedEOM = goalPace;
+  const deficit = MONTHLY_GOAL - total;
+  const requiredDailyRate = daysRemaining > 0
+    ? Math.round((deficit / daysRemaining) * 10) / 10
+    : 0;
+
+  return {
+    total,
+    byAgent: filteredAgents,
+    goal,
+    dailyGoal,
+    dayOfMonth,
+    daysInMonth,
+    daysRemaining,
+    goalPace,
+    projectedEOM,
+    deficit,
+    requiredDailyRate,
+    onTrack: projectedEOM >= MONTHLY_GOAL,
+    byAccount: filteredAccounts,
+    hourly,
+    mtdDaily,
+  };
+}
+
+/** Derive brand-filtered MTD rep activity (Ytica) from raw array + KPI tags.
+ *
+ *  Same classification logic as deriveMtdForBrand. Blended agents get their
+ *  totalCalls and totalTalkMin split proportionally.
+ */
+export function deriveMtdRepActivityForBrand(
+  raw: YticaMtdAgent[],
+  kpiMtd: KPIMtdSummary,
+  summary: BrandCallSummary,
+  brand: Brand,
+): YticaMtdAgent[] {
+  if (brand === 'mixed') return raw;
+
+  const kpiTeams = buildKpiTeamLookup(kpiMtd);
+  const result: YticaMtdAgent[] = [];
+
+  for (const a of raw) {
+    const agentLower = a.agent.toLowerCase();
+    const cls = classifyAgentForBrand(agentLower, brand, kpiTeams);
+    if (cls === 'exclude') continue;
+    if (cls === 'include') {
+      result.push(a);
+      continue;
+    }
+    // 'split' — blended agent
+    const ratio = summary.agentRatios[agentLower];
+    const brandCalls = splitCount(a.totalCalls, brand, ratio);
+    const brandTalkMin = splitMinutes(a.totalTalkMin, brand, ratio);
+    if (brandCalls > 0) {
+      result.push({
+        ...a,
+        totalCalls: brandCalls,
+        totalTalkMin: brandTalkMin,
+      });
+    }
+  }
+
+  return result;
+}
+
+/** Derive brand-filtered YTD data by scaling proportionally to MTD brand ratio.
+ *
+ *  NOTE: This is an approximation. True per-brand YTD would require
+ *  backfilling historical CDR with brand tags — out of scope for the initial
+ *  brand pipeline. The scaling is: brand_ytd = raw_ytd * (mtd_brand / mtd_raw).
+ *
+ *  For Mixed (brandRatio ≈ 1): returns raw unchanged.
+ */
+export function deriveYtdForBrand(raw: YtdData, brandRatio: number): YtdData {
+  if (brandRatio >= 0.9999) return raw;
+
+  const total = Math.round(raw.total * brandRatio);
+  const byMonth = raw.byMonth.map(m => ({
+    month: m.month,
+    conversions: Math.round(m.conversions * brandRatio),
+  }));
+  const annualPace = Math.round(raw.annualPace * brandRatio);
+  const projectedEOY = Math.round(raw.projectedEOY * brandRatio);
+
+  return {
+    ...raw,
+    total,
+    byMonth,
+    annualPace,
+    projectedEOY,
+    onTrack: projectedEOY >= raw.goal,
+  };
+}
+
+/** Derive brand-filtered weekly totals + 7d trend.
+ *
+ *  Like deriveYtdForBrand, this is a proportional scaling of Mixed numbers
+ *  by the MTD brand ratio. conversionRate is preserved (ratios don't scale).
+ *  For Mixed (brandRatio ≈ 1): returns the inputs unchanged.
+ */
+export function deriveWeeklyTotalsForBrand(
+  thisWeek: number,
+  lastWeek: number,
+  trend7d: TrendData,
+  brandRatio: number,
+): { thisWeek: number; lastWeek: number; trend7d: TrendData } {
+  if (brandRatio >= 0.9999) {
+    return { thisWeek, lastWeek, trend7d };
+  }
+
+  return {
+    thisWeek: Math.round(thisWeek * brandRatio),
+    lastWeek: Math.round(lastWeek * brandRatio),
+    trend7d: {
+      dates: trend7d.dates,
+      conversions: trend7d.conversions.map(c => Math.round(c * brandRatio)),
+      missed: trend7d.missed.map(m => Math.round(m * brandRatio)),
+      conversionRate: trend7d.conversionRate,
+    },
   };
 }

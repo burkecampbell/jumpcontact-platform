@@ -10,8 +10,16 @@ import {
   fetchYticaTeamStats,
   fetchYticaMtdActivity,
 } from '@/lib/sheets';
-import { blendYticaIntoPerioData, buildBrandSummary, deriveBrandView } from '@/lib/blender';
-import { fetchKPIForDate, fetchKPIMtdSummary, type KPIAgentDay } from '@/lib/kpi-sheet';
+import {
+  blendYticaIntoPerioData,
+  buildBrandSummary,
+  deriveBrandView,
+  deriveMtdForBrand,
+  deriveMtdRepActivityForBrand,
+  deriveYtdForBrand,
+  deriveWeeklyTotalsForBrand,
+} from '@/lib/blender';
+import { fetchKPIForDate, fetchKPIMtdSummary, type KPIAgentDay, type KPIMtdSummary } from '@/lib/kpi-sheet';
 import { parseBrand, MSC_ONLY_AGENTS, JC_ONLY_AGENTS, BLENDED_AGENTS, type Brand } from '@/lib/brand';
 import {
   ACTIVE_AGENTS,
@@ -638,6 +646,7 @@ export async function GET(request: NextRequest) {
       _yesterdayConv?: { total: number; byAgent: Record<string, number>; byAccount: AcctStat[]; byHour: number[] };
       _mscConvToday?: MscConversions | null;
       _mscConvYesterday?: MscConversions | null;
+      _kpiMtd?: KPIMtdSummary;
     };
 
     // ── Brand pipeline: Mixed-first, derive everything ──────────
@@ -708,7 +717,28 @@ export async function GET(request: NextRequest) {
     // + brand filtering in deriveBrandView(). Don't overwrite.
 
     // Strip internal fields from response
-    const { _todayCalls, _yesterdayCalls, _schedule, _workerStats, _yesterdayWorkerStats, _todayConversions, _yesterdayConv, _mscConvToday, _mscConvYesterday, ...cleanRaw } = raw;
+    const { _todayCalls, _yesterdayCalls, _schedule, _workerStats, _yesterdayWorkerStats, _todayConversions, _yesterdayConv, _mscConvToday, _mscConvYesterday, _kpiMtd, ...cleanRaw } = raw;
+
+    // ── Apply brand derivation to MTD / YTD / weekly / mtdRepActivity ──
+    // Historical aggregates need brand filtering too. Fetchers stay brand-
+    // agnostic (one shared cache); derivation happens here at the boundary.
+    // Empty KPI summary is the safe default when the KPI sheet fetch failed.
+    const kpiMtd: KPIMtdSummary = _kpiMtd ?? { totalConversions: 0, totalCalls: 0, byAgent: [], byDate: [] };
+    const brandMtd = deriveMtdForBrand(cleanRaw.mtd, kpiMtd, todaySummary, brand);
+    const brandMtdRepActivity = cleanRaw.mtdRepActivity
+      ? deriveMtdRepActivityForBrand(cleanRaw.mtdRepActivity, kpiMtd, todaySummary, brand)
+      : cleanRaw.mtdRepActivity;
+    // Brand ratio drives YTD / weekly proportional scaling (noted as
+    // approximate — full backfill of per-brand historical CDR is out of
+    // scope for Ship 1 of the brand pipeline).
+    const brandRatio = cleanRaw.mtd.total > 0 ? brandMtd.total / cleanRaw.mtd.total : 1;
+    const brandYtd = deriveYtdForBrand(cleanRaw.ytd, brand === 'mixed' ? 1 : brandRatio);
+    const brandWeekly = deriveWeeklyTotalsForBrand(
+      cleanRaw.thisWeek,
+      cleanRaw.lastWeek,
+      cleanRaw.trend7d,
+      brand === 'mixed' ? 1 : brandRatio,
+    );
 
     // Brand breakdown: always compute JC + MSC views so Mixed insights
     // can show fully attributed call counts (no mystery buckets)
@@ -761,6 +791,13 @@ export async function GET(request: NextRequest) {
       yesterday: derivedYesterday,
       weekend: brandWeekend,
       recentCalls: brandRecentCalls,
+      // Brand-derived historical aggregates (Ship 1 — brand-aware pipeline)
+      mtd: brandMtd,
+      ytd: brandYtd,
+      mtdRepActivity: brandMtdRepActivity,
+      thisWeek: brandWeekly.thisWeek,
+      lastWeek: brandWeekly.lastWeek,
+      trend7d: brandWeekly.trend7d,
       dataQuality,
       brandBreakdown,
       brand,
@@ -994,6 +1031,47 @@ async function fetchDashboardData(): Promise<DashboardData> {
       if (kpi.conversions > 0 && !BLENDED_AGENTS.has(agentLower)) {
         agent.conversions = kpi.conversions;
       }
+    }
+
+    // ── Close the agent-roster gap ──────────────────────────────────
+    // CDR pairing sometimes misses MSC agents (e.g. calls routed through
+    // a Flex trunk we don't know about). KPI sheet is authoritative, so
+    // any agent that's in KPI but NOT in repActivity.agents gets inserted
+    // here. This makes /api/data and /api/calls see the same roster.
+    const existingLower = new Set(period.repActivity.agents.map(a => a.agent.toLowerCase()));
+    const excludedLower = new Set(EXCLUDED_AGENTS.map(a => a.toLowerCase()));
+    // Preserve pre-rebuild conversions.byAgent for blended-agent lookup
+    const existingConvByAgent = new Map(
+      period.conversions.byAgent.map(a => [a.agent.toLowerCase(), a.count]),
+    );
+    const periodDate = new Date(period.date + 'T12:00:00');
+    for (const kpi of kpiRows) {
+      const agentLower = kpi.agent.toLowerCase();
+      if (existingLower.has(agentLower) || excludedLower.has(agentLower)) continue;
+      // Skip agents with no activity
+      if (kpi.callsPickedUp === 0 && kpi.conversions === 0) continue;
+
+      const hoursScheduled = getScheduledHours(schedule, kpi.agent, periodDate);
+      const isBlended = BLENDED_AGENTS.has(agentLower);
+      // Blended agents' conversions come from Sheets/GHL merge, not KPI column D
+      const conversions = isBlended
+        ? (existingConvByAgent.get(agentLower) ?? 0)
+        : kpi.conversions;
+
+      period.repActivity.agents.push({
+        agent: kpi.agent,
+        calls: kpi.callsPickedUp,
+        talkMin: kpi.totalTalkMin,
+        speedSec: kpi.ringTimeSec > 0 ? kpi.ringTimeSec : null,
+        wrapUpSec: kpi.avgWrapSec > 0 ? kpi.avgWrapSec : null,
+        hoursScheduled,
+        convsPerHour: hoursScheduled > 0 ? Math.round((conversions / hoursScheduled) * 100) / 100 : undefined,
+        conversions,
+        pickupRate: kpi.pickupPct > 0 ? kpi.pickupPct : undefined,
+        reservationsCreated: kpi.callsAvailable > 0 ? kpi.callsAvailable : undefined,
+        reservationsAccepted: kpi.callsPickedUp > 0 ? kpi.callsPickedUp : undefined,
+      });
+      existingLower.add(agentLower);
     }
 
     // Rebuild conversions.byAgent from KPI-overridden agent data
@@ -1246,7 +1324,7 @@ async function fetchDashboardData(): Promise<DashboardData> {
   // ── Assemble ───────────────────────────────────────────────────
   const pulledAt = new Date().toISOString();
 
-  const dashboard: DashboardData & { _todayCalls?: PairedCall[]; _yesterdayCalls?: PairedCall[]; _schedule?: Awaited<ReturnType<typeof fetchSchedule>>; _workerStats?: Record<string, { wrapUpSec: number; totalActiveSec: number; avgWrapUp: number; reservationsCreated?: number; reservationsAccepted?: number; reservationsRejected?: number; reservationsTimedOut?: number }>; _yesterdayWorkerStats?: typeof yesterdayWorkerStats; _todayConversions?: typeof todayConversions; _yesterdayConv?: typeof yesterdayConv; _mscConvToday?: MscConversions | null; _mscConvYesterday?: MscConversions | null } = {
+  const dashboard: DashboardData & { _todayCalls?: PairedCall[]; _yesterdayCalls?: PairedCall[]; _schedule?: Awaited<ReturnType<typeof fetchSchedule>>; _workerStats?: Record<string, { wrapUpSec: number; totalActiveSec: number; avgWrapUp: number; reservationsCreated?: number; reservationsAccepted?: number; reservationsRejected?: number; reservationsTimedOut?: number }>; _yesterdayWorkerStats?: typeof yesterdayWorkerStats; _todayConversions?: typeof todayConversions; _yesterdayConv?: typeof yesterdayConv; _mscConvToday?: MscConversions | null; _mscConvYesterday?: MscConversions | null; _kpiMtd?: KPIMtdSummary } = {
     today,
     yesterday,
     mtd,
@@ -1273,6 +1351,7 @@ async function fetchDashboardData(): Promise<DashboardData> {
     _yesterdayConv: yesterdayConv,
     _mscConvToday: mscConvToday,
     _mscConvYesterday: mscConvYesterday,
+    _kpiMtd: kpiMtd,
   };
 
   return dashboard;
