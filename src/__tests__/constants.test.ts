@@ -269,10 +269,11 @@ describe('fmtDuration', () => {
 });
 
 // ── fmtHours ──────────────────────────────────────────────────────
+// Per "minutes-only" rule (Burke): fmtHours ALWAYS returns minutes, never hours.
 
 describe('fmtHours', () => {
-  it('formats hours and minutes', () => {
-    expect(fmtHours(3661)).toBe('1h 1m');
+  it('formats over-hour input as minutes', () => {
+    expect(fmtHours(3661)).toBe('61m');
   });
 
   it('formats sub-hour as minutes only', () => {
@@ -283,24 +284,25 @@ describe('fmtHours', () => {
     expect(fmtHours(0)).toBe('0m');
   });
 
-  it('formats exactly one hour', () => {
-    expect(fmtHours(3600)).toBe('1h 0m');
+  it('formats exactly one hour as minutes', () => {
+    expect(fmtHours(3600)).toBe('60m');
   });
 });
 
 // ── fmtTalkTime ───────────────────────────────────────────────────
+// Per "minutes-only" rule: fmtTalkTime ALWAYS returns minutes, never hours.
 
 describe('fmtTalkTime', () => {
   it('formats minutes under 60', () => {
     expect(fmtTalkTime(45)).toBe('45m');
   });
 
-  it('formats hours with zero-padded minutes', () => {
-    expect(fmtTalkTime(65)).toBe('1h 05m');
+  it('formats over-hour input as total minutes', () => {
+    expect(fmtTalkTime(65)).toBe('65m');
   });
 
-  it('formats exact hours', () => {
-    expect(fmtTalkTime(120)).toBe('2h 00m');
+  it('formats 2 hours as total minutes', () => {
+    expect(fmtTalkTime(120)).toBe('120m');
   });
 
   it('rounds fractional minutes', () => {
