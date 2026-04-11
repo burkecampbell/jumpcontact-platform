@@ -517,93 +517,29 @@ function LiveNowPageInner() {
         )}
         </ErrorBoundary>
 
-        {/* Recent Calls Table */}
-        <ErrorBoundary section="Recent Calls">
-        <Card padding={false}>
-          <div className="px-5 pt-5 pb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold" style={{ color: C.text }}>Last 20 Calls</h2>
-            <span className="text-xs" style={{ color: C.sub }}>Auto-refreshes every 60s</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                  {['Time', 'Agent', 'Client', 'Phone', 'Duration', 'Ring', 'Wrap', '', 'Recording'].map(h => (
-                    <th key={h} className="px-4 py-2 text-left text-xs font-medium" style={{ color: C.sub }}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(data.recentCalls || []).map((call: RawCall, i: number) => (
-                  <tr key={i} className="table-row-hover" style={{ borderBottom: `1px solid ${C.border}` }}>
-                    <td className="px-4 py-2.5 font-mono text-xs" style={{ color: C.sub }}>
-                      {formatTime(call.time)}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: agentColor(call.agent) }} />
-                        <span className="font-medium" style={{ color: C.text }}>{capitalize(call.agent)}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-2.5 text-xs" style={{ color: call.account ? C.text : C.border }}>
-                      {call.account || '—'}
-                    </td>
-                    <td className="px-4 py-2.5 font-mono text-xs" style={{ color: C.sub }}>
-                      {formatPhone(call.phone)}
-                    </td>
-                    <td className="px-4 py-2.5 font-mono text-xs" style={{ color: C.text }}>
-                      {formatDuration(call.duration)}
-                    </td>
-                    <td className="px-4 py-2.5 font-mono text-xs" style={{ color: call.ringTime ? C.cyan : C.border }}>
-                      {call.ringTime ? call.ringTime + 's' : '—'}
-                    </td>
-                    <td className="px-4 py-2.5 font-mono text-xs" style={{ color: call.wrapUpSec ? C.sub : C.border }}>
-                      {call.wrapUpSec ? Math.round(call.wrapUpSec) + 's' : '—'}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {call.direction === 'inbound'
-                        ? <ArrowDown size={14} style={{ color: C.good }} />
-                        : <ArrowUp size={14} style={{ color: C.info }} />}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {call.recordingUrl ? (
-                        <div className="flex items-center gap-1">
-                          <InlinePlayer callSid={call.callSid!} recordingUrl={call.recordingUrl} />
-                          <button
-                            onClick={() => shareRecording(call)}
-                            className="p-1 rounded-md transition-colors hover:bg-white/5"
-                            title="Share recording"
-                          >
-                            <Share2 size={13} style={{ color: C.sub }} />
-                          </button>
-                          <a
-                            href={`${call.recordingUrl}${call.recordingUrl.includes('?') ? '&' : '?'}download=1`}
-                            download
-                            className="p-1 rounded-md transition-colors hover:bg-white/5"
-                            title="Download recording"
-                          >
-                            <Download size={13} style={{ color: C.sub }} />
-                          </a>
-                        </div>
-                      ) : (
-                        <span className="text-xs" style={{ color: C.border }}>—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {(!data.recentCalls || data.recentCalls.length === 0) && (
-                  <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-sm" style={{ color: C.sub }}>
-                      No calls yet today
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        {/* Recent Calls: replaced by Call Log link card (Ship 3 consolidation) */}
+        <ErrorBoundary section="Call Log Link">
+          <a
+            href={`/calls?brand=${brand}`}
+            className="block transition-colors hover:bg-white/5"
+            style={{ textDecoration: 'none' }}
+          >
+            <Card>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold mb-1" style={{ color: C.text }}>
+                    Full Call Log
+                  </h2>
+                  <p className="text-xs" style={{ color: C.sub }}>
+                    Date range, filtering, recordings, export — all calls across the period.
+                  </p>
+                </div>
+                <div className="text-sm font-medium" style={{ color: C.cyan }}>
+                  Open Call Log →
+                </div>
+              </div>
+            </Card>
+          </a>
         </ErrorBoundary>
       </div>
     </>
