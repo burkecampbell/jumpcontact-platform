@@ -391,18 +391,27 @@ export function blendYticaIntoPerioData(period: PeriodData, ytica: YticaRepActiv
 }
 
 // ── Brand Derivation for MTD, YTD, Weekly ──────────────────────────
-// Extends the today/yesterday pattern (deriveBrandView) to the historical
-// aggregates. Every field that flows into /api/data must be brand-filtered
-// at this boundary — not at the fetcher — so the raw 'dashboard-data'
-// cache stays shared across all three brand views.
+// Extends the today/yesterday pattern to the historical aggregates. Every
+// field that flows into /api/data must be brand-filtered at this boundary
+// — not at the fetcher — so the raw 'dashboard-data' cache stays shared
+// across all three brand views.
 //
 // Data sources for classification (highest-precedence first):
 //   1. KPI sheet team tags (column C: "Jump" | "MSC" | "MSC/Jump")
 //   2. Brand.ts agent sets (MSC_ONLY_AGENTS, JC_ONLY_AGENTS, BLENDED_AGENTS)
 //   3. clients.ts getClientBrand() for account classification
-// For blended agents, calls/conversions are split via today's CDR ratios
-// (summary.agentRatios), with 50/50 as the fallback when no ratio exists.
-// This is an approximation for historical data — noted in comments below.
+//
+// ── BLENDED AGENTS (Sara, Wendy, Jose) — WHOLE-COUNT RULE ──
+// Per the project CLAUDE.md gotcha #5: "Blended agents appear in both JC
+// and MSC — JC + MSC totals > Mixed total by the blended count. This is
+// correct, not a bug."
+//
+// Blended agents are NEVER split by CDR ratio. Their full count shows in
+// both JC and MSC views. This was a Ship 1 regression discovered on
+// 2026-04-10 when Burke noticed Wendy's new conversions weren't being
+// added on the JC view — the ratio-based split was shifting her JC count
+// downward as her MSC share grew throughout the day, canceling out
+// increments. Fixed in Ship 4.
 
 /** Build agentLower → team lookup from KPI MTD summary */
 function buildKpiTeamLookup(kpiMtd: KPIMtdSummary): Map<string, 'jc' | 'msc' | 'blended'> {
@@ -414,73 +423,50 @@ function buildKpiTeamLookup(kpiMtd: KPIMtdSummary): Map<string, 'jc' | 'msc' | '
 }
 
 /** Classify an agent for a brand view.
- *  - 'include': agent belongs entirely to the requested brand
- *  - 'split':   blended agent, split proportionally via CDR ratio
+ *  - 'include': agent appears in the requested brand view with FULL metrics
  *  - 'exclude': agent does not appear in the requested brand view
+ *
+ *  Blended agents are 'include' for BOTH jc and msc (whole-count rule).
  */
 function classifyAgentForBrand(
   agentLower: string,
   brand: 'jc' | 'msc',
   kpiTeams: Map<string, 'jc' | 'msc' | 'blended'>,
-): 'include' | 'split' | 'exclude' {
+): 'include' | 'exclude' {
   // KPI team tag is authoritative when present
   const kpiTeam = kpiTeams.get(agentLower);
   if (kpiTeam) {
-    if (kpiTeam === 'blended') return 'split';
+    if (kpiTeam === 'blended') return 'include'; // whole count in both views
     if (kpiTeam === brand) return 'include';
     return 'exclude';
   }
-  // Fallback: use brand.ts agent sets
+  // Fallback: use brand.ts agent sets. Blended agents return true for both
+  // brands via isAgentForBrand, so they pass the check in either view.
   if (!isAgentForBrand(agentLower, brand)) return 'exclude';
-  return BLENDED_AGENTS.has(agentLower) ? 'split' : 'include';
-}
-
-/** Split an integer count between brands using a CDR ratio (exact additivity).
- *  Returns the share for `brand`; jcCount + mscCount always equals total. */
-function splitCount(
-  total: number,
-  brand: 'jc' | 'msc',
-  ratio?: { jc: number; msc: number },
-): number {
-  if (!ratio) {
-    // 50/50 fallback: JC gets ceil, MSC gets floor
-    const jc = Math.ceil(total / 2);
-    return brand === 'jc' ? jc : total - jc;
-  }
-  const jc = Math.round(total * ratio.jc);
-  return brand === 'jc' ? jc : total - jc;
-}
-
-/** Split a decimal minute total between brands using a CDR ratio.
- *  Preserves 1 decimal place; jcMin + mscMin === total. */
-function splitMinutes(
-  total: number,
-  brand: 'jc' | 'msc',
-  ratio?: { jc: number; msc: number },
-): number {
-  if (!ratio) {
-    const jc = +(total / 2).toFixed(1);
-    return brand === 'jc' ? jc : +(total - jc).toFixed(1);
-  }
-  const jc = +(total * ratio.jc).toFixed(1);
-  return brand === 'jc' ? jc : +(total - jc).toFixed(1);
+  return 'include';
 }
 
 /** Derive brand-filtered MTD data from raw (Mixed) MTD + KPI team tags.
  *
  *  For Mixed: returns raw unchanged.
- *  For JC/MSC: filters byAgent using KPI team tags; splits blended agents
- *  via today's CDR ratio (fallback 50/50). Recomputes total, projections,
- *  and scales byAccount + mtdDaily + hourly by the resulting brand ratio.
+ *  For JC/MSC: filters byAgent using KPI team tags. Blended agents
+ *  (Sara, Wendy, Jose) keep their FULL counts in both brand views per
+ *  the whole-count rule. Recomputes mtdDaily from per-agent per-day
+ *  data to ensure the daily breakdown matches the filtered total.
  *
- *  byAccount classification:
- *    - accounts with known JC/MSC brand (via clients.json) → direct include/exclude
- *    - unknown accounts → proportional scale by brand ratio
+ *  byAccount classification (clients are single-brand):
+ *    - accounts tagged jc in clients.json → JC view only
+ *    - accounts tagged msc in clients.json → MSC view only
+ *    - unknown accounts → included in both (small tail)
+ *
+ *  Note: the `summary` parameter is no longer used (kept for API
+ *  backward compat with existing callers). Ship 4 removed CDR-ratio
+ *  splitting for blended agents.
  */
 export function deriveMtdForBrand(
   raw: MtdData,
   kpiMtd: KPIMtdSummary,
-  summary: BrandCallSummary,
+  _summary: BrandCallSummary,
   brand: Brand,
 ): MtdData {
   if (brand === 'mixed') return raw;
@@ -492,45 +478,46 @@ export function deriveMtdForBrand(
     const agentLower = a.agent.toLowerCase();
     const cls = classifyAgentForBrand(agentLower, brand, kpiTeams);
     if (cls === 'exclude') continue;
-    if (cls === 'include') {
-      filteredAgents.push(a);
-      continue;
-    }
-    // 'split' — blended agent
-    const brandCount = splitCount(a.count, brand, summary.agentRatios[agentLower]);
-    if (brandCount > 0) {
-      filteredAgents.push({ ...a, count: brandCount });
-    }
+    // Blended agents pass through unchanged — whole-count rule.
+    filteredAgents.push(a);
   }
 
   filteredAgents.sort((a, b) => b.count - a.count);
   const total = filteredAgents.reduce((s, a) => s + a.count, 0);
-  const brandRatio = raw.total > 0 ? total / raw.total : 0;
 
-  // byAccount: use client brand classification; scale unknowns proportionally
+  // byAccount: use client brand classification. Unknown accounts show up
+  // in both JC and MSC (usually a tiny tail).
   const filteredAccounts: AcctStat[] = [];
   for (const acct of (raw.byAccount || [])) {
     const clientBrand = getClientBrand(acct.account);
     if (clientBrand === brand) {
       filteredAccounts.push(acct);
     } else if (clientBrand === null) {
-      // Unknown account — proportional scale
-      const scaled = Math.round(acct.count * brandRatio);
-      if (scaled > 0) filteredAccounts.push({ ...acct, count: scaled });
+      filteredAccounts.push(acct);
     }
     // Other brand → exclude
   }
   filteredAccounts.sort((a, b) => b.count - a.count);
 
-  // mtdDaily: each day scaled proportionally (imperfect but best without
-  // per-date brand tags from the KPI sheet)
-  const mtdDaily = (raw.mtdDaily || []).map(d => ({
-    date: d.date,
-    total: Math.round(d.total * brandRatio),
-  }));
+  // mtdDaily: recompute from per-agent per-day data (not scaled).
+  // This guarantees that sum(mtdDaily) === total and matches the agent
+  // daily breakdowns exactly, so Burke's "new conversion" added to
+  // Wendy on day D increments that day's total by exactly 1.
+  const dailyAgg: Record<string, number> = {};
+  for (const a of filteredAgents) {
+    if (!a.daily) continue;
+    for (const [date, count] of Object.entries(a.daily)) {
+      dailyAgg[date] = (dailyAgg[date] || 0) + count;
+    }
+  }
+  const mtdDaily = Object.entries(dailyAgg)
+    .map(([date, total]) => ({ date, total }))
+    .sort((x, y) => x.date.localeCompare(y.date));
 
-  // hourly: same proportional scale
-  const hourly = (raw.hourly || []).map(h => Math.round(h * brandRatio));
+  // hourly: if raw has hourly totals, keep them. We don't have per-hour
+  // per-agent data so exact recomputation isn't possible; leaving raw
+  // is the least-surprising behavior.
+  const hourly = raw.hourly;
 
   // Recompute projections from filtered total
   const { dayOfMonth, daysInMonth, daysRemaining, goal, dailyGoal } = raw;
@@ -562,13 +549,16 @@ export function deriveMtdForBrand(
 
 /** Derive brand-filtered MTD rep activity (Ytica) from raw array + KPI tags.
  *
- *  Same classification logic as deriveMtdForBrand. Blended agents get their
- *  totalCalls and totalTalkMin split proportionally.
+ *  Same classification logic as deriveMtdForBrand — blended agents pass
+ *  through with their FULL counts per the whole-count rule. No CDR-ratio
+ *  splitting.
+ *
+ *  The `summary` parameter is no longer used (kept for backward compat).
  */
 export function deriveMtdRepActivityForBrand(
   raw: YticaMtdAgent[],
   kpiMtd: KPIMtdSummary,
-  summary: BrandCallSummary,
+  _summary: BrandCallSummary,
   brand: Brand,
 ): YticaMtdAgent[] {
   if (brand === 'mixed') return raw;
@@ -580,21 +570,8 @@ export function deriveMtdRepActivityForBrand(
     const agentLower = a.agent.toLowerCase();
     const cls = classifyAgentForBrand(agentLower, brand, kpiTeams);
     if (cls === 'exclude') continue;
-    if (cls === 'include') {
-      result.push(a);
-      continue;
-    }
-    // 'split' — blended agent
-    const ratio = summary.agentRatios[agentLower];
-    const brandCalls = splitCount(a.totalCalls, brand, ratio);
-    const brandTalkMin = splitMinutes(a.totalTalkMin, brand, ratio);
-    if (brandCalls > 0) {
-      result.push({
-        ...a,
-        totalCalls: brandCalls,
-        totalTalkMin: brandTalkMin,
-      });
-    }
+    // Blended agents pass through unchanged — whole-count rule.
+    result.push(a);
   }
 
   return result;

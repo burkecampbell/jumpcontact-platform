@@ -48,12 +48,12 @@ function makeKPIMtd(): KPIMtdSummary {
   };
 }
 
-function makeSummary(ratios: Record<string, { jc: number; msc: number }> = {}): BrandCallSummary {
+function makeSummary(): BrandCallSummary {
   return {
     jc: { answered: 0, missed: 0, talkSec: 0, ringSum: 0, ringCount: 0 },
     msc: { answered: 0, missed: 0, talkSec: 0, ringSum: 0, ringCount: 0 },
     unknown: { answered: 0, missed: 0, talkSec: 0, ringSum: 0, ringCount: 0 },
-    agentRatios: ratios,
+    agentRatios: {},  // Ship 4: no longer used
     missedByBrand: {
       jc: { total: 0, byAccount: [] },
       msc: { total: 0, byAccount: [] },
@@ -100,81 +100,77 @@ describe('deriveMtdRepActivityForBrand — brand filtering', () => {
   });
 });
 
-describe('deriveMtdRepActivityForBrand — blended agents', () => {
-  it('blended agents appear in both JC and MSC views (split proportionally)', () => {
-    const summary = makeSummary({
-      sara: { jc: 0.7, msc: 0.3 },
-      wendy: { jc: 0.4, msc: 0.6 },
-    });
-    const jc = deriveMtdRepActivityForBrand(makeRawMtdRA(), makeKPIMtd(), summary, 'jc');
-    const msc = deriveMtdRepActivityForBrand(makeRawMtdRA(), makeKPIMtd(), summary, 'msc');
+describe('deriveMtdRepActivityForBrand — whole-count rule for blended agents', () => {
+  it('blended agents appear in both JC and MSC views with FULL totalCalls', () => {
+    const jc = deriveMtdRepActivityForBrand(makeRawMtdRA(), makeKPIMtd(), makeSummary(), 'jc');
+    const msc = deriveMtdRepActivityForBrand(makeRawMtdRA(), makeKPIMtd(), makeSummary(), 'msc');
 
     const saraJc = jc.find(a => a.agent.toLowerCase() === 'sara');
     const saraMsc = msc.find(a => a.agent.toLowerCase() === 'sara');
-    expect(saraJc).toBeDefined();
-    expect(saraMsc).toBeDefined();
+    const wendyJc = jc.find(a => a.agent.toLowerCase() === 'wendy');
+    const wendyMsc = msc.find(a => a.agent.toLowerCase() === 'wendy');
 
-    // Sara 30 calls: 70/30 split → 21 + 9
-    expect(saraJc!.totalCalls).toBe(21);
-    expect(saraMsc!.totalCalls).toBe(9);
+    // Sara = 30 calls, Wendy = 25 calls, both appear full in both views
+    expect(saraJc?.totalCalls).toBe(30);
+    expect(saraMsc?.totalCalls).toBe(30);
+    expect(wendyJc?.totalCalls).toBe(25);
+    expect(wendyMsc?.totalCalls).toBe(25);
   });
 
-  it('additivity on blended agent totalCalls (JC + MSC = raw)', () => {
-    const summary = makeSummary({
-      sara: { jc: 0.7, msc: 0.3 },
-      wendy: { jc: 0.4, msc: 0.6 },
-    });
-    const jc = deriveMtdRepActivityForBrand(makeRawMtdRA(), makeKPIMtd(), summary, 'jc');
-    const msc = deriveMtdRepActivityForBrand(makeRawMtdRA(), makeKPIMtd(), summary, 'msc');
+  it('blended totalTalkMin is not scaled between views', () => {
+    const jc = deriveMtdRepActivityForBrand(makeRawMtdRA(), makeKPIMtd(), makeSummary(), 'jc');
+    const msc = deriveMtdRepActivityForBrand(makeRawMtdRA(), makeKPIMtd(), makeSummary(), 'msc');
 
-    const agents = ['sara', 'wendy'];
-    for (const name of agents) {
-      const jcCalls = jc.find(a => a.agent.toLowerCase() === name)?.totalCalls ?? 0;
-      const mscCalls = msc.find(a => a.agent.toLowerCase() === name)?.totalCalls ?? 0;
-      const rawCalls = makeRawMtdRA().find(a => a.agent.toLowerCase() === name)!.totalCalls;
-      expect(jcCalls + mscCalls).toBe(rawCalls);
-    }
+    const saraJc = jc.find(a => a.agent.toLowerCase() === 'sara');
+    const saraMsc = msc.find(a => a.agent.toLowerCase() === 'sara');
+    expect(saraJc!.totalTalkMin).toBe(saraMsc!.totalTalkMin);
   });
 
-  it('blended agents get 50/50 split when no CDR ratios', () => {
-    const summary = makeSummary({});
-    const jc = deriveMtdRepActivityForBrand(makeRawMtdRA(), makeKPIMtd(), summary, 'jc');
-    const msc = deriveMtdRepActivityForBrand(makeRawMtdRA(), makeKPIMtd(), summary, 'msc');
+  it('(JC sum) + (MSC sum) - (Mixed sum) == blended agent totalCalls', () => {
+    const jc = deriveMtdRepActivityForBrand(makeRawMtdRA(), makeKPIMtd(), makeSummary(), 'jc');
+    const msc = deriveMtdRepActivityForBrand(makeRawMtdRA(), makeKPIMtd(), makeSummary(), 'msc');
+    const mixed = deriveMtdRepActivityForBrand(makeRawMtdRA(), makeKPIMtd(), makeSummary(), 'mixed');
 
-    const sara30 = makeRawMtdRA().find(a => a.agent === 'sara')!.totalCalls;
-    const saraJc = jc.find(a => a.agent.toLowerCase() === 'sara')?.totalCalls ?? 0;
-    const saraMsc = msc.find(a => a.agent.toLowerCase() === 'sara')?.totalCalls ?? 0;
+    const jcSum = jc.reduce((s, a) => s + a.totalCalls, 0);
+    const mscSum = msc.reduce((s, a) => s + a.totalCalls, 0);
+    const mixedSum = mixed.reduce((s, a) => s + a.totalCalls, 0);
 
-    // Exact additivity: 15 + 15 = 30
-    expect(saraJc + saraMsc).toBe(sara30);
+    // Blended agents in the fixture: sara (30) + wendy (25) = 55
+    // JC includes JC-only (omar 100 + burke 80 = 180) + blended (55) = 235
+    // MSC includes MSC-only (desi 60 + natalie 40 = 100) + blended (55) = 155
+    // Mixed is everyone (all 6) = 335
+    // JC + MSC - Mixed = 235 + 155 - 335 = 55 = sum of blended totalCalls ✓
+    expect(jcSum).toBe(235);
+    expect(mscSum).toBe(155);
+    expect(mixedSum).toBe(335);
+    expect(jcSum + mscSum - mixedSum).toBe(55);
   });
 });
 
 describe('deriveMtdRepActivityForBrand — KPI-driven vs fallback', () => {
   it('uses KPI team tags when available', () => {
     const result = deriveMtdRepActivityForBrand(makeRawMtdRA(), makeKPIMtd(), makeSummary(), 'jc');
-    // omar and burke tagged 'jc' in KPI — included
     expect(result.find(a => a.agent === 'omar')).toBeDefined();
     expect(result.find(a => a.agent === 'burke')).toBeDefined();
   });
 
   it('falls back to isAgentForBrand when KPI has no data for agent', () => {
-    const raw = [...makeRawMtdRA(), makeYticaMtdAgent('chris', 50)]; // chris is JC per brand.ts but not in KPI
-    const kpiMtd = makeKPIMtd(); // no chris
+    // Chris is JC-only per brand.ts but not in the KPI fixture below
+    const raw = [...makeRawMtdRA(), makeYticaMtdAgent('chris', 50)];
+    const kpiMtd = makeKPIMtd();
     const jc = deriveMtdRepActivityForBrand(raw, kpiMtd, makeSummary(), 'jc');
-
-    // Chris is JC_ONLY_AGENTS per brand.ts — fallback should include him
     expect(jc.find(a => a.agent === 'chris')).toBeDefined();
   });
 
   it('empty KPI → pure fallback to isAgentForBrand', () => {
     const emptyKpi: KPIMtdSummary = { totalConversions: 0, totalCalls: 0, byAgent: [], byDate: [] };
     const result = deriveMtdRepActivityForBrand(makeRawMtdRA(), emptyKpi, makeSummary(), 'jc');
-
-    // With no KPI, relies on brand.ts MSC_ONLY_AGENTS set → desi, natalie excluded
     const names = result.map(a => a.agent.toLowerCase());
     expect(names).not.toContain('desi');
     expect(names).not.toContain('natalie');
+    // But blended agents should still show up (fallback uses isAgentForBrand)
+    expect(names).toContain('sara');
+    expect(names).toContain('wendy');
   });
 });
 
@@ -182,12 +178,5 @@ describe('deriveMtdRepActivityForBrand — empty cases', () => {
   it('handles empty raw array without throwing', () => {
     expect(() => deriveMtdRepActivityForBrand([], makeKPIMtd(), makeSummary(), 'jc')).not.toThrow();
     expect(deriveMtdRepActivityForBrand([], makeKPIMtd(), makeSummary(), 'msc')).toEqual([]);
-  });
-
-  it('removes blended agents with zero share for the brand', () => {
-    const summary = makeSummary({ sara: { jc: 1.0, msc: 0.0 } });
-    const msc = deriveMtdRepActivityForBrand(makeRawMtdRA(), makeKPIMtd(), summary, 'msc');
-    // Sara has 0% MSC share → shouldn't appear (she's 0 calls on MSC)
-    expect(msc.find(a => a.agent.toLowerCase() === 'sara')).toBeUndefined();
   });
 });
