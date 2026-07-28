@@ -61,7 +61,7 @@ export function getAgentsForBrand(brand: Brand, allAgents: string[]): string[] {
 export const OPS_CENTER_URL =
   process.env.NEXT_PUBLIC_OPS_CENTER_URL ||
   process.env.OPS_CENTER_URL ||
-  'https://operations-center-phi.vercel.app';
+  'https://your-ops-center.vercel.app';
 
 // ── Validation ──────────────────────────────────────────────────────────────
 

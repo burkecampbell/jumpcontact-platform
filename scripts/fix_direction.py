@@ -26,7 +26,7 @@ def log(msg):
     sys.stdout.flush()
 
 # ── Config ──────────────────────────────────────────────────────────────
-SHEET_ID = "YOUR_SHEET_ID"
+SHEET_ID = os.environ.get("YTICA_SHEET_ID", "YOUR_SHEET_ID")
 TAB_NAME = "Recordings"
 DIRECTION_COL = 7  # 0-indexed, column H (Date=0, Time=1, CallSid=2, Agent=3, Client=4, Phone=5, Duration=6, Direction=7)
 

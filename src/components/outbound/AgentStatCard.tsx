@@ -5,7 +5,7 @@ import Card from '@/components/Card';
 import { C, agentColor, capitalize } from '@/lib/constants';
 import type { OutboundAgentStats } from '@/lib/outbound-types';
 
-const HUBSPOT_PORTAL = 'YOUR_PORTAL_ID';
+const HUBSPOT_PORTAL = process.env.NEXT_PUBLIC_HUBSPOT_PORTAL || 'YOUR_PORTAL_ID';
 
 function agentHubSpotUrl(ownerId: string): string {
   // Links to "All contacts" view filtered by this owner

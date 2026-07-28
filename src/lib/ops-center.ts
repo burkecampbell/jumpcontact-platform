@@ -1,7 +1,7 @@
 /**
  * Ops-Center API client.
  *
- * The operations center (https://operations-center-phi.vercel.app) is the
+ * The operations center (configured via OPS_CENTER_URL env var) is the
  * canonical data backend for both JC and MSC.  This module provides typed
  * helpers for calling its endpoints.
  *

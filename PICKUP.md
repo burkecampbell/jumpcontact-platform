@@ -117,4 +117,4 @@ Burke needs the Call Log to function as a **minute counter and reporting tool**,
 
 ## Env Vars (New)
 
-- `HUBSPOT_PAT` = `pat-xxx-REDACTED` (Private App, JC Portal YOUR_PORTAL_ID)
+- `HUBSPOT_PAT` = set in Vercel env vars (Private App, JC Portal YOUR_PORTAL_ID) — NEVER commit the token value

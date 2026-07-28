@@ -1,7 +1,7 @@
 /**
  * HubSpot API client for JC Outbound Sales Dashboard.
  *
- * Portal: Jump Contact (YOUR_PORTAL_ID)
+ * Portal: configured via HUBSPOT_PAT env var
  * Auth: Private App PAT via HUBSPOT_PAT env var
  *
  * This module is SEPARATE from the Twilio-based agent system.

@@ -5,7 +5,7 @@ import { useUser } from '@clerk/nextjs';
 import { AlertTriangle, XCircle, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { C } from '@/lib/constants';
 
-const ADMIN_EMAIL = 'burke@jumpcontact.com';
+const ADMIN_EMAIL = 'admin@example.com';
 const POLL_INTERVAL = 60_000; // 60s
 
 interface HealthData {

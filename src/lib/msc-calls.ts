@@ -2,7 +2,7 @@
  * MSC Client Calls — Google Sheet data source
  *
  * Sheet: "DATA - CLIENTCALLS MSC ALL FORMS RECORDED INFO"
- * ID: YOUR_SHEET_ID
+ * ID: configured via MSC_CALLS_SHEET_ID env var
  *
  * Columns:
  *   A: Date           — "8/1/2025 6:39:00" format

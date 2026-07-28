@@ -24,9 +24,9 @@ const REQUIRED_VARS = [
 ] as const;
 
 const DEPLOY_URLS: Record<string, string> = {
-  'current':  'https://morning-dashboard-gilt-six.vercel.app',
-  'stable':   'https://morning-dashboard-stable.vercel.app',
-  'platform': 'https://main.d2t3zyuv8zobb7.amplifyapp.com',
+  'current':  'https://your-dashboard.vercel.app',
+  'stable':   'https://your-dashboard-stable.vercel.app',
+  'platform': 'https://your-ops-center.vercel.app',
 };
 
 // ── Colors ──────────────────────────────────────────────────────────────
@@ -164,7 +164,7 @@ async function checkGoogle(): Promise<void> {
 
       // Try to read the conversions sheet as a real test
       const tokenData = await tokenRes.json() as { access_token: string };
-      const sheetId = 'YOUR_SHEET_ID';
+      const sheetId = process.env.CONVERSIONS_SHEET_ID || 'YOUR_SHEET_ID';
       const sheetRes = await fetch(
         `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=properties.title`,
         { headers: { Authorization: `Bearer ${tokenData.access_token}` } },

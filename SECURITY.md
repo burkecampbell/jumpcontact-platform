@@ -34,14 +34,14 @@ Wildcard (`*`) is **not** used.
 
 ## Data Access
 
-- Google Sheets: Read-only access via service account (`sheets-api-jump@...`)
+- Google Sheets: Read-only access via service account (configured via env var)
 - Twilio: Read-only CDR + TaskRouter access via account SID + auth token
 - Neon Postgres: Read-write via `POSTGRES_URL` (connection string with SSL)
 - GoHighLevel: Read-only via ops-center proxy (no direct GHL credentials in this repo)
 
 ## Admin Features
 
-- Health banner: Visible only to `burke@jumpcontact.com` (checked via Clerk `useUser()`)
+- Health banner: Visible only to configured admin email (checked via Clerk `useUser()`)
 - Health alerts: Sent to a single Telegram chat (configured via `TELEGRAM_CHAT_ID`)
 
 ## Dependencies
